@@ -11,8 +11,12 @@ Desktop.ini
 # Local packaging artifacts
 *.zip
 
-# Runtime logs if someone runs the tool from the repo folder
+# Runtime logs / state if someone runs the tool from the repo folder
 Bastion-Log-*.txt
+Bastion-Report-*.html
 Bastion-LastApply.json
 Bastion-Config.json
+Bastion-Session.json
+Bastion-BrowserPolicies-State.json
 BastionInstallers/
+browser-policy-backups/

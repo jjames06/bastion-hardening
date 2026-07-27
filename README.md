@@ -107,7 +107,7 @@ A guided, selective hardening assistant for Windows 10/11 that lets you:
 | Principle | Meaning |
 |-----------|---------|
 | **Selective** | Almost every section is optional |
-| **State-aware** | Detects what is already configured before changing it |
+| **State-aware** | Detects live Windows state before changing it; menu prefs live in a durable data directory (not faked Apply history) |
 | **Safety-first** | Restore-point gate, soft failures, honest documentation |
 | **Catalog-only installs** | No free-typed package IDs; never uses `--ignore-security-hash` |
 | **Reversible where practical** | Tracked Undo for services and firewall groups |
@@ -190,18 +190,28 @@ If you use Code ZIP: extract, keep files together, launch `Bastion-Hardening.bat
 
 ### How to run Bastion the first time
 
+On the **first elevated launch**, Bastion automatically:
+
+- Creates a **writable data directory** (prefer `C:\Temp\Bastion`; reuses any existing Bastion state folder; falls back to `%ProgramData%\Bastion`, `%LOCALAPPDATA%\Bastion`, then wipeable `%TEMP%\Bastion` only if needed)
+- Seeds **`Bastion-Config.json`** with safe defaults (menu choices only)
+- Writes **`Bastion-Session.json`** from **live** detection (rewritten every launch)
+- Does **not** invent **`Bastion-LastApply.json`** until you actually Apply
+
+If you delete that folder later, the next run re-seeds defaults and re-detects the live system. Dry Run / Apply still judge Windows itself — they do not pretend a prior Apply happened.
+
 After the elevated menu opens:
 
-1. **13** or **R** — create a named System Restore Point  
-2. **1** — Dry Run (preview only; no hardening applied)  
-3. **2** — Security Audit (optional posture sample, including installed browsers)  
-4. **4** — enable only sections you understand  
-5. **5** — select programs only if you want installs (none are pre-selected)  
-6. **6** (optional) — browser policies for **installed** Firefox / Chrome / Brave only; Encrypted Client Hello (ECH) is a separate Yes/No under Strict and is never on by default  
-7. **D** — DNS resolver, or leave DNS unchanged  
-8. **7** Quick Harden or **8** Apply — type **YES** when asked  
-9. Reboot if prompted (e.g. LSA Protection / some optional features)  
-10. Run **Dry Run** again to verify  
+1. Confirm the **Data directory** line on the main menu (and “First run…” or “No Bastion Apply recorded yet” when appropriate)
+2. **13** or **R** — create a named System Restore Point  
+3. **1** — Dry Run (preview only; no hardening applied; live OS detection)  
+4. **2** — Security Audit (optional posture sample, including installed browsers)  
+5. **4** — enable only sections you understand  
+6. **5** — select programs only if you want installs (none are pre-selected)  
+7. **6** (optional) — browser policies for **installed** Firefox / Chrome / Brave only; Encrypted Client Hello (ECH) is a separate Yes/No under Strict and is never on by default  
+8. **D** — DNS resolver, or leave DNS unchanged  
+9. **7** Quick Harden or **8** Apply — type **YES** when asked  
+10. Reboot if prompted (e.g. LSA Protection / some optional features)  
+11. Run **Dry Run** again to verify  
 
 ### Common install / launch problems
 
@@ -213,13 +223,14 @@ After the elevated menu opens:
 | winget / Programs installs fail | Install **App Installer** from the Microsoft Store, open a new elevated window, retry |
 | Files “not found” after extract | Keep `.bat` and `.ps1` in the **same** directory; do not run a shortcut that points elsewhere |
 | Controlled Folder Access / AV blocks | Allow the script path temporarily, or run Dry Run first and apply in smaller steps |
+| Lost menu prefs after cleanup | Prefer the durable data dir (`C:\Temp\Bastion` / ProgramData / LocalAppData). `%TEMP%\Bastion` can be wiped by Disk Cleanup |
 
 ### What Bastion does **not** install for you
 
 - It does **not** add itself to Programs and Features as a permanent product installer  
 - It does **not** flash BIOS or auto-install GPU drivers  
 - Optional apps install **only** if you select them under Programs and run Apply  
-- Logs/config default under `C:\Temp` (or `%TEMP%\Bastion` / `%LOCALAPPDATA%\Bastion` fallbacks)
+- Logs/config live under a **data directory** shown on the main menu (prefer `C:\Temp\Bastion`; durable fallbacks before wipeable temp)
 
 ---
 

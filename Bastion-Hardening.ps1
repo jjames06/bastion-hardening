@@ -15,47 +15,117 @@ $ConfirmPreference     = "None"
 
 $script:Config = @{
     ScriptVersion = "15.0"
-    LogDirectory  = "C:\Temp"   # preferred; Resolve-BastionLogDirectory may fall back
+    # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
+    LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
 }
 
-function Resolve-BastionLogDirectory {
-    # Prefer C:\Temp; fall back to %TEMP%\Bastion then %LOCALAPPDATA%\Bastion if locked/unwritable.
-    $candidates = @(
-        "C:\Temp",
-        (Join-Path $env:TEMP "Bastion"),
-        (Join-Path $env:LOCALAPPDATA "Bastion")
+function Get-BastionDataDirCandidates {
+    # Discovery order for existing state + durable fallbacks. %TEMP%\Bastion is last (wipe-prone).
+    $raw = @(
+        (Join-Path "C:\Temp" "Bastion"),
+        "C:\Temp",   # legacy flat layout (pre-subfolder)
+        (Join-Path $env:ProgramData "Bastion"),
+        (Join-Path $env:LOCALAPPDATA "Bastion"),
+        (Join-Path $env:TEMP "Bastion")
     )
-    foreach ($c in $candidates) {
+    $list = [System.Collections.Generic.List[string]]::new()
+    foreach ($c in $raw) {
         if ([string]::IsNullOrWhiteSpace($c)) { continue }
-        try {
-            if (-not (Test-Path -LiteralPath $c)) {
-                New-Item -Path $c -ItemType Directory -Force -ErrorAction Stop | Out-Null
-            }
-            $probe = Join-Path $c ("bastion-write-test-{0}.tmp" -f [guid]::NewGuid().ToString("N"))
-            Set-Content -LiteralPath $probe -Value "ok" -ErrorAction Stop
-            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
-            return $c
-        } catch {
-            continue
+        if (-not $list.Contains($c)) { [void]$list.Add($c) }
+    }
+    return @($list)
+}
+
+function Test-BastionDirWritable {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    try {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -Path $Path -ItemType Directory -Force -ErrorAction Stop | Out-Null
         }
+        $probe = Join-Path $Path ("bastion-write-test-{0}.tmp" -f [guid]::NewGuid().ToString("N"))
+        Set-Content -LiteralPath $probe -Value "ok" -ErrorAction Stop
+        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Test-BastionStatePresent {
+    param([string]$Dir)
+    if ([string]::IsNullOrWhiteSpace($Dir)) { return $false }
+    if (-not (Test-Path -LiteralPath $Dir)) { return $false }
+    foreach ($name in @("Bastion-Config.json", "Bastion-LastApply.json", "Bastion-BrowserPolicies-State.json", "Bastion-Session.json")) {
+        if (Test-Path -LiteralPath (Join-Path $Dir $name)) { return $true }
+    }
+    return $false
+}
+
+function Resolve-BastionLogDirectory {
+    # 1) Reuse a writable dir that already has Bastion state (prefer newest config).
+    # 2) Else create the first durable writable path (never invent Apply history).
+    $candidates = @(Get-BastionDataDirCandidates)
+    $withState = [System.Collections.Generic.List[object]]::new()
+    foreach ($c in $candidates) {
+        if (-not (Test-Path -LiteralPath $c)) { continue }
+        if (-not (Test-BastionStatePresent -Dir $c)) { continue }
+        if (-not (Test-BastionDirWritable -Path $c)) { continue }
+        $cfg = Join-Path $c "Bastion-Config.json"
+        $mtime = [datetime]::MinValue
+        if (Test-Path -LiteralPath $cfg) {
+            try { $mtime = (Get-Item -LiteralPath $cfg).LastWriteTimeUtc } catch {}
+        }
+        [void]$withState.Add([PSCustomObject]@{ Path = $c; Mtime = $mtime })
+    }
+    if ($withState.Count -gt 0) {
+        $best = $withState | Sort-Object Mtime -Descending | Select-Object -First 1
+        return $best.Path
+    }
+
+    # New store: durable first. Prefer C:\Temp\Bastion over flat C:\Temp and over wipeable %TEMP%.
+    $preferredNew = @(
+        (Join-Path "C:\Temp" "Bastion"),
+        (Join-Path $env:ProgramData "Bastion"),
+        (Join-Path $env:LOCALAPPDATA "Bastion"),
+        "C:\Temp",
+        (Join-Path $env:TEMP "Bastion")
+    )
+    foreach ($c in $preferredNew) {
+        if ([string]::IsNullOrWhiteSpace($c)) { continue }
+        if (Test-BastionDirWritable -Path $c) { return $c }
     }
     return $null
 }
 
-$resolvedLog = Resolve-BastionLogDirectory
-if ($resolvedLog) {
-    $script:Config.LogDirectory = $resolvedLog
-} else {
-    Write-Host "  WARNING: Could not create a writable Bastion data directory." -ForegroundColor Red
-    Write-Host "  Tried C:\Temp, %TEMP%\Bastion, and %LOCALAPPDATA%\Bastion." -ForegroundColor Yellow
+function Bind-BastionDataPaths {
+    param([string]$LogDirectory)
+    $script:Config.LogDirectory = $LogDirectory
+    $script:logFile    = Join-Path $LogDirectory ("Bastion-Log-{0}.txt" -f $script:timestamp)
+    $script:tempDir    = Join-Path $LogDirectory "BastionInstallers"
+    $script:undoFile   = Join-Path $LogDirectory "Bastion-LastApply.json"
+    $script:configFile = Join-Path $LogDirectory "Bastion-Config.json"
+    $script:sessionFile = Join-Path $LogDirectory "Bastion-Session.json"
 }
 
-$script:timestamp  = Get-Date -Format "yyyyMMdd-HHmmss"
-$script:logFile    = Join-Path $script:Config.LogDirectory "Bastion-Log-$($script:timestamp).txt"
-$script:tempDir    = Join-Path $script:Config.LogDirectory "BastionInstallers"
-$script:undoFile   = Join-Path $script:Config.LogDirectory "Bastion-LastApply.json"
-$script:configFile = Join-Path $script:Config.LogDirectory "Bastion-Config.json"
+$script:timestamp   = Get-Date -Format "yyyyMMdd-HHmmss"
+$script:sessionFile = $null
+$script:HadPriorConfig  = $false
+$script:HadPriorApply   = $false
+$script:FirstRunSeeded  = $false
+$script:DataStoreReady  = $false
+
+$resolvedLog = Resolve-BastionLogDirectory
+if ($resolvedLog) {
+    Bind-BastionDataPaths -LogDirectory $resolvedLog
+} else {
+    Write-Host "  WARNING: Could not create a writable Bastion data directory." -ForegroundColor Red
+    Write-Host "  Tried C:\Temp\Bastion, C:\Temp, %ProgramData%\Bastion, %LOCALAPPDATA%\Bastion, %TEMP%\Bastion." -ForegroundColor Yellow
+    # Keep placeholders so later messages still show intended names.
+    Bind-BastionDataPaths -LogDirectory "C:\Temp\Bastion"
+}
+
 $script:SkipSpoolerThisApply = $false
 
 # Catalog installs start unselected; users opt in via the Programs menu.
@@ -398,20 +468,20 @@ $script:SuggestionRegistry = @(
 function Ensure-BastionPaths {
     try {
         # Re-resolve if preferred path became unusable mid-session
-        if (-not (Test-Path -LiteralPath $script:Config.LogDirectory)) {
+        if (-not (Test-Path -LiteralPath $script:Config.LogDirectory) -or -not (Test-BastionDirWritable -Path $script:Config.LogDirectory)) {
             $again = Resolve-BastionLogDirectory
             if ($again) {
-                $script:Config.LogDirectory = $again
-                $script:logFile    = Join-Path $script:Config.LogDirectory ("Bastion-Log-{0}.txt" -f $script:timestamp)
-                $script:tempDir    = Join-Path $script:Config.LogDirectory "BastionInstallers"
-                $script:undoFile   = Join-Path $script:Config.LogDirectory "Bastion-LastApply.json"
-                $script:configFile = Join-Path $script:Config.LogDirectory "Bastion-Config.json"
+                Bind-BastionDataPaths -LogDirectory $again
             }
         }
-        foreach ($p in @($script:Config.LogDirectory, $script:tempDir)) {
+        $backupDir = Join-Path $script:Config.LogDirectory "browser-policy-backups"
+        foreach ($p in @($script:Config.LogDirectory, $script:tempDir, $backupDir)) {
             if (-not (Test-Path -LiteralPath $p)) {
                 New-Item -Path $p -ItemType Directory -Force -ErrorAction Stop | Out-Null
             }
+        }
+        if (-not $script:sessionFile) {
+            $script:sessionFile = Join-Path $script:Config.LogDirectory "Bastion-Session.json"
         }
         return $true
     } catch {
@@ -1705,16 +1775,49 @@ function Format-BrowserPolicyStatusLine {
     return ("{0}: live {1} (ECH {2}) -> want {3} (ECH {4})" -f $Name, $LiveMode, $echL, $WantMode, $echW)
 }
 
+function Get-LiveBrowserPostureSnapshot {
+    # Live OS/file detection only - never invents Bastion Apply history.
+    $modes = [ordered]@{}
+    $ech = [ordered]@{}
+    $installed = [ordered]@{}
+    foreach ($name in @("Firefox", "Chrome", "Brave")) {
+        $isOn = $false
+        try {
+            if ($script:ProgramDefs.Contains($name)) {
+                $isOn = [bool](Test-Installed -Name $name -Paths $script:ProgramDefs[$name].Paths)
+            }
+        } catch { $isOn = $false }
+        $installed[$name] = $isOn
+        if (-not $isOn) {
+            $modes[$name] = "NotInstalled"
+            $ech[$name] = $false
+            continue
+        }
+        try {
+            if ($name -eq "Firefox") { $modes[$name] = [string](Get-FirefoxPolicyModeFromFile) }
+            else { $modes[$name] = [string](Get-ChromiumPolicyMode -Browser $name) }
+        } catch { $modes[$name] = "Unknown" }
+        try { $ech[$name] = [bool](Test-BrowserEchLockLive -Browser $name) } catch { $ech[$name] = $false }
+    }
+    return @{ Modes = $modes; Ech = $ech; Installed = $installed }
+}
+
 function Save-BrowserPolicyStateFile {
     if (-not (Ensure-BastionPaths)) { return }
     try {
         $path = Get-BrowserPolicyStatePath
+        $live = Get-LiveBrowserPostureSnapshot
         $data = @{
             UpdatedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
             ScriptVersion = $script:Config.ScriptVersion
+            # Wanted (menu / Bastion-Config) vs Live (policies on disk / registry).
             Modes = [ordered]@{}
             EchLocks = [ordered]@{}
+            LiveModes = $live.Modes
+            LiveEch = $live.Ech
+            Installed = $live.Installed
             LastChange = $script:BrowserPolicyLastChange
+            Note = "Wanted modes come from Bastion config. Live modes are detected each save. Deleting this file does not fake Apply history."
         }
         foreach ($k in $script:BrowserPolicyModes.Keys) {
             $data.Modes[$k] = $script:BrowserPolicyModes[$k]
@@ -1727,6 +1830,102 @@ function Save-BrowserPolicyStateFile {
     } catch {
         Write-Log ("Browser policy state save failed: {0}" -f $_.Exception.Message) -Level Warning -NoConsole
     }
+}
+
+function Load-BrowserPolicyStateFile {
+    # Restore last-change metadata only. Wanted modes live in Bastion-Config.json.
+    $path = Get-BrowserPolicyStatePath
+    if (-not (Test-Path -LiteralPath $path)) { return }
+    try {
+        $data = Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ($data.LastChange) {
+            $lc = $data.LastChange
+            $script:BrowserPolicyLastChange = @{
+                Timestamp  = [string]$lc.Timestamp
+                Browser    = [string]$lc.Browser
+                ModeBefore = [string]$lc.ModeBefore
+                ModeAfter  = [string]$lc.ModeAfter
+                Detail     = [string]$lc.Detail
+                BackupPath = [string]$lc.BackupPath
+                LogFile    = [string]$lc.LogFile
+            }
+        }
+    } catch {
+        Write-Log ("Browser policy state load failed: {0}" -f $_.Exception.Message) -Level Warning -NoConsole
+    }
+}
+
+function Write-BastionSessionSnapshot {
+    # Rewritten every launch: proves the store is real and records live detection vs Bastion files.
+    if (-not (Ensure-BastionPaths)) { return }
+    try {
+        if (-not $script:sessionFile) {
+            $script:sessionFile = Join-Path $script:Config.LogDirectory "Bastion-Session.json"
+        }
+        $live = Get-LiveBrowserPostureSnapshot
+        $wantedModes = [ordered]@{}
+        $wantedEch = [ordered]@{}
+        foreach ($k in $script:BrowserPolicyModes.Keys) { $wantedModes[$k] = [string]$script:BrowserPolicyModes[$k] }
+        foreach ($k in $script:BrowserEchLocks.Keys) { $wantedEch[$k] = [bool]$script:BrowserEchLocks[$k] }
+        $sectionSnap = [ordered]@{}
+        foreach ($k in $script:Sections.Keys) { $sectionSnap[$k] = [bool]$script:Sections[$k] }
+        $data = [ordered]@{
+            WrittenAt         = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            ScriptVersion     = $script:Config.ScriptVersion
+            DataDirectory     = $script:Config.LogDirectory
+            HadPriorConfig    = [bool]$script:HadPriorConfig
+            HadPriorApply     = [bool]$script:HadPriorApply
+            ConfigLoaded      = [bool]$script:ConfigLoaded
+            FirstRunSeeded    = [bool]$script:FirstRunSeeded
+            DnsProviderId     = [string]$script:DnsProviderId
+            SectionsEnabled   = $sectionSnap
+            WantedBrowserModes = $wantedModes
+            WantedBrowserEch   = $wantedEch
+            LiveBrowserModes   = $live.Modes
+            LiveBrowserEch     = $live.Ech
+            BrowsersInstalled  = $live.Installed
+            HasConfigFile      = (Test-Path -LiteralPath $script:configFile)
+            HasLastApplyFile   = (Test-Path -LiteralPath $script:undoFile)
+            Note = "Apply and Dry Run detect live Windows state. Bastion-LastApply.json is only written after a real Apply. Deleting this data directory just forces a clean seed next run - it does not invent prior hardening."
+        }
+        ($data | ConvertTo-Json -Depth 8) | Out-File -LiteralPath $script:sessionFile -Encoding utf8 -Force
+        Write-Log ("Session snapshot written: {0}" -f $script:sessionFile) -NoConsole
+    } catch {
+        Write-Log ("Session snapshot failed: {0}" -f $_.Exception.Message) -Level Warning -NoConsole
+    }
+}
+
+function Initialize-BastionDataStore {
+    # First bat/ps1 run (and every later run): ensure dirs exist, load real files if present,
+    # seed defaults only when missing, rewrite session/browser state from live detection.
+    # Never invent Bastion-LastApply.json without a completed Apply.
+    if (-not (Ensure-BastionPaths)) {
+        $script:DataStoreReady = $false
+        return $false
+    }
+
+    $script:HadPriorConfig = Test-Path -LiteralPath $script:configFile
+    $script:HadPriorApply  = Test-Path -LiteralPath $script:undoFile
+    $script:FirstRunSeeded = $false
+
+    Load-BastionConfig
+    Load-BrowserPolicyStateFile
+
+    if (-not $script:HadPriorConfig) {
+        # Materialize a real config on first run / after wipe so the store is not empty theater.
+        Save-BastionConfig
+        $script:FirstRunSeeded = $true
+        Write-Log "First-run (or wiped store): seeded Bastion-Config.json with defaults (no Apply history invented)."
+    }
+
+    # Always refresh browser policy state + session snapshot from live OS + current wants.
+    Save-BrowserPolicyStateFile
+    Write-BastionSessionSnapshot
+
+    $script:DataStoreReady = $true
+    Write-Log ("Data store ready at {0} (priorConfig={1} priorApply={2} seeded={3})" -f `
+        $script:Config.LogDirectory, $script:HadPriorConfig, $script:HadPriorApply, $script:FirstRunSeeded)
+    return $true
 }
 
 function Record-BrowserPolicyChange {
@@ -4456,7 +4655,8 @@ function Show-Help {
         "It helps you measure risk, choose sections, apply changes with logging, and recover common side effects.",
         "## What it is",
         "A guided toolkit: Dry Run, Security Audit, section toggles, catalog app installs, browser policy modes, Recovery, and documentation.",
-        "State-aware means Apply and Dry Run try to detect what is already configured so repeats stay calm.",
+        "State-aware means Apply and Dry Run detect live Windows state (services, firewall, registry, features) so repeats stay calm.",
+        "Bastion JSON files remember your menu choices and last Apply undo data. They do not fake that Apply already ran.",
         "## What it is not",
         "Not an antivirus product, not enterprise MDM, not a guarantee against zero-days, and not an automated GPU or BIOS flasher.",
         "## Safety model",
@@ -4467,6 +4667,8 @@ function Show-Help {
 
     $r = Show-HelpPage -Title "HELP 2/13 - RECOMMENDED WORKFLOW" -Page 2 -Total $total -Lines @(
         "## First-time flow",
+        "0. First elevated launch (Bastion-Hardening.bat) creates a writable data directory and seeds Bastion-Config.json with defaults.",
+        "   No Bastion-LastApply.json is written until you actually Apply - Dry Run still reads live Windows state.",
         "1. Main menu 13 or R - create a named System Restore Point.",
         "2. Option 1 Dry Run - read Would change vs Already OK with your current toggles.",
         "3. Option 2 Security audit - posture sample (firewall, DNS, Defender, browsers, winget, restore points).",
@@ -4477,6 +4679,7 @@ function Show-Help {
         "8. Reboot if LSA Protection or optional features require it, then Dry Run again.",
         "## Everyday flow",
         "Change one area at a time, Dry Run, Apply, verify. Use Recovery for Spooler, per-browser Default (revert), Suggestions, or Undo.",
+        "If you delete the Bastion data folder, the next launch re-seeds defaults and re-detects the live system - it does not invent a prior Apply.",
         "## If something goes wrong",
         "Recovery menu first. For browser breakage after Strict or Encrypted Client Hello (ECH): menu 6 > that browser > Default. For deep failure: Safe Mode then System Restore."
     )
@@ -4612,14 +4815,18 @@ function Show-Help {
     if ($r -eq "back" -or $r -eq "quit") { return }
 
     $r = Show-HelpPage -Title "HELP 12/13 - FILES AND LOGS" -Page 12 -Total $total -Lines @(
-        ("## Directory: {0}" -f $script:Config.LogDirectory),
-        "Preferred path is C:\Temp; falls back to %TEMP%\Bastion or %LOCALAPPDATA%\Bastion if needed.",
-        "Bastion-Config.json - section toggles, selected apps, install roots, per-browser policy modes, DNS provider.",
-        "Bastion-BrowserPolicies-State.json - saved browser modes and last policy change summary.",
+        ("## Directory (this session): {0}" -f $script:Config.LogDirectory),
+        "Created automatically on first elevated launch. Prefer durable paths over wipeable temp.",
+        "Resolve order for existing state: C:\Temp\Bastion, legacy C:\Temp, %ProgramData%\Bastion, %LOCALAPPDATA%\Bastion, then %TEMP%\Bastion (last).",
+        "New installs prefer C:\Temp\Bastion, then ProgramData, then LocalAppData. %TEMP% is last-resort only.",
+        "Bastion-Config.json - section toggles, selected apps, install roots, per-browser policy modes, DNS provider (seeded on first run).",
+        "Bastion-Session.json - rewritten every launch: live browser posture vs wanted modes; proves the store is real.",
+        "Bastion-BrowserPolicies-State.json - wanted + live browser modes and last policy change summary.",
         "browser-policy-backups/ - snapshots taken before Bastion overwrites browser policies.",
-        "Bastion-LastApply.json - last Apply timestamp, sections run, tracked undo data.",
+        "Bastion-LastApply.json - only after a real Apply: timestamp, sections run, tracked undo data. Missing = no Bastion Apply undo yet.",
         "Bastion-Log-*.txt - session transcript lines for support and review.",
         "Bastion-Report-*.html - optional HTML snapshot from Help and Reports.",
+        "Deleting the data directory does not un-harden Windows; next run re-seeds defaults and detects live state again.",
         ("Windows Event Log Application source: {0}" -f $script:Config.EventSource),
         "Optional Bastion-Banner.utf8.txt beside the script supplies a Unicode logo; ASCII fallback is built in."
     )
@@ -4743,6 +4950,7 @@ function Reset-ToDefaults {
     $script:DnsProviderId = "Quad9"
     Save-BastionConfig
     Save-BrowserPolicyStateFile
+    Write-BastionSessionSnapshot
     Write-Host "  Bastion config reset. Windows hardening state unchanged." -ForegroundColor Green
     Write-Host "  Note: browser enterprise policies already on disk stay until you set that browser to Default in menu 6." -ForegroundColor Yellow
     Start-Sleep -Seconds 1
@@ -5223,12 +5431,19 @@ function Show-MainMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Banner
-        if ($script:ConfigLoaded) {
+        Write-Host ("  Data directory: {0}" -f $script:Config.LogDirectory) -ForegroundColor DarkGray
+        if ($script:FirstRunSeeded -and -not $script:HadPriorConfig) {
+            Write-Host "  First run (or wiped store): defaults seeded. No prior Bastion config was found." -ForegroundColor Cyan
+        } elseif ($script:ConfigLoaded) {
             Write-Host "  Config loaded from previous session." -ForegroundColor DarkGray
+        } else {
+            Write-Host "  Config: using in-memory defaults (file missing or unreadable)." -ForegroundColor Yellow
         }
         $last = Get-LastApplyInfo
         if ($last) {
-            Write-Host ("  Last Apply: {0} (v{1})" -f $last.Timestamp, $last.ScriptVersion) -ForegroundColor DarkGray
+            Write-Host ("  Last Bastion Apply: {0} (v{1})" -f $last.Timestamp, $last.ScriptVersion) -ForegroundColor DarkGray
+        } else {
+            Write-Host "  No Bastion Apply recorded yet (live OS detection still drives Dry Run / Apply)." -ForegroundColor DarkGray
         }
         Write-Host ("  Browser policies: {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor DarkGray
         Write-Host ("  DNS resolver:   {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
@@ -5331,8 +5546,12 @@ try {
     } catch {}
     # Maximize early so menus/help use full readable width (soft-fail if host disallows).
     Maximize-BastionConsole
-    Load-BastionConfig
-    Write-Log ("Bastion v{0} FINAL started" -f $script:Config.ScriptVersion)
+    # Create/load durable store, seed defaults only when missing, rewrite live session snapshot.
+    if (-not (Initialize-BastionDataStore)) {
+        Write-Host ("Cannot prepare Bastion data store under {0}. Exiting." -f $script:Config.LogDirectory) -ForegroundColor Red
+        exit 1
+    }
+    Write-Log ("Bastion v{0} FINAL started | data={1}" -f $script:Config.ScriptVersion, $script:Config.LogDirectory)
     Show-MainMenu
 } catch {
     Write-Host ("FATAL: {0}" -f $_.Exception.Message) -ForegroundColor Red
