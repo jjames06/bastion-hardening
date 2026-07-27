@@ -265,11 +265,11 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Never uses --ignore-security-hash. Free-typed package IDs are rejected."
     }
     "BrowserPolicies" = @{
-        Intent  = "Optional privacy-oriented policy packs per installed browser (Firefox, Chrome, Brave)."
-        Changes = "Menu 6 sets each browser independently to Default, Medium, or Strict. On Strict you may also opt in to Encrypted Client Hello (ECH) / max transport privacy for that browser only. Firefox can lock ECH-related prefs in policies.json. Chrome and Brave get BastionEchLock tracking plus the strongest transport policies Bastion can apply via enterprise registry (HTTPS-Only, DNS-over-HTTPS preference). Changes are logged with backups for best-effort revert."
-        Impact  = "Strict and Encrypted Client Hello (ECH) packs can break some websites or networks. HTTPS-Only affects plain HTTP and some captive portals. ECH-related locks improve TLS handshake privacy when supported but a few middleboxes mishandle them. Choose modes and ECH per browser (for example Firefox Strict+ECH, Chrome Medium without ECH)."
-        Revert  = "Menu 6 or Recovery > 3: set that browser to Default to clear Bastion policies and Encrypted Client Hello (ECH) locks for that browser only. System Restore remains the bulletproof rollback."
-        Notes   = "Modes and Encrypted Client Hello (ECH) opt-in are independent per browser. Restart browsers after changes. Firefox: about:policies. Chrome: chrome://policy. Brave: brave://policy."
+        Intent  = "Optional privacy-oriented policy packs for installed Firefox, Chrome, and Brave only."
+        Changes = "Menu 6 (works even if this section is off). Only installed engines are listed. Default / Medium / Strict per browser. Encrypted Client Hello (ECH) is a separate Yes/No under Strict and is never default. Dry Run and Security audit report live vs saved mode and ECH for each installed browser."
+        Impact  = "Strict (HTTPS-Only) can break some sites. Encrypted Client Hello (ECH), only if you opt in, can break a few networks or middleboxes. Common pattern: one browser Strict (optional ECH), another Medium/Default."
+        Revert  = "Menu 6 or Recovery > 3: that browser > Default (clears Bastion policies and any ECH pack for that browser only). System Restore is the bulletproof rollback."
+        Notes   = "Installing Bastion or a browser does not enable Encrypted Client Hello (ECH). Restart browsers after changes. Firefox: about:policies. Chrome: chrome://policy. Brave: brave://policy."
     }
     "BloatApps" = @{
         Intent  = "Remove a curated list of consumer Appx packages many users do not want on a clean workstation."
@@ -1673,10 +1673,36 @@ function Resolve-BrowserEchChoice {
 function Get-BrowserPolicyModesSummary {
     $parts = foreach ($k in @($script:BrowserPolicyModes.Keys)) {
         $mode = $script:BrowserPolicyModes[$k]
-        $ech = if ($script:BrowserEchLocks.Contains($k) -and $script:BrowserEchLocks[$k]) { "+ECH" } else { "" }
+        $ech = if ($script:BrowserEchLocks.Contains($k) -and $script:BrowserEchLocks[$k] -and $mode -eq "Strict") {
+            "+ECH"
+        } else {
+            ""
+        }
         "{0}={1}{2}" -f $k, $mode, $ech
     }
     return ($parts -join ", ")
+}
+
+function Get-BrowserPolicyWantedEch {
+    param([string]$BrowserName)
+    if (-not $script:BrowserPolicyModes.Contains($BrowserName)) { return $false }
+    if ($script:BrowserPolicyModes[$BrowserName] -ne "Strict") { return $false }
+    if (-not $script:BrowserEchLocks.Contains($BrowserName)) { return $false }
+    return [bool]$script:BrowserEchLocks[$BrowserName]
+}
+
+function Format-BrowserPolicyStatusLine {
+    # Compact readable line for Dry Run / Audit / logs.
+    param(
+        [string]$Name,
+        [string]$LiveMode,
+        [string]$WantMode,
+        [bool]$EchLive,
+        [bool]$WantEch
+    )
+    $echL = if ($EchLive) { "Yes" } else { "No" }
+    $echW = if ($WantEch) { "Yes" } else { "No" }
+    return ("{0}: live {1} (ECH {2}) -> want {3} (ECH {4})" -f $Name, $LiveMode, $echL, $WantMode, $echW)
 }
 
 function Save-BrowserPolicyStateFile {
@@ -2502,32 +2528,43 @@ function Invoke-DryRun {
         }
     }
 
-    if (-not $script:Sections["BrowserPolicies"]) { Show-DryItem "BrowserPolicies" "Skipped" "Section disabled (use menu 6 for per-browser control)" }
-    else {
+    if (-not $script:Sections["BrowserPolicies"]) {
+        $installedCount = 0
+        try { $installedCount = @(Get-InstalledBastionBrowsers).Count } catch {}
+        Show-DryItem "BrowserPolicies" "Skipped" (
+            "Section off (menu 6 still works). Installed supported browsers: {0}. Encrypted Client Hello (ECH) never applies unless you opt in." -f $installedCount
+        )
+    } else {
         try {
             $browsers = @(Get-InstalledBastionBrowsers)
             if ($browsers.Count -eq 0) {
-                Show-DryItem "BrowserPolicies" "Already OK" "No supported browsers installed; nothing to apply"
+                Show-DryItem "BrowserPolicies" "Already OK" "No supported browsers installed (Firefox/Chrome/Brave); nothing to apply"
             } else {
                 $need = @()
+                $okLines = @()
                 foreach ($b in $browsers) {
                     $want = if ($script:BrowserPolicyModes.Contains($b.Name)) { $script:BrowserPolicyModes[$b.Name] } else { "Default" }
-                    $wantEch = $false
-                    if ($want -eq "Strict" -and $script:BrowserEchLocks.Contains($b.Name) -and $script:BrowserEchLocks[$b.Name]) {
-                        $wantEch = $true
-                    }
+                    $wantEch = Get-BrowserPolicyWantedEch -BrowserName $b.Name
+                    $line = Format-BrowserPolicyStatusLine -Name $b.Name -LiveMode $b.Mode -WantMode $want `
+                        -EchLive ([bool]$b.EchLive) -WantEch $wantEch
                     if ($b.Mode -ne $want -or [bool]$b.EchLive -ne $wantEch) {
-                        $need += ("{0}: live={1}/ECH={2} want={3}/ECH={4}" -f $b.Name, $b.Mode, $(if ($b.EchLive) { "Yes" } else { "No" }), $want, $(if ($wantEch) { "Yes" } else { "No" }))
+                        $need += $line
+                    } else {
+                        $okLines += ("{0}={1}{2}" -f $b.Name, $want, $(if ($wantEch) { "+ECH" } else { "" }))
                     }
                 }
                 if ($need.Count -eq 0) {
-                    Show-DryItem "BrowserPolicies" "Already OK" ("Installed browsers match saved modes: {0}" -f (Get-BrowserPolicyModesSummary))
+                    Show-DryItem "BrowserPolicies" "Already OK" (
+                        "Installed browsers match saved intent: {0}. ECH only where saved Yes." -f ($okLines -join ", ")
+                    )
                 } else {
-                    Show-DryItem "BrowserPolicies" "Would change" ($need -join "; ")
+                    Show-DryItem "BrowserPolicies" "Would change" ($need -join " | ")
                 }
             }
         } catch {
-            Show-DryItem "BrowserPolicies" "Would change" ("Apply per-browser saved modes: {0}" -f (Get-BrowserPolicyModesSummary))
+            Show-DryItem "BrowserPolicies" "Would change" (
+                "Apply saved modes for installed browsers only: {0}" -f (Get-BrowserPolicyModesSummary)
+            )
         }
     }
 
@@ -2982,10 +3019,30 @@ function Invoke-SelfTest {
 
     try {
         $browsers = @(Get-InstalledBastionBrowsers)
-        if ($browsers.Count -eq 0) { Add-Good "Browser policies" "No supported browsers detected" }
-        else {
-            $lines = @($browsers | ForEach-Object { "{0}={1}" -f $_.Name, $_.Mode })
-            Add-Good "Browser policies" "Detected" ($lines -join "; ") "Menu 6 to change"
+        if ($browsers.Count -eq 0) {
+            Add-Good "Browser policies" "No supported browsers installed" "Firefox / Chrome / Brave not detected" "Programs menu 5"
+        } else {
+            $strictOrEch = $false
+            foreach ($b in $browsers) {
+                $want = if ($script:BrowserPolicyModes.Contains($b.Name)) { $script:BrowserPolicyModes[$b.Name] } else { "Default" }
+                $wantEch = Get-BrowserPolicyWantedEch -BrowserName $b.Name
+                $echLive = if ($b.EchLive) { "ECH live Yes" } else { "ECH live No" }
+                $echWant = if ($wantEch) { "saved ECH Yes" } else { "saved ECH No" }
+                $detail = "live {0}; saved {1}; {2}; {3}" -f $b.Mode, $want, $echLive, $echWant
+                if ($b.Mode -eq "Strict" -or $b.EchLive -or $want -eq "Strict" -or $wantEch) {
+                    $strictOrEch = $true
+                    Add-Warn ("Browser {0}" -f $b.Name) ("{0} / transport privacy active or intended" -f $b.Mode) $detail "Menu 6 (Default reverts this browser)"
+                } elseif ($b.Mode -eq "Medium" -or $want -eq "Medium") {
+                    Add-Good ("Browser {0}" -f $b.Name) "Medium privacy pack" $detail "Menu 6"
+                } else {
+                    Add-Good ("Browser {0}" -f $b.Name) "Default / no Bastion Strict" $detail "Menu 6 to harden"
+                }
+            }
+            if ($strictOrEch) {
+                Add-Warn "Encrypted Client Hello (ECH)" "Optional pack" "Never default; only if you chose Yes under Strict for that browser" "Menu 6 > browser > Default clears ECH for that browser"
+            } else {
+                Add-Good "Encrypted Client Hello (ECH)" "Not forced" "No saved ECH Yes on installed browsers" "Optional under Strict in menu 6"
+            }
         }
     } catch { Add-Warn "Browser policies" "Query failed" }
 
@@ -4412,15 +4469,16 @@ function Show-Help {
         "## First-time flow",
         "1. Main menu 13 or R - create a named System Restore Point.",
         "2. Option 1 Dry Run - read Would change vs Already OK with your current toggles.",
-        "3. Option 2 Audit - quick posture sample (firewall, SMB, Defender, LSA, winget).",
-        "4. Option 4 Sections - enable only what you understand; leave BloatApps off until ready.",
-        "5. Option 5 Programs - select apps only if you want installs; set paths only for pending apps.",
-        "6. Option 7 Quick Harden or 8 Apply - confirm restore-point gate, then type YES.",
-        "7. Reboot if LSA Protection or optional features require it, then run Dry Run again.",
+        "3. Option 2 Security audit - posture sample (firewall, DNS, Defender, browsers, winget, restore points).",
+        "4. Option 4 Sections - enable only what you understand; leave BloatApps and BrowserPolicies off until ready.",
+        "5. Option 5 Programs - queue missing catalog apps only if you want installs (none pre-selected).",
+        "6. Option 6 Browser policies (optional) - only installed Firefox/Chrome/Brave. Pick mode per browser; Encrypted Client Hello (ECH) is a separate Yes/No under Strict and never default.",
+        "7. Option 7 Quick Harden or 8 Apply - confirm restore-point gate, then type YES.",
+        "8. Reboot if LSA Protection or optional features require it, then Dry Run again.",
         "## Everyday flow",
-        "Change one area at a time, Dry Run, Apply, verify. Use Recovery when a single feature breaks (printing, Strict browser sites, Widgets).",
+        "Change one area at a time, Dry Run, Apply, verify. Use Recovery for Spooler, per-browser Default (revert), Suggestions, or Undo.",
         "## If something goes wrong",
-        "Recovery menu first for Spooler, browser policy, Suggestions, or Undo. For login or deep failure: Safe Mode then System Restore."
+        "Recovery menu first. For browser breakage after Strict or Encrypted Client Hello (ECH): menu 6 > that browser > Default. For deep failure: Safe Mode then System Restore."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -4466,31 +4524,33 @@ function Show-Help {
 
     $r = Show-HelpPage -Title "HELP 7/13 - BROWSERS, STRICT MODE, AND ECH" -Page 7 -Total $total -Lines @(
         "## Where to configure",
-        "Main menu 6 (or Recovery > 3). Each installed browser shows live mode, saved mode, and Encrypted Client Hello (ECH) pack status.",
-        "You choose one browser or all, then Default / Medium / Strict for that selection only.",
-        "Only browsers that are installed and supported (Firefox, Chrome, Brave) appear. Missing engines are never listed.",
-        "You choose one installed browser or all detected installed browsers, then Default / Medium / Strict.",
-        "Encrypted Client Hello (ECH) is never on by default. If you pick Strict, Bastion asks a separate Yes/No for the ECH pack on only those selected browsers.",
-        "## What each mode does",
-        "Default - remove Bastion policies and any ECH pack for that browser only (best-effort revert). Backups stay under the Bastion data directory.",
-        "Medium - privacy baseline: less telemetry and stronger tracking or third-party cookie limits. Fewer breakages than Strict.",
-        "Strict - Medium plus HTTPS-Only. Does not enable Encrypted Client Hello (ECH) unless you answer Yes to the ECH question.",
-        "## Encrypted Client Hello (ECH) pack (optional, never default)",
+        "Main menu 6 (or Recovery > 3). Only installed supported browsers appear: Firefox, Chrome, Brave.",
+        "Missing browsers are never listed, so you cannot change settings for an engine you do not have.",
+        "Pick one installed browser (or all detected), then Default / Medium / Strict for that selection only.",
+        "## Encrypted Client Hello (ECH) is never automatic",
+        "Installing Bastion, installing a browser, or choosing Strict alone does not enable Encrypted Client Hello (ECH).",
+        "If you choose Strict, Bastion asks a separate Yes/No for the Encrypted Client Hello (ECH) pack on only the browsers you selected.",
+        "Answer No (or skip Strict) and no ECH pack is written. Defaults and fresh configs keep ECH off for every browser.",
+        "## Modes",
+        "Default - remove Bastion policies and any ECH pack for that browser only (best-effort revert; backups kept).",
+        "Medium - privacy baseline (telemetry / tracking / cookies). Usually fewer breakages than Strict.",
+        "Strict - Medium plus HTTPS-Only. Does not include Encrypted Client Hello (ECH) unless you answer Yes next.",
+        "## Encrypted Client Hello (ECH) pack (optional)",
         "Encrypted Client Hello (ECH) is a TLS feature. Without it, the Client Hello can expose the destination hostname to passive observers on the path.",
         "With Encrypted Client Hello (ECH), supporting clients and servers can encrypt that material so observers learn less about which site you open (when the path cooperates).",
-        "Firefox + ECH Yes: locks network.dns.echconfig.enabled and http3 ECH prefs in policies.json. Bastion never sets DisableEncryptedClientHello (that would turn ECH off).",
-        "Chrome/Brave + ECH Yes: BastionEchLock marker, HTTPS-Only, DNS-over-HTTPS preference, best-effort EncryptedClientHelloEnabled if the engine honors it (not identical to Firefox prefs).",
-        "You may enable Encrypted Client Hello (ECH) on any combination of installed browsers, or on none.",
+        "Firefox + ECH Yes: locks network.dns.echconfig.enabled and related prefs in policies.json. Bastion never sets DisableEncryptedClientHello (that turns ECH off).",
+        "Chrome/Brave + ECH Yes: not the same as Firefox prefs; Bastion sets an intent marker and the strongest transport policies it can via enterprise registry.",
+        "You may enable Encrypted Client Hello (ECH) on any mix of installed browsers, or on none.",
         "## Why some sites break",
         "HTTPS-Only: plain HTTP, mixed content, captive portals, and misconfigured HTTPS hosts may fail.",
-        "Encrypted Client Hello (ECH): some networks or middleboxes mishandle ECH; use another browser or set that browser to Default.",
+        "Encrypted Client Hello (ECH): some networks or middleboxes mishandle it; use another browser or set that browser to Default.",
         "Tracking and cookie limits: some SSO, banks, embeds, and older payment widgets need looser settings.",
-        "## Practical recommendation",
-        "Example: Firefox Strict with Encrypted Client Hello (ECH) Yes for daily use; Chrome Medium (ECH No) for stubborn sites. Any mix is allowed.",
-        "After changes, fully restart the browser. Firefox about:policies, Chrome chrome://policy, Brave brave://policy.",
+        "## Dry Run and Security audit",
+        "Dry Run compares live mode and ECH on/off to your saved intent for each installed browser only.",
+        "Security audit lists each installed browser with live/saved mode and Encrypted Client Hello (ECH) status.",
         "## Revert and logging",
-        "Per browser: menu 6 > that browser > Default (clears mode and Encrypted Client Hello (ECH) pack for that browser only).",
-        "Logs: session Bastion-Log, Bastion-BrowserPolicies-State.json, browser-policy-backups. System Restore is still bulletproof."
+        "Per browser: menu 6 > that browser > Default. Session log, Bastion-BrowserPolicies-State.json, and browser-policy-backups support best-effort recovery.",
+        "System Restore (menu 13 / R) remains the bulletproof rollback."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -4498,11 +4558,16 @@ function Show-Help {
         "## Dry Run",
         "Reads the live system and compares it to enabled sections. It never changes configuration.",
         "Would change means Apply would still do work. Already OK means detection believes the goal is met. Skipped means the section toggle is off.",
+        "BrowserPolicies (when enabled): for each installed Firefox/Chrome/Brave, compares live mode and Encrypted Client Hello (ECH) on/off to saved intent. ECH want is Yes only if you previously chose Yes under Strict.",
+        "BrowserPolicies (when skipped): reports how many supported browsers are installed; menu 6 still works independently of the section toggle.",
         "## Apply",
-        "Runs enabled sections in a fixed order, writes a log under C:\\Temp, updates Bastion-LastApply.json for tracked undo data, and prints a summary of Applied, Already, and Failed counts.",
+        "Runs enabled sections in a fixed order, writes a log under the Bastion data directory, updates Bastion-LastApply.json for tracked undo data, and prints Applied / Already / Failed counts.",
+        "BrowserPolicies Apply only touches installed browsers and only applies Encrypted Client Hello (ECH) when saved as Yes for that browser.",
         "You must pass the restore-point gate (or create a point when prompted).",
+        "## Security audit (option 2)",
+        "Scoreboard of firewall, DNS, services, Defender, each installed browser (mode + ECH), winget, and System Restore status. It does not change settings.",
         "## Verify",
-        "Run Dry Run again after Apply. Run Audit for a compact scoreboard. For firewall, use Get-NetFirewallProfile. For DNS, check adapter DNS or your VPN UI while connected."
+        "Run Dry Run again after Apply. Run Audit for a compact scoreboard. Browsers: about:policies / chrome://policy / brave://policy after a full restart."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 

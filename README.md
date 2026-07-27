@@ -194,13 +194,14 @@ After the elevated menu opens:
 
 1. **13** or **R** — create a named System Restore Point  
 2. **1** — Dry Run (preview only; no hardening applied)  
-3. **2** — Security Audit (optional posture sample)  
+3. **2** — Security Audit (optional posture sample, including installed browsers)  
 4. **4** — enable only sections you understand  
 5. **5** — select programs only if you want installs (none are pre-selected)  
-6. **D** — DNS resolver, or leave DNS unchanged  
-7. **7** Quick Harden or **8** Apply — type **YES** when asked  
-8. Reboot if prompted (e.g. LSA Protection / some optional features)  
-9. Run **Dry Run** again to verify  
+6. **6** (optional) — browser policies for **installed** Firefox / Chrome / Brave only; Encrypted Client Hello (ECH) is a separate Yes/No under Strict and is never on by default  
+7. **D** — DNS resolver, or leave DNS unchanged  
+8. **7** Quick Harden or **8** Apply — type **YES** when asked  
+9. Reboot if prompted (e.g. LSA Protection / some optional features)  
+10. Run **Dry Run** again to verify  
 
 ### Common install / launch problems
 
@@ -250,14 +251,35 @@ For full detail, use **[How to install (properly)](#how-to-install-properly)** a
 | ScheduledTasks       | On      | Selected telemetry tasks                        |
 | XboxGaming           | Off     | Optional                                        |
 | Programs             | On      | Catalog-only winget installs (none pre-selected)|
-| BrowserPolicies      | Off     | Firefox / Chrome privacy modes                  |
+| BrowserPolicies      | Off     | Per-browser modes; see [Browser policies](#browser-policies) |
 | BloatApps            | Off     | Curated AppX removal                            |
 | Suggestions          | Off     | Widgets / Start suggestions                     |
 | CopilotM365          | Off     | Optional                                        |
 
 \* DNS is enabled by default with **Quad9**, but you can pick another resolver or leave DNS alone (main menu **D**). Quick Harden asks whether to change DNS and which provider to use.
 
-Quick Harden uses a safer subset and asks explicitly whether to keep the Print Spooler enabled and whether to change DNS.
+Quick Harden uses a safer subset and asks explicitly whether to keep the Print Spooler enabled and whether to change DNS. It does **not** apply browser policies or Encrypted Client Hello (ECH).
+
+---
+
+## Browser policies
+
+Main menu **6** (or Recovery **3**). Only **installed** supported browsers appear: **Firefox**, **Chrome**, **Brave**.
+
+| Mode | What it does |
+|------|----------------|
+| **Default** | Removes Bastion policies for that browser only (best-effort revert; backups kept) |
+| **Medium** | Privacy baseline (telemetry / tracking / cookies); usually fewer site breakages |
+| **Strict** | Medium + HTTPS-Only. Does **not** enable Encrypted Client Hello (ECH) by itself |
+| **ECH pack** | Optional second Yes/No after Strict, for the browsers you selected only. **Never on by default** |
+
+**Encrypted Client Hello (ECH)** is a TLS privacy feature. Bastion only applies an ECH pack if you answer **Yes** under Strict for the chosen installed browser(s). Installing Bastion or a browser does not turn ECH on.
+
+- **Firefox + ECH Yes:** locks ECH-related prefs in `distribution\policies.json`  
+- **Chrome / Brave + ECH Yes:** enterprise transport policies + ECH intent marker (not identical to Firefox prefs)  
+
+**Revert one browser:** menu **6** → that browser → **Default**.  
+**Dry Run / Security audit** report live vs saved mode and Encrypted Client Hello (ECH) status for installed browsers only.
 
 ---
 
@@ -282,10 +304,11 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 
 - **Print Spooler** — Disabled by default for security. Quick Harden gives a clear choice to keep it.
 - **OneDrive & BloatApps** — Hard to reverse. System Restore is the reliable recovery path.
-- **Undo** — Restores tracked services and firewall groups from the last Apply only. It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers.
+- **Browser policies / Encrypted Client Hello (ECH)** — Off by default. ECH is never applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only can break some sites.
+- **Undo** — Restores tracked services and firewall groups from the last Apply only. It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers. Browser revert is menu **6** → Default per browser.
 - **DNS** — Optional. Choose a provider or leave DNS unchanged; VPN software may still override while connected.
 - **Custom install paths** — Only allowed on fixed local volumes outside system directories.
-- **Logs and config** — Prefer `C:\Temp`; fall back to `%TEMP%\Bastion` or `%LOCALAPPDATA%\Bastion` if needed.
+- **Logs and config** — Prefer `C:\Temp`; fall back to `%TEMP%\Bastion` or `%LOCALAPPDATA%\Bastion` if needed. Browser policy state/backups live there too when you use menu 6.
 
 ---
 
