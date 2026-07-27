@@ -5,6 +5,49 @@
 Version **15.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)](#how-to-install-properly)
+
+<p align="center">
+  <img src="docs/images/hero-banner.png" alt="Bastion — menu-driven Windows hardening for personal machines" width="720">
+</p>
+
+<p align="center">
+  <a href="#how-to-install-properly"><strong>Install guide</strong></a> ·
+  <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> ·
+  <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> ·
+  <a href="SECURITY.md"><strong>Security</strong></a>
+</p>
+
+---
+
+## Screenshots
+
+Main menu (review, configure, apply, safety):
+
+![Bastion main menu](docs/images/main-menu.png)
+
+Dry Run — state-aware preview, no changes applied:
+
+![Bastion Dry Run](docs/images/dry-run.png)
+
+Built-in help (scope, safety model, section docs):
+
+![Bastion help overview](docs/images/help-overview.png)
+
+---
+
+## Tested on
+
+Verified by the maintainer on a personal daily-driver PC (not a lab matrix of every SKU):
+
+| OS | Build | Arch | Bastion | Notes |
+|----|-------|------|---------|--------|
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.0** | Dry Run, menus, config load, DNS/firewall posture as of 2026-07-27 |
+
+Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions → Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
+
+**Not tested / not supported:** domain-joined, Intune/MDM-managed, Windows Server, ARM-specific edge cases (may still run; report results).
 
 ---
 
@@ -245,11 +288,12 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 
 ## Feedback and contributions
 
+- **Testing feedback / “I ran this on …”:** [GitHub Discussions](https://github.com/jjames06/bastion-hardening/discussions) (see the pinned **Testing feedback** thread)
 - **Bugs and feature requests:** open a [GitHub Issue](https://github.com/jjames06/bastion-hardening/issues)
 - **Pull requests:** welcome for clear fixes and documentation improvements
 - Maintained on a best-effort basis
 
-When reporting a bug, include Windows version, what you ran (Dry Run / Apply / Quick Harden), and relevant lines from the Bastion log under the log directory shown at exit.
+When reporting a bug, include Windows version (**Settings → System → About** or `winver`), what you ran (Dry Run / Apply / Quick Harden), and relevant lines from the Bastion log under the log directory shown at exit.
 
 ---
 
