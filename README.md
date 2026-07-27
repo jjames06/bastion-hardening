@@ -31,6 +31,22 @@ Dry Run — state-aware preview, no changes applied:
 
 ![Bastion Dry Run](docs/images/dry-run.png)
 
+Hardening sections — toggle only what you want (DNS shows the chosen provider):
+
+![Bastion hardening sections](docs/images/sections-menu.png)
+
+DNS resolver — Quad9, Cloudflare, Google, OpenDNS, or leave DNS unchanged:
+
+![Bastion DNS resolver menu](docs/images/dns-resolver.png)
+
+Programs and install paths — catalog apps via winget; selection is opt-in (nothing forced):
+
+![Bastion programs and install paths](docs/images/programs-menu.png)
+
+Recovery / fix — undo last services/firewall groups, Spooler, browser policies, and related helpers:
+
+![Bastion recovery menu](docs/images/recovery-menu.png)
+
 Built-in help (scope, safety model, section docs):
 
 ![Bastion help overview](docs/images/help-overview.png)
