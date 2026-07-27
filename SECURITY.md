@@ -4,10 +4,11 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.x    | Yes       |
+| 15.1    | Yes (current) |
+| 15.0    | Best-effort until you upgrade |
 | < 15.0  | No        |
 
-Only the latest published release of Bastion Hardening Framework is supported for security fixes.
+Prefer the **latest published release** of Bastion Hardening Framework for security fixes and product updates.
 
 ## What this project does
 
