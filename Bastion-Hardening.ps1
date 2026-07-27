@@ -975,6 +975,38 @@ function Get-SelectedMissingApps {
     return @($list)
 }
 
+function Sync-ProgramInstallQueue {
+    # Install queue = catalog apps the user opted in to install that are still missing.
+    # Never keep already-installed names selected (avoids green [X] on installed rows).
+    $kept = [System.Collections.Generic.List[string]]::new()
+    foreach ($name in @($script:SelectedApps)) {
+        if (-not $script:ProgramDefs.Contains($name)) { continue }
+        if (-not (Test-Installed -Name $name -Paths $script:ProgramDefs[$name].Paths)) {
+            if (-not ($kept -contains $name)) { [void]$kept.Add($name) }
+        }
+    }
+    $script:SelectedApps.Clear()
+    foreach ($n in $kept) { [void]$script:SelectedApps.Add($n) }
+    Clear-StaleInstallRoots
+}
+
+function Get-CatalogProgramRows {
+    # Live detect installed/missing for every catalog entry (order matches ProgramDefs).
+    $rows = foreach ($name in $script:ProgramDefs.Keys) {
+        $def = $script:ProgramDefs[$name]
+        $installed = [bool](Test-Installed -Name $name -Paths $def.Paths)
+        $queued = (-not $installed) -and ($script:SelectedApps -contains $name)
+        [PSCustomObject]@{
+            Name      = $name
+            Paths     = $def.Paths
+            WingetId  = $def.WingetId
+            Installed = $installed
+            Selected  = $queued
+        }
+    }
+    return @($rows)
+}
+
 function Clear-StaleInstallRoots {
     foreach ($k in @($script:ProgramInstallRoots.Keys)) {
         if ($script:SelectedApps -notcontains $k) {
@@ -1546,6 +1578,8 @@ function Load-BastionConfig {
             foreach ($a in @($data.SelectedApps)) {
                 if ($script:ProgramDefs.Contains("$a")) { [void]$script:SelectedApps.Add("$a") }
             }
+            # Drop names already present on disk so the install menu is not pre-checked.
+            Sync-ProgramInstallQueue
         }
         if ($data.BrowserPolicyMode) { $script:BrowserPolicyMode = [string]$data.BrowserPolicyMode }
         if ($data.DnsProviderId -and $script:DnsProviders.Contains([string]$data.DnsProviderId)) {
@@ -2598,58 +2632,78 @@ function Set-LocationsForPendingInstalls {
 }
 
 function Show-ProgramMenu {
-    $apps = foreach ($name in $script:ProgramDefs.Keys) {
-        $def = $script:ProgramDefs[$name]
-        [PSCustomObject]@{
-            Name = $name
-            Paths = $def.Paths
-            Selected = ($script:SelectedApps -contains $name)
-            Installed = (Test-Installed -Name $name -Paths $def.Paths)
-        }
-    }
+    # Prune stale queue (e.g. apps installed outside Bastion since last session).
+    Sync-ProgramInstallQueue
     while ($true) {
+        # Re-detect installed/missing every paint so status stays accurate.
+        $apps = @(Get-CatalogProgramRows)
         Clear-BastionScreen
         Write-Header "PROGRAMS AND INSTALL PATHS"
-        Write-Host "  No location chosen => vendor defaults (Program Files / AppData)." -ForegroundColor DarkGray
-        Write-Host "  L sets locations only for selected apps that are still missing." -ForegroundColor DarkGray
+        Write-Host "  [X] = queued to INSTALL (missing apps only). Installed apps cannot be checked here." -ForegroundColor DarkGray
+        Write-Host "  Status is detected live. Use menu 10 to uninstall catalog apps." -ForegroundColor DarkGray
+        Write-Host "  No location chosen => vendor defaults. L sets paths for pending installs only." -ForegroundColor DarkGray
         Write-Host ""
         for ($i = 0; $i -lt $apps.Count; $i++) {
             $a = $apps[$i]
-            $mark = if ($a.Selected) { "[X]" } else { "[ ]" }
-            $inst = if ($a.Installed) { "installed" } else { "missing  " }
-            $hint = ""
-            if ($a.Selected -and -not $a.Installed) {
+            if ($a.Installed) {
+                # Never show install-queue checkmark on software already present.
+                Write-Host ("  {0,2}. [ ] {1,-16} installed" -f ($i + 1), $a.Name) -ForegroundColor DarkCyan
+            } elseif ($a.Selected) {
                 $r = Get-EffectiveInstallRoot -AppName $a.Name
                 $hint = $(if ($r) { (" -> {0}" -f $r) } else { " -> default" })
+                Write-Host ("  {0,2}. [X] {1,-16} missing  (queued){2}" -f ($i + 1), $a.Name, $hint) -ForegroundColor Green
+            } else {
+                Write-Host ("  {0,2}. [ ] {1,-16} missing" -f ($i + 1), $a.Name) -ForegroundColor DarkGray
             }
-            Write-Host ("  {0,2}. {1} {2,-16} {3}{4}" -f ($i + 1), $mark, $a.Name, $inst, $hint) `
-                -ForegroundColor $(if ($a.Selected) { "Green" } else { "DarkGray" })
         }
         $pendingCount = @($apps | Where-Object { $_.Selected -and -not $_.Installed }).Count
+        $installedCount = @($apps | Where-Object Installed).Count
+        $missingCount = @($apps | Where-Object { -not $_.Installed }).Count
         Write-Host ""
-        Write-Host ("  Selected {0} | Pending install {1} | Global {2}" -f `
-            @($apps | Where-Object Selected).Count, $pendingCount,
+        Write-Host ("  Queued install {0} | Missing {1} | Already installed {2} | Global {3}" -f `
+            $pendingCount, $missingCount, $installedCount,
             $(if ($script:GlobalInstallRoot) { $script:GlobalInstallRoot } else { "(none)" })) -ForegroundColor Cyan
-        Write-Host "  A all  N none  S select-missing  L locations  C confirm  0 back" -ForegroundColor Yellow
+        Write-Host "  A all-missing  N none  S same as A  L locations  C confirm  0 back" -ForegroundColor Yellow
         $valid = @("A","N","S","L","C","0","a","n","s","l","c") + (1..$apps.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
         switch ($c.ToUpper()) {
-            "0" { return }
-            "A" { $apps | ForEach-Object { $_.Selected = $true } }
-            "N" { $apps | ForEach-Object { $_.Selected = $false } }
-            "S" { $apps | ForEach-Object { $_.Selected = -not $_.Installed } }
-            "L" {
+            "0" {
+                Sync-ProgramInstallQueue
+                return
+            }
+            "A" {
+                # Queue every catalog app that is not installed.
                 $script:SelectedApps.Clear()
-                foreach ($x in @($apps | Where-Object Selected)) { [void]$script:SelectedApps.Add($x.Name) }
+                foreach ($a in $apps) {
+                    if (-not $a.Installed) { [void]$script:SelectedApps.Add($a.Name) }
+                }
                 Clear-StaleInstallRoots
-                Set-LocationsForPendingInstalls
+            }
+            "N" {
+                $script:SelectedApps.Clear()
+                Clear-StaleInstallRoots
+            }
+            "S" {
+                # Alias: select all missing (same as A).
+                $script:SelectedApps.Clear()
+                foreach ($a in $apps) {
+                    if (-not $a.Installed) { [void]$script:SelectedApps.Add($a.Name) }
+                }
+                Clear-StaleInstallRoots
+            }
+            "L" {
+                Sync-ProgramInstallQueue
+                if (@(Get-SelectedMissingApps).Count -eq 0) {
+                    Write-Host "  No missing apps are queued. Select missing apps first, then L." -ForegroundColor Yellow
+                    Start-Sleep -Seconds 2
+                } else {
+                    Set-LocationsForPendingInstalls
+                }
             }
             "C" {
-                $script:SelectedApps.Clear()
-                foreach ($x in @($apps | Where-Object Selected)) { [void]$script:SelectedApps.Add($x.Name) }
-                Clear-StaleInstallRoots
+                Sync-ProgramInstallQueue
                 Save-BastionConfig
-                Write-Host "  Saved." -ForegroundColor Green
+                Write-Host ("  Saved. Queued for install: {0}" -f $(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { "(none)" })) -ForegroundColor Green
                 Start-Sleep -Seconds 1
                 return
             }
@@ -2657,7 +2711,18 @@ function Show-ProgramMenu {
                 if ($c -match '^\d+$') {
                     $idx = [int]$c - 1
                     if ($idx -ge 0 -and $idx -lt $apps.Count) {
-                        $apps[$idx].Selected = -not $apps[$idx].Selected
+                        $row = $apps[$idx]
+                        if ($row.Installed) {
+                            Write-Host ("  {0} is already installed. Use menu 10 Uninstall to remove it." -f $row.Name) -ForegroundColor Yellow
+                            Start-Sleep -Seconds 2
+                        } else {
+                            if ($script:SelectedApps -contains $row.Name) {
+                                [void]$script:SelectedApps.Remove($row.Name)
+                            } else {
+                                [void]$script:SelectedApps.Add($row.Name)
+                            }
+                            Clear-StaleInstallRoots
+                        }
                     }
                 }
             }
@@ -3121,47 +3186,76 @@ function Show-UninstallMenu {
         Wait-ForKey
         return
     }
-    $installed = foreach ($name in $script:ProgramDefs.Keys) {
-        if (Test-Installed -Name $name -Paths $script:ProgramDefs[$name].Paths) {
-            [PSCustomObject]@{ Name = $name; WingetId = $script:ProgramDefs[$name].WingetId; Selected = $false }
-        }
-    }
-    $installed = @($installed)
-    if ($installed.Count -eq 0) {
-        Write-Host "  None of the catalog apps were detected." -ForegroundColor Yellow
-        Wait-ForKey
-        return
-    }
+
+    # Selection is local to this menu; always starts empty (never pre-checked).
+    $selectedNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
     while ($true) {
+        # Live detect which catalog apps are present.
+        $installed = [System.Collections.Generic.List[object]]::new()
+        foreach ($name in $script:ProgramDefs.Keys) {
+            $def = $script:ProgramDefs[$name]
+            if (Test-Installed -Name $name -Paths $def.Paths) {
+                [void]$installed.Add([PSCustomObject]@{
+                    Name     = $name
+                    WingetId = $def.WingetId
+                    Selected = $selectedNames.Contains($name)
+                })
+            }
+        }
+        # Drop selections for apps no longer detected.
+        foreach ($gone in @($selectedNames)) {
+            if (-not ($installed | Where-Object { $_.Name -eq $gone })) {
+                [void]$selectedNames.Remove($gone)
+            }
+        }
+        # Refresh Selected flags after prune
+        foreach ($row in $installed) {
+            $row.Selected = $selectedNames.Contains($row.Name)
+        }
+        $installed = @($installed)
+
+        if ($installed.Count -eq 0) {
+            Clear-BastionScreen
+            Write-Header "UNINSTALL"
+            Write-Host "  None of the catalog apps were detected on this PC." -ForegroundColor Yellow
+            Wait-ForKey
+            return
+        }
+
         Clear-BastionScreen
         Write-Header "UNINSTALL"
-        Write-Host "  Toggle apps with numbers. Then press U to uninstall the checked ones." -ForegroundColor Cyan
-        Write-Host "  Note: PowerToys is often a per-user install. Elevated uninstall may fail;" -ForegroundColor DarkYellow
-        Write-Host "        use Settings > Apps (Add or remove programs) if Bastion cannot remove it." -ForegroundColor DarkYellow
+        Write-Host "  Detected catalog installs only. [X] = queued to uninstall (starts empty)." -ForegroundColor DarkGray
+        Write-Host "  Toggle with numbers, then U. After U, paths are re-checked to verify removal." -ForegroundColor DarkGray
+        Write-Host "  PowerToys is often per-user; elevated uninstall may fail (use Settings > Apps)." -ForegroundColor DarkYellow
         Write-Host ""
         for ($i = 0; $i -lt $installed.Count; $i++) {
-            $mark = if ($installed[$i].Selected) { "[X]" } else { "[ ]" }
+            $row = $installed[$i]
+            $mark = if ($row.Selected) { "[X]" } else { "[ ]" }
             $suffix = ""
-            if ($installed[$i].Name -eq "PowerToys") {
-                $suffix = "  (manual uninstall via Settings > Apps may be required)"
-            }
-            Write-Host ("  {0,2}. {1} {2}{3}" -f ($i + 1), $mark, $installed[$i].Name, $suffix)
+            if ($row.Name -eq "PowerToys") { $suffix = "  (may need Settings > Apps)" }
+            $color = if ($row.Selected) { "Yellow" } else { "Gray" }
+            Write-Host ("  {0,2}. {1} {2}{3}" -f ($i + 1), $mark, $row.Name, $suffix) -ForegroundColor $color
         }
         $sel = @($installed | Where-Object Selected | ForEach-Object { $_.Name })
         Write-Host ""
+        Write-Host ("  Detected {0} | Queued uninstall {1}" -f $installed.Count, $sel.Count) -ForegroundColor Cyan
         if ($sel.Count -gt 0) {
-            Write-Host ("  Selected ({0}): {1}" -f $sel.Count, ($sel -join ", ")) -ForegroundColor Yellow
+            Write-Host ("  Will remove: {0}" -f ($sel -join ", ")) -ForegroundColor Yellow
             Write-Host "  Press U to uninstall selected apps." -ForegroundColor Green
         } else {
             Write-Host "  No apps selected yet." -ForegroundColor DarkGray
         }
-        Write-Host "  A all  N none  U uninstall selected  0 cancel" -ForegroundColor Yellow
+        Write-Host "  A all  N none  U uninstall selected  0 back" -ForegroundColor Yellow
         $valid = @("A","N","U","0","a","n","u") + (1..$installed.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
         switch ($c.ToUpper()) {
             "0" { return }
-            "A" { $installed | ForEach-Object { $_.Selected = $true } }
-            "N" { $installed | ForEach-Object { $_.Selected = $false } }
+            "A" {
+                $selectedNames.Clear()
+                foreach ($row in $installed) { [void]$selectedNames.Add($row.Name) }
+            }
+            "N" { $selectedNames.Clear() }
             "U" {
                 $targets = @($installed | Where-Object Selected)
                 if ($targets.Count -eq 0) {
@@ -3182,12 +3276,15 @@ function Show-UninstallMenu {
                     Write-Host "  Or non-admin: winget uninstall -e --id Microsoft.PowerToys --scope user" -ForegroundColor DarkGray
                 }
                 if (-not (Read-ConfirmYes -Prompt "  Type YES to uninstall these catalog apps")) { continue }
+
+                $removed = [System.Collections.Generic.List[string]]::new()
+                $stillThere = [System.Collections.Generic.List[string]]::new()
                 foreach ($t in $targets) {
                     $idCheck = Test-CatalogPackageId -AppName $t.Name -WingetId $t.WingetId
                     if (-not $idCheck.Ok) {
                         Write-Status $idCheck.Detail "Failed"
                         Write-Host ("    Catalog ID was: {0}" -f $t.WingetId) -ForegroundColor DarkGray
-                        Write-Host "    Next step: Settings > Apps, or: winget uninstall -e --id <id> --scope user" -ForegroundColor Yellow
+                        [void]$stillThere.Add($t.Name)
                         continue
                     }
                     try {
@@ -3195,30 +3292,43 @@ function Show-UninstallMenu {
                     } catch {
                         Write-Status ("{0} uninstall error: {1}" -f $t.Name, $_.Exception.Message) "Failed"
                     }
-                }
-                Write-Host ""
-                Write-Host "  Returning to the uninstall list so you can select more apps if needed." -ForegroundColor DarkGray
-                Write-Host "  Press 0 when finished." -ForegroundColor DarkGray
-                Wait-ForKey
-                # refresh installed list after uninstalls
-                $installed = foreach ($name in $script:ProgramDefs.Keys) {
-                    if (Test-Installed -Name $name -Paths $script:ProgramDefs[$name].Paths) {
-                        [PSCustomObject]@{ Name = $name; WingetId = $script:ProgramDefs[$name].WingetId; Selected = $false }
+                    # Verify by re-detecting install paths.
+                    if (Test-Installed -Name $t.Name -Paths $script:ProgramDefs[$t.Name].Paths) {
+                        Write-Status ("{0} still detected after uninstall attempt" -f $t.Name) "Warn"
+                        [void]$stillThere.Add($t.Name)
+                    } else {
+                        Write-Status ("{0} removed (paths no longer detected)" -f $t.Name) "Applied"
+                        [void]$removed.Add($t.Name)
+                        [void]$selectedNames.Remove($t.Name)
+                        # If it was on the install queue, leave queue clean.
+                        if ($script:SelectedApps -contains $t.Name) {
+                            [void]$script:SelectedApps.Remove($t.Name)
+                        }
                     }
                 }
-                $installed = @($installed)
-                if ($installed.Count -eq 0) {
-                    Write-Host "  No catalog apps remain detected." -ForegroundColor Green
-                    Wait-ForKey
-                    return
+                Write-Host ""
+                if ($removed.Count -gt 0) {
+                    Write-Host ("  Verified removed: {0}" -f ($removed -join ", ")) -ForegroundColor Green
                 }
+                if ($stillThere.Count -gt 0) {
+                    Write-Host ("  Still present (manual remove may be needed): {0}" -f ($stillThere -join ", ")) -ForegroundColor Yellow
+                }
+                Sync-ProgramInstallQueue
+                Save-BastionConfig
+                Write-Host "  List will refresh. Press 0 when finished." -ForegroundColor DarkGray
+                Wait-ForKey
                 continue
             }
             default {
                 if ($c -match '^\d+$') {
                     $idx = [int]$c - 1
                     if ($idx -ge 0 -and $idx -lt $installed.Count) {
-                        $installed[$idx].Selected = -not $installed[$idx].Selected
+                        $name = $installed[$idx].Name
+                        if ($selectedNames.Contains($name)) {
+                            [void]$selectedNames.Remove($name)
+                        } else {
+                            [void]$selectedNames.Add($name)
+                        }
                     }
                 }
             }
@@ -4302,9 +4412,9 @@ function Invoke-ApplyHardening {
 
     if ($script:Sections["Programs"]) {
         Write-Host "  [Programs]" -ForegroundColor Cyan
-        Clear-StaleInstallRoots
+        Sync-ProgramInstallQueue
         if ($script:SelectedApps.Count -eq 0) {
-            Write-Status "No programs selected" "Skip"
+            Write-Status "No missing programs queued for install" "Skip"
         } else {
             $pre = Test-WingetSecurityPreflight
             if (-not $pre.Ok) {
@@ -4337,6 +4447,8 @@ function Invoke-ApplyHardening {
                         $undoTrack.ProgramsInstalledList += $appName
                     }
                 }
+                # Drop successfully installed names from the queue for next session.
+                Sync-ProgramInstallQueue
             }
         }
     }
@@ -4428,7 +4540,7 @@ function Show-MainMenu {
         Write-Host "  Installs: catalog IDs only; winget hash enforced; no hash bypass." -ForegroundColor Yellow
         Write-Host "  GPU/BIOS: option 3 guidance only (no automated installs)." -ForegroundColor Yellow
         Write-Host "  --------------------------------------------------------------" -ForegroundColor DarkRed
-        Write-Host ("  Programs selected: {0}" -f $(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { "None" })) -ForegroundColor White
+        Write-Host ("  Programs queued to install: {0}" -f $(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { "None" })) -ForegroundColor White
         Write-Host ""
 
         $choice = Read-MenuChoice -Prompt "  Select" -Valid @(
