@@ -66,37 +66,111 @@ System Restore remains the strongest rollback path.
 
 ---
 
-## Quick start
+## How to install (properly)
 
-### Option A — Download release
+Bastion is **not** an MSI installer. You download the files, keep them together, and launch the elevated batch file. Nothing is registered as a Windows program until *you* choose optional winget installs inside the tool.
 
-1. Download the latest release (or clone this repository)
-2. Extract the files to a folder you control
-3. Right-click `Bastion-Hardening.bat` → **Run as administrator**
-4. Create a System Restore Point (menu **13** or **R**)
-5. Run **Dry Run** first
-6. Review sections, then Apply or use Quick Harden
+### Before you start
 
-### Option B — Clone with Git
+1. Use a **personal** PC you fully control (not work, school, domain-joined, or MDM-managed).
+2. Prefer the **official** release or this GitHub repository only — not random re-uploads.
+3. Skim [LICENSE](LICENSE) and the warnings at the top of this README.
+4. Optionally read the script (`Bastion-Hardening.ps1`) before the first Apply.
+
+### Method A — Release zip (recommended)
+
+Best for most people.
+
+1. Open the latest release:  
+   **https://github.com/jjames06/bastion-hardening/releases/latest**  
+   (or [v15.0](https://github.com/jjames06/bastion-hardening/releases/tag/v15.0) if you want a pinned version)
+2. Download **`bastion-hardening-v15.0.zip`** (or the current release asset with a similar name).
+3. Right-click the zip → **Properties** → if you see **Unblock**, check it → **OK**  
+   (reduces SmartScreen / “downloaded from the internet” friction on the extracted scripts)
+4. Extract the zip to a folder **you** control, for example:  
+   `C:\Tools\Bastion`  
+   Avoid system folders such as `C:\Windows` or Program Files.
+5. Confirm these files sit **in the same folder**:
+
+   | File | Required? |
+   |------|-----------|
+   | `Bastion-Hardening.bat` | Yes — launcher |
+   | `Bastion-Hardening.ps1` | Yes — main script |
+   | `Bastion-Banner.utf8.txt` | Optional (banner only) |
+   | `LICENSE`, `README.md`, `SECURITY.md` | Optional at runtime |
+
+6. **Do not** double-click the `.ps1` file. Use the batch launcher:
+   - Right-click **`Bastion-Hardening.bat`**
+   - Choose **Run as administrator**
+   - Accept the UAC prompt
+7. When the Bastion menu appears, go to **How to run Bastion the first time** below.
+
+### Method B — Git clone
+
+For people who already use Git and want easy updates.
 
 ```powershell
 git clone https://github.com/jjames06/bastion-hardening.git
 cd bastion-hardening
-# Right-click Bastion-Hardening.bat → Run as administrator
 ```
+
+Then right-click **`Bastion-Hardening.bat`** → **Run as administrator** (same as Method A, step 6).
+
+To update later:
+
+```powershell
+cd bastion-hardening
+git pull
+```
+
+### Method C — Download ZIP from the Code button
+
+GitHub **Code → Download ZIP** works, but the **Releases** zip is preferred (known version tag, release notes, checksums if you add them later).
+
+If you use Code ZIP: extract, keep files together, launch `Bastion-Hardening.bat` as administrator — same rules as Method A.
+
+### How to run Bastion the first time
+
+After the elevated menu opens:
+
+1. **13** or **R** — create a named System Restore Point  
+2. **1** — Dry Run (preview only; no hardening applied)  
+3. **2** — Security Audit (optional posture sample)  
+4. **4** — enable only sections you understand  
+5. **5** — select programs only if you want installs (none are pre-selected)  
+6. **D** — DNS resolver, or leave DNS unchanged  
+7. **7** Quick Harden or **8** Apply — type **YES** when asked  
+8. Reboot if prompted (e.g. LSA Protection / some optional features)  
+9. Run **Dry Run** again to verify  
+
+### Common install / launch problems
+
+| Symptom | What to try |
+|---------|-------------|
+| Nothing happens / window flashes | Run `Bastion-Hardening.bat` **as administrator**, not the `.ps1` alone |
+| “scripts is disabled” / execution policy | The launcher uses `-ExecutionPolicy Bypass` for this script only. Use the `.bat`, not a locked-down host policy that blocks even elevated Bypass |
+| SmartScreen / “Windows protected your PC” | Prefer Unblock on the zip (Method A step 3). More info → Run anyway **only** if you trust this official source |
+| winget / Programs installs fail | Install **App Installer** from the Microsoft Store, open a new elevated window, retry |
+| Files “not found” after extract | Keep `.bat` and `.ps1` in the **same** directory; do not run a shortcut that points elsewhere |
+| Controlled Folder Access / AV blocks | Allow the script path temporarily, or run Dry Run first and apply in smaller steps |
+
+### What Bastion does **not** install for you
+
+- It does **not** add itself to Programs and Features as a permanent product installer  
+- It does **not** flash BIOS or auto-install GPU drivers  
+- Optional apps install **only** if you select them under Programs and run Apply  
+- Logs/config default under `C:\Temp` (or `%TEMP%\Bastion` / `%LOCALAPPDATA%\Bastion` fallbacks)
 
 ---
 
-## Recommended first-time workflow
+## Quick start (short)
 
-1. Menu **13 / R** → create a named System Restore Point  
-2. Option **1** → Dry Run (see what would change)  
-3. Option **2** → Security Audit  
-4. Option **4** → enable only the sections you understand  
-5. Option **5** → select programs only if you want them installed  
-6. Option **7** (Quick Harden) or **8** (Apply)  
-7. Reboot if LSA Protection or optional features were changed  
-8. Run Dry Run again to verify  
+1. Download the [latest release](https://github.com/jjames06/bastion-hardening/releases/latest) zip and extract it  
+2. Right-click `Bastion-Hardening.bat` → **Run as administrator**  
+3. Create a System Restore Point (**13** / **R**)  
+4. **Dry Run** first, then Apply or Quick Harden  
+
+For full detail, use **[How to install (properly)](#how-to-install-properly)** above.
 
 ---
 

@@ -8,6 +8,9 @@ Desktop.ini
 *.swp
 *~
 
+# Local packaging artifacts
+*.zip
+
 # Runtime logs if someone runs the tool from the repo folder
 Bastion-Log-*.txt
 Bastion-LastApply.json
