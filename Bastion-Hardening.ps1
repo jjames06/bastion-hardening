@@ -63,8 +63,50 @@ $script:SelectedApps = [System.Collections.Generic.List[string]]::new()
 $script:GlobalInstallRoot   = $null
 $script:ProgramInstallRoots = @{}
 $script:BrowserPolicyMode   = "Default"
+# DNS: pick a public resolver or leave adapters unchanged (see $script:DnsProviders).
+$script:DnsProviderId       = "Quad9"
 $script:ConfigLoaded        = $false
 $script:ApplyFailures       = [System.Collections.Generic.List[string]]::new()
+
+# Curated public recursive DNS resolvers (IPv4). IDs are stable config keys.
+$script:DnsProviders = [ordered]@{
+    "Quad9" = @{
+        DisplayName = "Quad9 (malware blocking)"
+        Primary     = "9.9.9.9"
+        Secondary   = "149.112.112.112"
+        Notes       = "Blocks known malicious domains. Privacy-oriented recursive resolver (quad9.net)."
+    }
+    "Cloudflare" = @{
+        DisplayName = "Cloudflare (1.1.1.1)"
+        Primary     = "1.1.1.1"
+        Secondary   = "1.0.0.1"
+        Notes       = "Fast, privacy-focused public DNS. Widely used and independently audited practices."
+    }
+    "CloudflareSecurity" = @{
+        DisplayName = "Cloudflare security (malware block)"
+        Primary     = "1.1.1.2"
+        Secondary   = "1.0.0.2"
+        Notes       = "Cloudflare DNS with malware domain blocking (1.1.1.2 family)."
+    }
+    "Google" = @{
+        DisplayName = "Google Public DNS"
+        Primary     = "8.8.8.8"
+        Secondary   = "8.8.4.4"
+        Notes       = "Highly available public DNS with broad client and network support."
+    }
+    "OpenDNS" = @{
+        DisplayName = "Cisco OpenDNS"
+        Primary     = "208.67.222.222"
+        Secondary   = "208.67.220.220"
+        Notes       = "Cisco OpenDNS public resolvers with phishing protection features."
+    }
+    "None" = @{
+        DisplayName = "Do not change DNS"
+        Primary     = $null
+        Secondary   = $null
+        Notes       = "Leave adapter DNS as-is (DHCP/manual). Disables the DNS hardening section."
+    }
+}
 $script:Stats = @{
     AlreadyConfigured = 0
     Applied           = 0
@@ -140,11 +182,11 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Dry Run reads the current policy value so repeated runs show Already OK when set."
     }
     "DNS" = @{
-        Intent  = "Point eligible network adapters at Quad9 recursive DNS for a simple privacy-oriented default."
-        Changes = "For active non-loopback adapters, sets DNS to 9.9.9.9 and 149.112.112.112 via Set-DnsClientServerAddress when not already Quad9-first."
-        Impact  = "Name resolution uses Quad9 while those adapter settings apply. A connected VPN (for example Mullvad) may override DNS while the tunnel is up; that is expected."
-        Revert  = "Reset DNS on the adapter (automatic/DHCP) or set your preferred servers. VPN apps may manage DNS independently."
-        Notes   = "Dry Run compares the first configured IPv4 DNS server per adapter so success is detectable after Apply."
+        Intent  = "Optionally set eligible network adapters to a user-chosen public recursive DNS provider, or leave DNS unchanged."
+        Changes = "When a provider is selected (menu D), sets IPv4 DNS on active adapters via Set-DnsClientServerAddress. Providers: Quad9 malware-blocking, Cloudflare 1.1.1.1, Cloudflare security 1.1.1.2, Google Public DNS, Cisco OpenDNS. Choose 'Do not change DNS' to skip."
+        Impact  = "Name resolution uses the chosen resolver while those adapter settings apply. A connected VPN may override DNS while the tunnel is up; that is expected."
+        Revert  = "Reset DNS on the adapter (automatic/DHCP) or set your preferred servers. VPN apps may manage DNS independently. Bastion Undo does not restore previous DNS servers."
+        Notes   = "Default provider is Quad9. Dry Run and Audit compare the first configured IPv4 DNS server per adapter against the selected primary."
     }
     "Defender" = @{
         Intent  = "Turn on stronger Microsoft Defender workstation protections that are often left off by default."
@@ -1405,6 +1447,68 @@ function Set-ChromePolicyMode {
     }
 }
 
+function Get-BastionDnsProvider {
+    param([string]$Id = $script:DnsProviderId)
+    if ([string]::IsNullOrWhiteSpace($Id)) { $Id = "Quad9" }
+    if ($script:DnsProviders.Contains($Id)) { return $script:DnsProviders[$Id] }
+    return $script:DnsProviders["Quad9"]
+}
+
+function Get-BastionDnsProviderLabel {
+    param([string]$Id = $script:DnsProviderId)
+    if ([string]::IsNullOrWhiteSpace($Id) -or $Id -eq "None" -or -not $script:Sections["DNS"]) {
+        return "Do not change DNS"
+    }
+    $p = Get-BastionDnsProvider -Id $Id
+    if ($p -and $p.Primary) {
+        return ("{0} ({1})" -f $p.DisplayName, $p.Primary)
+    }
+    return "Do not change DNS"
+}
+
+function Get-BastionDnsAdapters {
+    # Unified filter for Dry Run, Audit, and Apply so results stay consistent.
+    return @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object {
+        $_.Status -eq "Up" -and
+        $_.InterfaceDescription -notmatch "Loopback|Bluetooth|Virtual|Hyper-V|vEthernet|WSL|Docker|VPN|TAP|TUN|WireGuard|Mullvad|OpenVPN|Cisco AnyConnect|NordLynx"
+    })
+}
+
+function Get-AdapterDnsServers {
+    param([int]$InterfaceIndex)
+    try {
+        return @(Get-DnsClientServerAddress -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.ServerAddresses } | ForEach-Object { $_ } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    } catch {
+        return @()
+    }
+}
+
+function Test-AdapterDnsMatchesProvider {
+    param(
+        [int]$InterfaceIndex,
+        [string]$ProviderId = $script:DnsProviderId
+    )
+    $prov = Get-BastionDnsProvider -Id $ProviderId
+    if (-not $prov -or -not $prov.Primary) { return $false }
+    $dns = @(Get-AdapterDnsServers -InterfaceIndex $InterfaceIndex)
+    if ($dns.Count -lt 1) { return $false }
+    return ($dns[0] -eq [string]$prov.Primary)
+}
+
+function Set-BastionDnsProviderId {
+    param([Parameter(Mandatory)][string]$Id)
+    if (-not $script:DnsProviders.Contains($Id)) { return $false }
+    $script:DnsProviderId = $Id
+    if ($Id -eq "None") {
+        $script:Sections["DNS"] = $false
+    } else {
+        $script:Sections["DNS"] = $true
+    }
+    return $true
+}
+
 function Save-BastionConfig {
     if (-not (Ensure-BastionPaths)) { return }
     try {
@@ -1416,6 +1520,7 @@ function Save-BastionConfig {
             GlobalInstallRoot = $script:GlobalInstallRoot
             ProgramInstallRoots = @{}
             BrowserPolicyMode = $script:BrowserPolicyMode
+            DnsProviderId = $script:DnsProviderId
         }
         foreach ($k in $script:Sections.Keys) { $data.Sections[$k] = [bool]$script:Sections[$k] }
         foreach ($k in $script:ProgramInstallRoots.Keys) { $data.ProgramInstallRoots[$k] = $script:ProgramInstallRoots[$k] }
@@ -1443,6 +1548,14 @@ function Load-BastionConfig {
             }
         }
         if ($data.BrowserPolicyMode) { $script:BrowserPolicyMode = [string]$data.BrowserPolicyMode }
+        if ($data.DnsProviderId -and $script:DnsProviders.Contains([string]$data.DnsProviderId)) {
+            $script:DnsProviderId = [string]$data.DnsProviderId
+            if ($script:DnsProviderId -eq "None") { $script:Sections["DNS"] = $false }
+        }
+        # If DNS section is off after load, treat provider as None for clear UI unless a real provider was saved.
+        if (-not $script:Sections["DNS"] -and $script:DnsProviderId -ne "None") {
+            # Keep last real provider in memory for re-enable, but label shows do-not-change via Sections.
+        }
         $script:ProgramInstallRoots = @{}
         $vols = @(Get-AvailableInstallVolumes)
         if ($data.ProgramInstallRoots) {
@@ -1746,27 +1859,29 @@ function Invoke-DryRun {
         } catch { Show-DryItem "DeliveryOptimization" "Would change" "Set DODownloadMode=0" }
     }
 
-    if (-not $script:Sections["DNS"]) { Show-DryItem "DNS" "Skipped" "Section disabled" }
-    else {
+    if (-not $script:Sections["DNS"] -or $script:DnsProviderId -eq "None") {
+        Show-DryItem "DNS" "Skipped" "Do not change DNS (section off or provider None)"
+    } else {
+        $prov = Get-BastionDnsProvider
+        $label = if ($prov -and $prov.Primary) { ("{0} / {1}" -f $prov.Primary, $prov.Secondary) } else { "selected provider" }
         try {
-            $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" -and $_.InterfaceDescription -notmatch "Loopback" })
+            $adapters = @(Get-BastionDnsAdapters)
             $need = @(); $ok = @()
             foreach ($a in $adapters) {
                 try {
-                    $dns = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | ForEach-Object { $_.ServerAddresses } | ForEach-Object { $_ })
-                    if ($dns -and $dns.Count -gt 0 -and $dns[0] -eq "9.9.9.9") { $ok += $a.Name }
+                    if (Test-AdapterDnsMatchesProvider -InterfaceIndex $a.ifIndex) { $ok += $a.Name }
                     else { $need += $a.Name }
                 } catch { $need += $a.Name }
             }
             if ($need.Count -eq 0 -and $ok.Count -gt 0) {
-                Show-DryItem "DNS" "Already OK" ("Quad9-first on: {0} (VPN may still override while connected)" -f ($ok -join ", "))
+                Show-DryItem "DNS" "Already OK" ("{0}-first on: {1} (VPN may still override while connected)" -f $prov.DisplayName, ($ok -join ", "))
             } elseif ($ok.Count -gt 0) {
-                Show-DryItem "DNS" "Would change" ("Need Quad9 on: {0}; already OK: {1}" -f ($need -join ", "), ($ok -join ", "))
+                Show-DryItem "DNS" "Would change" ("Need {0} on: {1}; already OK: {2}" -f $prov.DisplayName, ($need -join ", "), ($ok -join ", "))
             } else {
-                Show-DryItem "DNS" "Would change" "Set eligible adapters to Quad9 9.9.9.9 / 149.112.112.112"
+                Show-DryItem "DNS" "Would change" ("Set eligible adapters to {0} ({1})" -f $prov.DisplayName, $label)
             }
         } catch {
-            Show-DryItem "DNS" "Would change" "Set eligible adapters to Quad9 (could not fully query current DNS)"
+            Show-DryItem "DNS" "Would change" ("Set eligible adapters to {0} (could not fully query current DNS)" -f $prov.DisplayName)
         }
     }
 
@@ -1942,6 +2057,11 @@ function Show-ApplyPreview {
         if (-not $script:Sections[$k]) { continue }
         $extra = switch ($k) {
             "BrowserPolicies" { (" [mode {0}]" -f $script:BrowserPolicyMode) }
+            "DNS" {
+                $p = Get-BastionDnsProvider
+                if ($script:DnsProviderId -eq "None" -or -not $p.Primary) { " [leave unchanged]" }
+                else { (" -> {0} ({1})" -f $p.DisplayName, $p.Primary) }
+            }
             "HighRiskServices" { " [includes Print Spooler]" }
             "Programs" {
                 if ($script:SelectedApps.Count) { (" -> {0}" -f ($script:SelectedApps -join ", ")) } else { " -> none" }
@@ -2172,18 +2292,30 @@ function Invoke-SelfTest {
     } catch { Add-Warn "SMBv1" "Query failed" }
 
     try {
-        $dnsLines = @(); $nonQuad = 0
-        foreach ($a in @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" -and $_.InterfaceDescription -notmatch "Loopback" })) {
+        $dnsLines = @(); $mismatch = 0
+        $wantChange = ($script:Sections["DNS"] -and $script:DnsProviderId -ne "None")
+        $prov = Get-BastionDnsProvider
+        $targetPrimary = if ($wantChange -and $prov.Primary) { [string]$prov.Primary } else { $null }
+        foreach ($a in @(Get-BastionDnsAdapters)) {
             try {
-                $dns = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | ForEach-Object { $_.ServerAddresses } | ForEach-Object { $_ })
+                $dns = @(Get-AdapterDnsServers -InterfaceIndex $a.ifIndex)
                 $first = if ($dns -and $dns.Count) { $dns[0] } else { "(none)" }
                 $dnsLines += ("{0}={1}" -f $a.Name, $first)
-                if ($first -ne "9.9.9.9") { $nonQuad++ }
+                if ($targetPrimary) {
+                    if ($first -ne $targetPrimary) { $mismatch++ }
+                }
             } catch {}
         }
-        if ($dnsLines.Count -eq 0) { Add-Warn "DNS adapters" "No active adapters" }
-        elseif ($nonQuad -eq 0) { Add-Good "DNS adapters" "Quad9-first" ($dnsLines -join "; ") "VPN may override while connected" }
-        else { Add-Warn "DNS adapters" "Not all Quad9-first" ($dnsLines -join "; ") "DNS section (VPN override is normal)" }
+        if ($dnsLines.Count -eq 0) { Add-Warn "DNS adapters" "No eligible active adapters" }
+        elseif (-not $wantChange) {
+            Add-Good "DNS adapters" "Leave unchanged (by choice)" ($dnsLines -join "; ") "Menu D: pick a provider to change"
+        }
+        elseif ($mismatch -eq 0) {
+            Add-Good "DNS adapters" ("{0}-first" -f $prov.DisplayName) ($dnsLines -join "; ") "VPN may override while connected"
+        }
+        else {
+            Add-Warn "DNS adapters" ("Not all on {0}" -f $prov.DisplayName) ($dnsLines -join "; ") "DNS section / menu D (VPN override is normal)"
+        }
     } catch { Add-Warn "DNS adapters" "Query failed" }
 
     try {
@@ -2541,24 +2673,91 @@ function Show-SectionMenu {
         for ($i = 0; $i -lt $names.Count; $i++) {
             $n = $names[$i]
             $mark = if ($script:Sections[$n]) { "[X]" } else { "[ ]" }
-            Write-Host ("  {0,2}. {1}  {2}" -f ($i + 1), $mark, $n) `
+            $suffix = ""
+            if ($n -eq "DNS") {
+                if (-not $script:Sections["DNS"] -or $script:DnsProviderId -eq "None") {
+                    $suffix = "  (leave DNS unchanged)"
+                } else {
+                    $p = Get-BastionDnsProvider
+                    $suffix = ("  -> {0}" -f $p.DisplayName)
+                }
+            }
+            Write-Host ("  {0,2}. {1}  {2}{3}" -f ($i + 1), $mark, $n, $suffix) `
                 -ForegroundColor $(if ($script:Sections[$n]) { "Green" } else { "DarkGray" })
         }
-        Write-Host "  A all  N none  C confirm  0 back" -ForegroundColor Yellow
-        $valid = @("A","N","C","0","a","n","c") + (1..$names.Count | ForEach-Object { "$_" })
+        Write-Host "  A all  N none  D DNS provider  C confirm  0 back" -ForegroundColor Yellow
+        $valid = @("A","N","C","D","0","a","n","c","d") + (1..$names.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
         switch ($c.ToUpper()) {
             "0" { return }
-            "A" { foreach ($k in $names) { $script:Sections[$k] = $true } }
+            "A" {
+                foreach ($k in $names) { $script:Sections[$k] = $true }
+                if ($script:DnsProviderId -eq "None") { $script:DnsProviderId = "Quad9" }
+            }
             "N" { foreach ($k in $names) { $script:Sections[$k] = $false } }
+            "D" { Show-DnsProviderMenu; return }
             "C" { Save-BastionConfig; return }
             default {
                 if ($c -match '^\d+$') {
                     $idx = [int]$c - 1
                     if ($idx -ge 0 -and $idx -lt $names.Count) {
-                        $script:Sections[$names[$idx]] = -not $script:Sections[$names[$idx]]
+                        $key = $names[$idx]
+                        $script:Sections[$key] = -not $script:Sections[$key]
+                        if ($key -eq "DNS") {
+                            if ($script:Sections["DNS"]) {
+                                if ($script:DnsProviderId -eq "None") { $script:DnsProviderId = "Quad9" }
+                            } else {
+                                # Section off = do not change DNS; keep last real provider for easy re-enable
+                            }
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+function Show-DnsProviderMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "DNS RESOLVER"
+        Write-Host "  Choose a public recursive DNS provider, or leave adapters unchanged." -ForegroundColor Cyan
+        Write-Host "  VPN software may override these settings while a tunnel is connected." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host ("  Current: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor White
+        Write-Host ("  Section DNS enabled: {0}" -f $(if ($script:Sections["DNS"]) { "Yes" } else { "No" })) -ForegroundColor DarkGray
+        Write-Host ""
+
+        $ids = @($script:DnsProviders.Keys)
+        for ($i = 0; $i -lt $ids.Count; $i++) {
+            $id = $ids[$i]
+            $p = $script:DnsProviders[$id]
+            $mark = if ($script:DnsProviderId -eq $id -and ($id -eq "None" -or $script:Sections["DNS"])) { ">" } else { " " }
+            if ($id -eq "None") {
+                $mark = if (-not $script:Sections["DNS"] -or $script:DnsProviderId -eq "None") { ">" } else { " " }
+                Write-Host ("  {0} {1,2}. {2}" -f $mark, ($i + 1), $p.DisplayName) -ForegroundColor $(if ($mark -eq ">") { "Green" } else { "White" })
+                Write-Host ("         {0}" -f $p.Notes) -ForegroundColor DarkGray
+            } else {
+                Write-Host ("  {0} {1,2}. {2}" -f $mark, ($i + 1), $p.DisplayName) -ForegroundColor $(if ($mark -eq ">") { "Green" } else { "White" })
+                Write-Host ("         Primary {0}  Secondary {1}" -f $p.Primary, $p.Secondary) -ForegroundColor DarkGray
+                Write-Host ("         {0}" -f $p.Notes) -ForegroundColor DarkGray
+            }
+            Write-Host ""
+        }
+        Write-Host "  0 Back (save)" -ForegroundColor Yellow
+        $valid = @("0") + (1..$ids.Count | ForEach-Object { "$_" })
+        $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
+        if ($c -eq "0") {
+            Save-BastionConfig
+            return
+        }
+        if ($c -match '^\d+$') {
+            $idx = [int]$c - 1
+            if ($idx -ge 0 -and $idx -lt $ids.Count) {
+                [void](Set-BastionDnsProviderId -Id $ids[$idx])
+                Save-BastionConfig
+                Write-Host ("  DNS set to: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor Green
+                Start-Sleep -Milliseconds 700
             }
         }
     }
@@ -3506,6 +3705,7 @@ function Show-Help {
         "4 Sections - toggle each hardening area on or off.",
         "5 Programs and paths - choose catalog apps and optional install roots.",
         "6 Browser policies - per installed browser Default, Medium, or Strict.",
+        "D DNS resolver - Quad9, Cloudflare, Cloudflare security, Google, OpenDNS, or do not change DNS.",
         "## EXECUTE",
         "7 Quick Harden - safe preset, restore-point gate, then Apply.",
         "8 Apply - runs every enabled section with logging and undo tracking.",
@@ -3517,7 +3717,7 @@ function Show-Help {
         "12 Reset Bastion config - clears Bastion toggles only, not Windows itself.",
         "0 Exit",
         "## Aliases",
-        "Q Quick Harden, A Apply, H Help. Numbers typed inside Help documentation are ignored on purpose."
+        "Q Quick Harden, A Apply, H Help, D DNS resolver. Numbers typed inside Help documentation are ignored on purpose."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -3591,7 +3791,7 @@ function Show-Help {
     $r = Show-HelpPage -Title "HELP 11/12 - FILES AND LOGS" -Page 11 -Total $total -Lines @(
         ("## Directory: {0}" -f $script:Config.LogDirectory),
         "Preferred path is C:\Temp; falls back to %TEMP%\Bastion or %LOCALAPPDATA%\Bastion if needed.",
-        "Bastion-Config.json - section toggles, selected apps, install roots, browser mode.",
+        "Bastion-Config.json - section toggles, selected apps, install roots, browser mode, DNS provider.",
         "Bastion-LastApply.json - last Apply timestamp, sections run, tracked undo data.",
         "Bastion-Log-*.txt - session transcript lines for support and review.",
         "Bastion-Report-*.html - optional HTML snapshot from Help and Reports.",
@@ -3602,7 +3802,8 @@ function Show-Help {
 
     $r = Show-HelpPage -Title "HELP 12/12 - LIMITS AND EXPECTATIONS" -Page 12 -Total $total -Lines @(
         "## Expected behaviors",
-        "VPN DNS while connected may differ from Quad9 on the physical adapter. That is normal.",
+        "VPN DNS while connected may differ from the chosen public resolver on the physical adapter. That is normal.",
+        "Menu D lets you pick Quad9, Cloudflare, Cloudflare security, Google Public DNS, Cisco OpenDNS, or leave DNS unchanged.",
         "Optional HKLM policy values for News/Interests may be denied by Windows even when elevated; that is a Soft skip, not a hard failure.",
         "Some installers ignore custom --location after path validation succeeds.",
         "## Deliberate non-goals",
@@ -3707,12 +3908,10 @@ function Reset-ToDefaults {
         $script:Sections[$k] = [bool]$script:DefaultSections[$k]
     }
     $script:SelectedApps.Clear()
-    foreach ($a in @("Firefox","Steam","Mullvad VPN","Discord","Battle.net")) {
-        [void]$script:SelectedApps.Add($a)
-    }
     $script:GlobalInstallRoot = $null
     $script:ProgramInstallRoots = @{}
     $script:BrowserPolicyMode = "Default"
+    $script:DnsProviderId = "Quad9"
     Save-BastionConfig
     Write-Host "  Bastion config reset. Windows hardening state unchanged." -ForegroundColor Green
     Start-Sleep -Seconds 1
@@ -3734,6 +3933,31 @@ function Invoke-QuickHardening {
     }
     # Explicit Spooler choice for Quick Harden (common support issue)
     $script:SkipSpoolerThisApply = $false
+    Write-Host ""
+    Write-Host "  DNS: set a public recursive resolver, or leave adapter DNS unchanged." -ForegroundColor Cyan
+    if ((Read-YesNo -Prompt "  Change DNS on eligible adapters during Quick Harden (Y/N)?") -eq "Y") {
+        if ($script:DnsProviderId -eq "None" -or -not $script:DnsProviders.Contains($script:DnsProviderId)) {
+            $script:DnsProviderId = "Quad9"
+        }
+        $script:Sections["DNS"] = $true
+        Write-Host ""
+        Write-Host "  Pick a resolver for this run:" -ForegroundColor Cyan
+        $pickIds = @($script:DnsProviders.Keys | Where-Object { $_ -ne "None" })
+        for ($i = 0; $i -lt $pickIds.Count; $i++) {
+            $p = $script:DnsProviders[$pickIds[$i]]
+            Write-Host ("    {0}. {1}  ({2})" -f ($i + 1), $p.DisplayName, $p.Primary) -ForegroundColor White
+        }
+        $validDns = 1..$pickIds.Count | ForEach-Object { "$_" }
+        $dc = Read-MenuChoice -Prompt "  DNS choice" -Valid $validDns
+        $didx = [int]$dc - 1
+        if ($didx -ge 0 -and $didx -lt $pickIds.Count) {
+            [void](Set-BastionDnsProviderId -Id $pickIds[$didx])
+        }
+        Write-Host ("  Will set DNS to: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor Green
+    } else {
+        $script:Sections["DNS"] = $false
+        Write-Host "  DNS adapters will be left unchanged." -ForegroundColor Green
+    }
     Write-Host ""
     Write-Host "  Print Spooler: disabling is better for security (PrintNightmare surface)," -ForegroundColor Cyan
     Write-Host "  but you will not be able to print until it is re-enabled." -ForegroundColor Cyan
@@ -3780,6 +4004,7 @@ function Invoke-ApplyHardening {
         FirewallGroups = @()
         ProgramsInstalledList = @()
         BrowserPolicyMode = $script:BrowserPolicyMode
+        DnsProviderId = $script:DnsProviderId
     }
 
     Clear-BastionScreen
@@ -3941,26 +4166,29 @@ function Invoke-ApplyHardening {
         }
     }
 
-    if ($script:Sections["DNS"]) {
-        Write-Host "  [DNS]" -ForegroundColor Cyan
-        $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object {
-            $_.Status -eq "Up" -and $_.InterfaceDescription -notmatch "Bluetooth|Loopback|Virtual"
-        })
-        if ($adapters.Count -eq 0) {
-            Write-Status "No eligible adapters found" "Warn"
-        }
-        foreach ($a in $adapters) {
-            try {
-                $dns = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                    Select-Object -ExpandProperty ServerAddresses)
-                if ($dns.Count -ge 1 -and $dns[0] -eq "9.9.9.9") {
-                    Write-Status ("{0} already Quad9-first" -f $a.Name) "Already"
-                } else {
-                    Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses @("9.9.9.9","149.112.112.112") -ErrorAction Stop
-                    Write-Status ("Quad9 -> {0}" -f $a.Name) "Applied"
+    if ($script:Sections["DNS"] -and $script:DnsProviderId -ne "None") {
+        $prov = Get-BastionDnsProvider
+        Write-Host ("  [DNS] {0}" -f $prov.DisplayName) -ForegroundColor Cyan
+        if (-not $prov.Primary) {
+            Write-Status "No DNS provider selected; leaving adapters unchanged" "Already"
+        } else {
+            $servers = @([string]$prov.Primary)
+            if ($prov.Secondary) { $servers += [string]$prov.Secondary }
+            $adapters = @(Get-BastionDnsAdapters)
+            if ($adapters.Count -eq 0) {
+                Write-Status "No eligible adapters found" "Warn"
+            }
+            foreach ($a in $adapters) {
+                try {
+                    if (Test-AdapterDnsMatchesProvider -InterfaceIndex $a.ifIndex) {
+                        Write-Status ("{0} already {1}-first" -f $a.Name, $prov.DisplayName) "Already"
+                    } else {
+                        Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses $servers -ErrorAction Stop
+                        Write-Status ("{0} -> {1}" -f $prov.DisplayName, $a.Name) "Applied"
+                    }
+                } catch {
+                    Write-Status ("DNS fail on {0}: {1}" -f $a.Name, $_.Exception.Message) "Failed"
                 }
-            } catch {
-                Write-Status ("DNS fail on {0}: {1}" -f $a.Name, $_.Exception.Message) "Failed"
             }
         }
     }
@@ -4146,6 +4374,7 @@ function Show-MainMenu {
             Write-Host ("  Last Apply: {0} (v{1})" -f $last.Timestamp, $last.ScriptVersion) -ForegroundColor DarkGray
         }
         Write-Host ("  Browser policy: {0}" -f $script:BrowserPolicyMode) -ForegroundColor DarkGray
+        Write-Host ("  DNS resolver:   {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
 
         Write-MenuGroup "REVIEW"
         Write-Host "   1    Dry Run"
@@ -4156,6 +4385,7 @@ function Show-MainMenu {
         Write-Host "   4    Hardening sections"
         Write-Host "   5    Programs and install paths"
         Write-Host "   6    Browser privacy policies"
+        Write-Host "   D    DNS resolver (or leave unchanged)"
 
         Write-MenuGroup "EXECUTE"
         Write-Host "   7    Quick Harden" -ForegroundColor Green
@@ -4202,7 +4432,7 @@ function Show-MainMenu {
         Write-Host ""
 
         $choice = Read-MenuChoice -Prompt "  Select" -Valid @(
-            "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r"
+            "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r","D","d"
         )
 
         switch ($choice.ToUpper()) {
@@ -4212,6 +4442,7 @@ function Show-MainMenu {
             "4" { Show-SectionMenu }
             "5" { Show-ProgramMenu }
             "6" { Show-BrowserPolicyMenu }
+            "D" { Show-DnsProviderMenu }
             "7" { Invoke-QuickHardening }
             "Q" { Invoke-QuickHardening }
             "8" { Invoke-ApplyHardening }

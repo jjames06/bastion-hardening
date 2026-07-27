@@ -109,7 +109,7 @@ cd bastion-hardening
 | SMBv1                | On      | Disables legacy SMB1                            |
 | OneDrive             | On      | Removes desktop client only                     |
 | DeliveryOptimization | On      | HTTP-only updates                               |
-| DNS                  | On      | Quad9 (`9.9.9.9`)                               |
+| DNS                  | On*     | User-chosen public resolver (default Quad9)     |
 | Defender             | On      | Network Protection + Controlled Folder Access   |
 | PowerShellAuditing   | On      | Script Block Logging                            |
 | ExploitProtection    | On      | Mild, compatibility-safe mitigations            |
@@ -122,7 +122,26 @@ cd bastion-hardening
 | Suggestions          | Off     | Widgets / Start suggestions                     |
 | CopilotM365          | Off     | Optional                                        |
 
-Quick Harden uses a safer subset and asks explicitly whether to keep the Print Spooler enabled.
+\* DNS is enabled by default with **Quad9**, but you can pick another resolver or leave DNS alone (main menu **D**). Quick Harden asks whether to change DNS and which provider to use.
+
+Quick Harden uses a safer subset and asks explicitly whether to keep the Print Spooler enabled and whether to change DNS.
+
+---
+
+## DNS resolvers
+
+From main menu **D** (or Sections → **D**), choose one of:
+
+| Option | Primary / secondary | Notes |
+|--------|---------------------|--------|
+| **Quad9 (malware blocking)** | `9.9.9.9` / `149.112.112.112` | Default. Blocks known malicious domains |
+| **Cloudflare (1.1.1.1)** | `1.1.1.1` / `1.0.0.1` | Privacy-focused public DNS |
+| **Cloudflare security** | `1.1.1.2` / `1.0.0.2` | Cloudflare with malware blocking |
+| **Google Public DNS** | `8.8.8.8` / `8.8.4.4` | Highly available public DNS |
+| **Cisco OpenDNS** | `208.67.222.222` / `208.67.220.220` | Public OpenDNS resolvers |
+| **Do not change DNS** | — | Leaves adapters on DHCP/manual settings |
+
+A connected VPN may override these settings while the tunnel is up. That is expected.
 
 ---
 
@@ -130,8 +149,8 @@ Quick Harden uses a safer subset and asks explicitly whether to keep the Print S
 
 - **Print Spooler** — Disabled by default for security. Quick Harden gives a clear choice to keep it.
 - **OneDrive & BloatApps** — Hard to reverse. System Restore is the reliable recovery path.
-- **Undo** — Restores tracked services and firewall groups from the last Apply only. It does **not** reinstall AppX packages or OneDrive.
-- **VPN DNS** — A connected VPN may override Quad9. That is normal.
+- **Undo** — Restores tracked services and firewall groups from the last Apply only. It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers.
+- **DNS** — Optional. Choose a provider or leave DNS unchanged; VPN software may still override while connected.
 - **Custom install paths** — Only allowed on fixed local volumes outside system directories.
 - **Logs and config** — Prefer `C:\Temp`; fall back to `%TEMP%\Bastion` or `%LOCALAPPDATA%\Bastion` if needed.
 
@@ -145,6 +164,7 @@ Quick Harden uses a safer subset and asks explicitly whether to keep the Print S
 | `Bastion-Hardening.bat`   | Elevated launcher               |
 | `Bastion-Banner.utf8.txt` | Optional Unicode banner         |
 | `LICENSE`                 | MIT License + additional notice |
+| `SECURITY.md`             | Vulnerability reporting policy  |
 | `README.md`               | This documentation              |
 
 ---
@@ -164,7 +184,7 @@ When reporting a bug, include Windows version, what you ran (Dry Run / Apply / Q
 - Review the script before running it. Trust is earned by reading the code.
 - Prefer official releases or clones of this repository only.
 - Do not run untrusted copies of Bastion from random downloads or chat attachments.
-- For vulnerability reports, open a private security advisory on GitHub if available, or an Issue without exploit detail until maintainers respond.
+- Vulnerability reporting and supported versions: see [SECURITY.md](SECURITY.md).
 
 ---
 
