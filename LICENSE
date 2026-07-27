@@ -1,0 +1,39 @@
+MIT License
+
+Copyright (c) 2026 Bastion Hardening Framework contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+------------------------------------------------------------------------------
+ADDITIONAL DISCLAIMER
+
+This tool makes significant changes to Windows (services, firewall, registry,
+optional features, AppX packages, DNS, Microsoft Defender settings, and related
+components).
+
+- Always create a System Restore Point before using Apply or Quick Harden.
+- It can disable printing (Print Spooler), network discovery, the OneDrive
+  client, Xbox clients, Widgets, and other features.
+- It is intended for a single personal workstation you administer.
+- It is NOT designed for domain-joined, Intune/MDM-managed, or corporate machines.
+- The author(s) and contributors accept no responsibility for data loss, broken
+  functionality, security incidents, or any other consequences of using this
+  software.
+
+Use at your own risk.

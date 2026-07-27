@@ -1,0 +1,15 @@
+# Local git worktrees
+.worktrees/
+
+# OS / editor noise
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*~
+
+# Runtime logs if someone runs the tool from the repo folder
+Bastion-Log-*.txt
+Bastion-LastApply.json
+Bastion-Config.json
+BastionInstallers/
