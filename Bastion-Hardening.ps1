@@ -239,10 +239,10 @@ $script:SectionDocs = [ordered]@{
     }
     "BrowserPolicies" = @{
         Intent  = "Optional privacy-oriented policy packs for installed Firefox and Chrome."
-        Changes = "Applies Default (remove Bastion policies), Medium, or Strict per browser from menu 6 or during Apply when the section is enabled."
-        Impact  = "Strict can break SSO, payments, and embedded media on some sites. Medium is milder."
-        Revert  = "Menu 6 or Recovery > Browser policies; set Default."
-        Notes   = "Per-browser detection is preferred over a blind blanket. Restart browsers after changes."
+        Changes = "Firefox: writes or deletes distribution/policies.json. Default deletes the file (full Bastion revert). Medium: telemetry/studies off + tracking protection. Strict: Medium + HTTPS-Only forced + ECH preference locks + Pocket off + TP locked. Chrome: HKLM policy DWords or key removal for Default."
+        Impact  = "Strict HTTPS-Only can break some sites/SSO. ECH locks apply only while policies.json exists. Bastion never sets DisableEncryptedClientHello (that disables ECH)."
+        Revert  = "Menu 6 or Recovery > 3 Browser policies > Default. Deletes Firefox policies.json entirely (HTTPS-Only, ECH locks, telemetry, TP) and removes Chrome Bastion policy keys."
+        Notes   = "Restart browsers after changes. In Firefox, about:policies should be empty after Default."
     }
     "BloatApps" = @{
         Intent  = "Remove a curated list of consumer Appx packages many users do not want on a clean workstation."
@@ -269,12 +269,29 @@ $script:SectionDocs = [ordered]@{
 
 
 $script:ProgramDefs = [ordered]@{
-    "Firefox"        = @{ WingetId = "Mozilla.Firefox"; Paths = @("C:\Program Files\Mozilla Firefox\firefox.exe"); Category = "Browser" }
+    "Firefox"        = @{ WingetId = "Mozilla.Firefox"; Paths = @("C:\Program Files\Mozilla Firefox\firefox.exe","C:\Program Files (x86)\Mozilla Firefox\firefox.exe"); Category = "Browser" }
     "Chrome"         = @{ WingetId = "Google.Chrome"; Paths = @("C:\Program Files\Google\Chrome\Application\chrome.exe"); Category = "Browser" }
     "Brave"          = @{ WingetId = "Brave.Brave"; Paths = @("C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"); Category = "Browser" }
     "Steam"          = @{ WingetId = "Valve.Steam"; Paths = @("C:\Program Files (x86)\Steam\steam.exe"); Category = "Gaming" }
+    "EA App"         = @{ WingetId = "ElectronicArts.EADesktop"; Paths = @(
+                            "C:\Program Files\Electronic Arts\EA Desktop\EA Desktop\EADesktop.exe",
+                            "C:\Program Files\Electronic Arts\EA Desktop\EA Desktop\EALauncher.exe",
+                            "C:\Program Files (x86)\Electronic Arts\EA Desktop\EA Desktop\EADesktop.exe"
+                         ); Category = "Gaming" }
+    "Riot Client"    = @{
+                            # No dedicated winget package for Riot Client alone; detect only + manual download URL.
+                            WingetId = $null
+                            ManualInstallOnly = $true
+                            ManualUrl = "https://www.riotgames.com/en"
+                            Paths = @(
+                                "C:\Riot Games\Riot Client\RiotClientServices.exe",
+                                "C:\Riot Games\Riot Client\RiotClientUx.exe"
+                            )
+                            Category = "Gaming"
+                         }
     "Mullvad VPN"    = @{ WingetId = "MullvadVPN.MullvadVPN"; Paths = @("C:\Program Files\Mullvad VPN\Mullvad VPN.exe"); Category = "Security" }
     "Discord"        = @{ WingetId = "Discord.Discord"; Paths = @("$env:LOCALAPPDATA\Discord\Update.exe"); Category = "Social" }
+    "Slack"          = @{ WingetId = "SlackTechnologies.Slack"; Paths = @("$env:LOCALAPPDATA\slack\slack.exe","C:\Program Files\Slack\slack.exe"); Category = "Social" }
     "Battle.net"     = @{ WingetId = "Blizzard.BattleNet"; Paths = @("C:\Program Files (x86)\Battle.net\Battle.net.exe"); Category = "Gaming" }
     "7-Zip"          = @{ WingetId = "7zip.7zip"; Paths = @("C:\Program Files\7-Zip\7zFM.exe","C:\Program Files\7-Zip\7z.exe"); Category = "Utility" }
     "Notepad++"      = @{ WingetId = "Notepad++.Notepad++"; Paths = @("C:\Program Files\Notepad++\notepad++.exe"); Category = "Dev" }
@@ -284,6 +301,14 @@ $script:ProgramDefs = [ordered]@{
     "Git"            = @{ WingetId = "Git.Git"; Paths = @("C:\Program Files\Git\cmd\git.exe"); Category = "Dev" }
     "GitHub Desktop" = @{ WingetId = "GitHub.GitHubDesktop"; Paths = @("$env:LOCALAPPDATA\GitHubDesktop\GitHubDesktop.exe"); Category = "Dev" }
     "Node.js"        = @{ WingetId = "OpenJS.NodeJS.LTS"; Paths = @("C:\Program Files\nodejs\node.exe"); Category = "Dev" }
+    "Postman"        = @{ WingetId = "Postman.Postman"; Paths = @("$env:LOCALAPPDATA\Postman\Postman.exe","C:\Program Files\Postman\Postman.exe"); Category = "Dev" }
+    "Docker Desktop" = @{ WingetId = "Docker.DockerDesktop"; Paths = @("C:\Program Files\Docker\Docker\Docker Desktop.exe"); Category = "Dev" }
+    "PostgreSQL"     = @{ WingetId = "PostgreSQL.PostgreSQL.17"; Paths = @(
+                            "C:\Program Files\PostgreSQL\18\bin\psql.exe",
+                            "C:\Program Files\PostgreSQL\17\bin\psql.exe",
+                            "C:\Program Files\PostgreSQL\16\bin\psql.exe",
+                            "C:\Program Files\PostgreSQL\15\bin\psql.exe"
+                         ); Category = "Dev" }
     "ShareX"         = @{ WingetId = "ShareX.ShareX"; Paths = @("C:\Program Files\ShareX\ShareX.exe"); Category = "Utility" }
     "Bitwarden"      = @{ WingetId = "Bitwarden.Bitwarden"; Paths = @("C:\Program Files\Bitwarden\Bitwarden.exe","$env:LOCALAPPDATA\Programs\Bitwarden\Bitwarden.exe"); Category = "Security" }
     "OBS Studio"     = @{ WingetId = "OBSProject.OBSStudio"; Paths = @("C:\Program Files\obs-studio\bin\64bit\obs64.exe"); Category = "Media" }
@@ -830,11 +855,15 @@ function Test-CatalogPackageId {
     if ([string]::IsNullOrWhiteSpace($AppName) -or -not $script:ProgramDefs.Contains($AppName)) {
         return [PSCustomObject]@{ Ok = $false; Detail = ("Not in Bastion catalog: {0}" -f $AppName) }
     }
-    $expected = $script:ProgramDefs[$AppName].WingetId
+    $def = $script:ProgramDefs[$AppName]
+    if ($def.ManualInstallOnly) {
+        return [PSCustomObject]@{ Ok = $false; Detail = ("Manual install only (not on winget): {0}" -f $AppName); Manual = $true }
+    }
+    $expected = $def.WingetId
     if ($WingetId -ne $expected) {
         return [PSCustomObject]@{ Ok = $false; Detail = ("Package ID mismatch for {0}" -f $AppName) }
     }
-    if ($WingetId -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]{1,120}$') {
+    if ([string]::IsNullOrWhiteSpace($WingetId) -or $WingetId -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]{1,120}$') {
         return [PSCustomObject]@{ Ok = $false; Detail = ("Package ID failed format validation: {0}" -f $WingetId) }
     }
     return [PSCustomObject]@{ Ok = $true; Detail = $WingetId }
@@ -946,16 +975,31 @@ function Get-EffectiveInstallRoot([string]$AppName) {
 function Test-Installed {
     param([string]$Name, [string[]]$Paths)
     foreach ($p in @($Paths)) {
-        if ($p -and (Test-Path -LiteralPath $p)) { return $true }
+        if ([string]::IsNullOrWhiteSpace($p)) { continue }
+        # Literal first; also allow simple * wildcards in a single path segment.
+        try {
+            if (Test-Path -LiteralPath $p) { return $true }
+        } catch {}
+        if ($p -match '\*') {
+            try {
+                $hit = Get-Item -Path $p -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($hit) { return $true }
+            } catch {}
+        }
     }
     if ($Name -eq "Blender" -and (Test-Path -LiteralPath "C:\Program Files\Blender Foundation")) {
         $hit = Get-ChildItem "C:\Program Files\Blender Foundation" -Filter blender.exe -Recurse -Depth 3 -File -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if ($hit) { return $true }
     }
+    if ($Name -eq "PostgreSQL" -and (Test-Path -LiteralPath "C:\Program Files\PostgreSQL")) {
+        $hit = Get-ChildItem "C:\Program Files\PostgreSQL" -Filter psql.exe -Recurse -Depth 3 -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($hit) { return $true }
+    }
     $root = Get-EffectiveInstallRoot -AppName $Name
     if (-not $root -or -not (Test-Path -LiteralPath $root)) { return $false }
-    foreach ($exe in @($Paths | ForEach-Object { Split-Path $_ -Leaf } | Select-Object -Unique)) {
+    foreach ($exe in @($Paths | ForEach-Object { Split-Path $_ -Leaf } | Select-Object -Unique | Where-Object { $_ -and $_ -ne '*' })) {
         $hit = Get-ChildItem -LiteralPath $root -Filter $exe -Recurse -Depth 5 -File -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if ($hit) { return $true }
@@ -1022,14 +1066,21 @@ function Install-BastionCatalogApp {
         return $false
     }
     $def = $script:ProgramDefs[$AppName]
+    if (Test-Installed -Name $AppName -Paths $def.Paths) {
+        Write-Status ("{0} already installed" -f $AppName) "Already"
+        return $true
+    }
+    if ($def.ManualInstallOnly) {
+        $url = if ($def.ManualUrl) { [string]$def.ManualUrl } else { "(vendor site)" }
+        Write-Status ("{0} is not available via winget" -f $AppName) "Warn"
+        Write-Host ("      Download/install from: {0}" -f $url) -ForegroundColor Cyan
+        Write-Host "      After install, Bastion will detect it for uninstall if paths match." -ForegroundColor DarkGray
+        return $false
+    }
     $idCheck = Test-CatalogPackageId -AppName $AppName -WingetId $def.WingetId
     if (-not $idCheck.Ok) {
         Write-Status ("REFUSED: {0}" -f $idCheck.Detail) "Failed"
         return $false
-    }
-    if (Test-Installed -Name $AppName -Paths $def.Paths) {
-        Write-Status ("{0} already installed" -f $AppName) "Already"
-        return $true
     }
 
     $pre = Test-WingetSecurityPreflight
@@ -1404,20 +1455,60 @@ function Get-FirefoxPoliciesPath {
     return "C:\Program Files\Mozilla Firefox\distribution\policies.json"
 }
 
+function Get-FirefoxPolicyModeFromFile {
+    # Classify Bastion-written (or compatible) policies.json for UI display.
+    $path = Get-FirefoxPoliciesPath
+    if (-not (Test-Path -LiteralPath $path)) { return "Default" }
+    try {
+        $j = Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json
+        $p = $j.policies
+        if (-not $p) { return "Custom" }
+        $httpsOnly = ("$($p.HTTPSOnlyMode)" -eq "force_enabled")
+        $echPref = $false
+        if ($p.Preferences) {
+            $prefNames = @($p.Preferences.PSObject.Properties | ForEach-Object { $_.Name })
+            if ($prefNames -match 'echconfig|EncryptedClientHello|network\.dns\.ech') { $echPref = $true }
+        }
+        # DisableEncryptedClientHello = true means ECH is forced OFF (not Bastion Strict).
+        $echDisabled = ($p.DisableEncryptedClientHello -eq $true)
+        if ($httpsOnly -or $echPref -or ($p.DisablePocket -eq $true -and $p.EnableTrackingProtection -and $p.EnableTrackingProtection.Locked)) {
+            return "Strict"
+        }
+        if ($p.DisableTelemetry -eq $true -or $p.DisableFirefoxStudies -eq $true) {
+            return "Medium"
+        }
+        if ($echDisabled) { return "Custom" }
+        return "Custom"
+    } catch {
+        return "Custom"
+    }
+}
+
 function Set-FirefoxPolicyMode {
     param([ValidateSet("Default","Medium","Strict")][string]$Mode)
     $path = Get-FirefoxPoliciesPath
     $dist = Split-Path $path -Parent
     try {
         if ($Mode -eq "Default") {
+            # Full Bastion revert: delete enterprise policies.json entirely.
+            # That unlocks HTTPS-Only, tracking protection locks, Pocket, telemetry blocks,
+            # and any Preferences Bastion wrote (including ECH-related locks).
             if (Test-Path -LiteralPath $path) {
                 Remove-Item -LiteralPath $path -Force -ErrorAction Stop
-                Write-Status "Firefox policies removed" "Applied"
+                Write-Status "Firefox policies.json removed (full Bastion revert)" "Applied"
+                Write-Host "      Cleared: telemetry/studies locks, tracking protection locks," -ForegroundColor DarkGray
+                Write-Host "      HTTPS-Only force, Pocket disable, ECH preference locks (if present)." -ForegroundColor DarkGray
+                Write-Host ("      File was: {0}" -f $path) -ForegroundColor DarkGray
+                Write-Host "      Restart Firefox. about:policies should show no active Bastion file." -ForegroundColor DarkGray
             } else {
-                Write-Status "Firefox already default" "Already"
+                Write-Status "Firefox already default (no policies.json)" "Already"
             }
             return $true
         }
+
+        # Medium: privacy baseline (no HTTPS-Only force, no ECH locks).
+        # Strict: Medium + HTTPS-Only + explicit ECH enable via Preferences (not DisableEncryptedClientHello).
+        # Note: DisableEncryptedClientHello=true would TURN ECH OFF; Bastion never sets that.
         $policy = if ($Mode -eq "Medium") {
             @{ policies = @{
                 DisableTelemetry = $true
@@ -1430,14 +1521,38 @@ function Set-FirefoxPolicyMode {
                 DisableFirefoxStudies = $true
                 DisablePocket = $true
                 HTTPSOnlyMode = "force_enabled"
-                EnableTrackingProtection = @{ Value = $true; Locked = $true; Cryptomining = $true; Fingerprinting = $true }
+                EnableTrackingProtection = @{
+                    Value = $true
+                    Locked = $true
+                    Cryptomining = $true
+                    Fingerprinting = $true
+                }
+                # Force-enable Encrypted Client Hello (ECH) and keep it locked under enterprise policy.
+                # Revert (Default) deletes this file so these prefs are no longer locked.
+                Preferences = @{
+                    "network.dns.echconfig.enabled" = @{
+                        Value  = $true
+                        Status = "locked"
+                    }
+                    "network.dns.http3_echconfig.enabled" = @{
+                        Value  = $true
+                        Status = "locked"
+                    }
+                }
             }}
         }
         if (-not (Test-Path -LiteralPath $dist)) {
             New-Item -Path $dist -ItemType Directory -Force -ErrorAction Stop | Out-Null
         }
-        ($policy | ConvertTo-Json -Depth 8) | Out-File -FilePath $path -Encoding utf8 -Force
+        # UTF-8 without BOM is preferred for policies.json; .NET UTF8Encoding($false) is BOM-less.
+        $json = ($policy | ConvertTo-Json -Depth 10)
+        $utf8 = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($path, $json, $utf8)
         Write-Status ("Firefox policies -> {0}" -f $Mode) "Applied"
+        if ($Mode -eq "Strict") {
+            Write-Host "      Strict includes: HTTPS-Only force + ECH prefs locked on + tracking locks." -ForegroundColor DarkGray
+            Write-Host "      Revert: menu 6 or Recovery > Browser policies > Default (deletes policies.json)." -ForegroundColor DarkGray
+        }
         return $true
     } catch {
         Write-Status ("Firefox policy failed: {0}" -f $_.Exception.Message) "Failed"
@@ -2644,15 +2759,18 @@ function Show-ProgramMenu {
         Write-Host ""
         for ($i = 0; $i -lt $apps.Count; $i++) {
             $a = $apps[$i]
+            $manual = $false
+            if ($script:ProgramDefs.Contains($a.Name) -and $script:ProgramDefs[$a.Name].ManualInstallOnly) { $manual = $true }
             if ($a.Installed) {
                 # Never show install-queue checkmark on software already present.
                 Write-Host ("  {0,2}. [ ] {1,-16} installed" -f ($i + 1), $a.Name) -ForegroundColor DarkCyan
             } elseif ($a.Selected) {
                 $r = Get-EffectiveInstallRoot -AppName $a.Name
-                $hint = $(if ($r) { (" -> {0}" -f $r) } else { " -> default" })
+                $hint = $(if ($manual) { " -> manual download" } elseif ($r) { (" -> {0}" -f $r) } else { " -> default" })
                 Write-Host ("  {0,2}. [X] {1,-16} missing  (queued){2}" -f ($i + 1), $a.Name, $hint) -ForegroundColor Green
             } else {
-                Write-Host ("  {0,2}. [ ] {1,-16} missing" -f ($i + 1), $a.Name) -ForegroundColor DarkGray
+                $tag = if ($manual) { "missing (manual)" } else { "missing" }
+                Write-Host ("  {0,2}. [ ] {1,-16} {2}" -f ($i + 1), $a.Name, $tag) -ForegroundColor DarkGray
             }
         }
         $pendingCount = @($apps | Where-Object { $_.Selected -and -not $_.Installed }).Count
@@ -2816,14 +2934,7 @@ function Get-InstalledBastionBrowsers {
     $list = [System.Collections.Generic.List[object]]::new()
     $map = @(
         @{ Name = "Firefox"; Test = { Test-Installed -Name "Firefox" -Paths $script:ProgramDefs["Firefox"].Paths }; Set = "Firefox"; GetMode = {
-            $fp = Get-FirefoxPoliciesPath
-            if (-not (Test-Path -LiteralPath $fp)) { return "Default" }
-            try {
-                $j = Get-Content -LiteralPath $fp -Raw -ErrorAction Stop | ConvertFrom-Json
-                if ($j.policies.HTTPSOnlyMode -eq "force_enabled") { return "Strict" }
-                if ($j.policies.DisableTelemetry -eq $true) { return "Medium" }
-                return "Custom"
-            } catch { return "Custom" }
+            return (Get-FirefoxPolicyModeFromFile)
         }}
         @{ Name = "Chrome"; Test = { Test-Installed -Name "Chrome" -Paths $script:ProgramDefs["Chrome"].Paths }; Set = "Chrome"; GetMode = {
             $base = "HKLM:\SOFTWARE\Policies\Google\Chrome"
@@ -2855,7 +2966,13 @@ function Show-BrowserPolicyMenu {
         Clear-BastionScreen
         Write-Header "BROWSER PRIVACY POLICIES"
         Write-Host "  Policies are applied per installed browser (not a blind blanket)." -ForegroundColor Cyan
-        Write-Host "  Strict can break SSO, payments, and embedded media." -ForegroundColor Yellow
+        Write-Host "  Strict can break SSO, payments, and embedded media (HTTPS-Only)." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  Firefox modes (enterprise policies.json under the install folder):" -ForegroundColor DarkGray
+        Write-Host "    Default = delete Bastion policies.json (full revert: HTTPS-Only, ECH locks, telemetry, etc.)" -ForegroundColor DarkGray
+        Write-Host "    Medium  = telemetry/studies off + tracking protection (crypto/fingerprinting)" -ForegroundColor DarkGray
+        Write-Host "    Strict  = Medium + HTTPS-Only forced + ECH preference locks + Pocket off + TP locked" -ForegroundColor DarkGray
+        Write-Host "  Chrome: Default removes HKLM policy key; Medium/Strict set privacy-related DWords." -ForegroundColor DarkGray
         Write-Host ""
 
         $browsers = @(Get-InstalledBastionBrowsers)
@@ -2892,11 +3009,12 @@ function Show-BrowserPolicyMenu {
 
         Write-Host ""
         Write-Host ("  Target: {0}" -f (($targets | ForEach-Object { $_.Name }) -join ", ")) -ForegroundColor Cyan
-        Write-Host "  1 Default (remove Bastion policies)  2 Medium  3 Strict  0 Cancel"
+        Write-Host "  1 Default (FULL revert / remove Bastion policies)  2 Medium  3 Strict  0 Cancel"
         $m = Read-MenuChoice -Prompt "  Mode" -Valid @("0", "1", "2", "3")
         if ($m -eq "0") { continue }
         $mode = switch ($m) { "1" { "Default" } "2" { "Medium" } "3" { "Strict" } }
-        if ($mode -eq "Strict" -and (Read-YesNo -Prompt "  Apply Strict (may break sites) (Y/N)?") -ne "Y") { continue }
+        if ($mode -eq "Strict" -and (Read-YesNo -Prompt "  Apply Strict (HTTPS-Only / may break sites) (Y/N)?") -ne "Y") { continue }
+        if ($mode -eq "Default" -and (Read-YesNo -Prompt "  Remove Bastion browser policies entirely (Y/N)?") -ne "Y") { continue }
 
         foreach ($t in $targets) {
             Write-Host ("  Applying {0} -> {1}..." -f $t.Name, $mode) -ForegroundColor White
@@ -2914,7 +3032,7 @@ function Show-BrowserPolicyMenu {
         }
         $script:BrowserPolicyMode = $mode
         Save-BastionConfig
-        Write-Host "  Restart affected browsers to load policies." -ForegroundColor Yellow
+        Write-Host "  Restart affected browsers fully (all windows) to load or drop policies." -ForegroundColor Yellow
         Wait-ForKey
     }
 }
@@ -3302,10 +3420,20 @@ function Show-UninstallMenu {
                 $removed = [System.Collections.Generic.List[string]]::new()
                 $stillThere = [System.Collections.Generic.List[string]]::new()
                 foreach ($t in $targets) {
-                    # Final gate: refuse winget uninstall if detection says absent.
+                    # Final gate: refuse uninstall if detection says absent.
                     if (-not (Test-Installed -Name $t.Name -Paths $t.Paths)) {
                         Write-Status ("{0} is not installed; skipped" -f $t.Name) "Skip"
                         [void]$selectedNames.Remove($t.Name)
+                        continue
+                    }
+                    $defU = $script:ProgramDefs[$t.Name]
+                    if ($defU.ManualInstallOnly -or [string]::IsNullOrWhiteSpace($t.WingetId)) {
+                        Write-Status ("{0} has no winget uninstall ID" -f $t.Name) "Warn"
+                        Write-Host "      Remove it from Settings > Apps, or the vendor uninstaller." -ForegroundColor Yellow
+                        if ($defU.ManualUrl) {
+                            Write-Host ("      Vendor: {0}" -f $defU.ManualUrl) -ForegroundColor DarkGray
+                        }
+                        [void]$stillThere.Add($t.Name)
                         continue
                     }
                     $idCheck = Test-CatalogPackageId -AppName $t.Name -WingetId $t.WingetId
@@ -3668,7 +3796,7 @@ function Show-RecoveryMenu {
         Write-Header "RECOVERY / FIX"
         Write-Host "  1 Undo last hardening (services / firewall groups from last Apply)"
         Write-Host "  2 Re-enable Print Spooler"
-        Write-Host "  3 Browser policies (Default / Medium / Strict)"
+        Write-Host "  3 Browser policies (Default = full revert including Firefox ECH locks)"
         Write-Host "  4 Copilot / M365 tools"
         Write-Host "  5 Restore Widgets / Suggestions defaults" -ForegroundColor Green
         Write-Host "  0 Back"
