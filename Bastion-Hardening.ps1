@@ -62,11 +62,29 @@ $script:SkipSpoolerThisApply = $false
 $script:SelectedApps = [System.Collections.Generic.List[string]]::new()
 $script:GlobalInstallRoot   = $null
 $script:ProgramInstallRoots = @{}
+# Per-browser policy mode (Default | Medium | Strict). Independent so Firefox can stay Strict while Chrome stays Medium.
+$script:BrowserPolicyModes  = [ordered]@{
+    Firefox = "Default"
+    Chrome  = "Default"
+    Brave   = "Default"
+}
+# Legacy single-mode field (older configs / last bulk choice summary).
 $script:BrowserPolicyMode   = "Default"
 # DNS: pick a public resolver or leave adapters unchanged (see $script:DnsProviders).
 $script:DnsProviderId       = "Quad9"
+# Registry value names Bastion may write under Chrome/Brave policy keys (targeted revert).
+$script:ChromiumBastionValueNames = @(
+    "BastionManaged",
+    "MetricsReportingEnabled",
+    "SafeBrowsingEnabled",
+    "BlockThirdPartyCookies",
+    "DefaultCookiesSetting",
+    "HttpsOnlyMode",
+    "DnsOverHttpsMode"
+)
 $script:ConfigLoaded        = $false
 $script:ApplyFailures       = [System.Collections.Generic.List[string]]::new()
+$script:BrowserPolicyLastChange = $null
 
 # Curated public recursive DNS resolvers (IPv4). IDs are stable config keys.
 $script:DnsProviders = [ordered]@{
@@ -238,11 +256,11 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Never uses --ignore-security-hash. Free-typed package IDs are rejected."
     }
     "BrowserPolicies" = @{
-        Intent  = "Optional privacy-oriented policy packs for installed Firefox and Chrome."
-        Changes = "Firefox: writes or deletes distribution/policies.json. Default deletes the file (full Bastion revert). Medium: telemetry/studies off + tracking protection. Strict: Medium + HTTPS-Only forced + ECH preference locks + Pocket off + TP locked. Chrome: HKLM policy DWords or key removal for Default."
-        Impact  = "Strict HTTPS-Only can break some sites/SSO. ECH locks apply only while policies.json exists. Bastion never sets DisableEncryptedClientHello (that disables ECH)."
-        Revert  = "Menu 6 or Recovery > 3 Browser policies > Default. Deletes Firefox policies.json entirely (HTTPS-Only, ECH locks, telemetry, TP) and removes Chrome Bastion policy keys."
-        Notes   = "Restart browsers after changes. In Firefox, about:policies should be empty after Default."
+        Intent  = "Optional privacy-oriented policy packs per installed browser (Firefox, Chrome, Brave)."
+        Changes = "Each browser has its own Default/Medium/Strict mode (menu 6). Firefox uses distribution/policies.json (Strict adds HTTPS-Only + ECH locks). Chrome/Brave use HKLM policy DWords (telemetry/Safe Browsing, third-party cookies, HTTPS-Only). Changes are logged and prior Bastion artifacts are snapshotted under the Bastion data directory for best-effort revert."
+        Impact  = "STRICT WARNING: HTTPS-Only and hard cookie/tracking policies can break SSO, bank flows, older HTTP sites, embed/players, and some captive portals. Many people keep one browser Strict for daily privacy and another at Medium/Default for sites that need looser settings."
+        Revert  = "Menu 6 or Recovery > 3: set that browser to Default (removes Bastion Firefox policies.json and Bastion-managed Chrome/Brave registry values). System Restore remains the bulletproof rollback."
+        Notes   = "Modes are independent per browser. Restart each browser after changes. Firefox: about:policies. Chrome: chrome://policy. Brave: brave://policy."
     }
     "BloatApps" = @{
         Intent  = "Remove a curated list of consumer Appx packages many users do not want on a clean workstation."
@@ -1488,11 +1506,11 @@ function Set-FirefoxPolicyMode {
     param([ValidateSet("Default","Medium","Strict")][string]$Mode)
     $path = Get-FirefoxPoliciesPath
     $dist = Split-Path $path -Parent
+    $modeBefore = Get-FirefoxPolicyModeFromFile
     try {
         if ($Mode -eq "Default") {
             # Full Bastion revert: delete enterprise policies.json entirely.
-            # That unlocks HTTPS-Only, tracking protection locks, Pocket, telemetry blocks,
-            # and any Preferences Bastion wrote (including ECH-related locks).
+            $bak = Backup-FirefoxPoliciesFile
             if (Test-Path -LiteralPath $path) {
                 Remove-Item -LiteralPath $path -Force -ErrorAction Stop
                 Write-Status "Firefox policies.json removed (full Bastion revert)" "Applied"
@@ -1503,12 +1521,15 @@ function Set-FirefoxPolicyMode {
             } else {
                 Write-Status "Firefox already default (no policies.json)" "Already"
             }
+            if ($script:BrowserPolicyModes.Contains("Firefox")) { $script:BrowserPolicyModes["Firefox"] = "Default" }
+            Record-BrowserPolicyChange -Browser "Firefox" -ModeBefore $modeBefore -ModeAfter "Default" `
+                -Detail "Deleted policies.json (Bastion full revert)" -BackupPath $bak
             return $true
         }
 
+        $bak = Backup-FirefoxPoliciesFile
         # Medium: privacy baseline (no HTTPS-Only force, no ECH locks).
         # Strict: Medium + HTTPS-Only + explicit ECH enable via Preferences (not DisableEncryptedClientHello).
-        # Note: DisableEncryptedClientHello=true would TURN ECH OFF; Bastion never sets that.
         $policy = if ($Mode -eq "Medium") {
             @{ policies = @{
                 DisableTelemetry = $true
@@ -1527,8 +1548,6 @@ function Set-FirefoxPolicyMode {
                     Cryptomining = $true
                     Fingerprinting = $true
                 }
-                # Force-enable Encrypted Client Hello (ECH) and keep it locked under enterprise policy.
-                # Revert (Default) deletes this file so these prefs are no longer locked.
                 Preferences = @{
                     "network.dns.echconfig.enabled" = @{
                         Value  = $true
@@ -1544,15 +1563,17 @@ function Set-FirefoxPolicyMode {
         if (-not (Test-Path -LiteralPath $dist)) {
             New-Item -Path $dist -ItemType Directory -Force -ErrorAction Stop | Out-Null
         }
-        # UTF-8 without BOM is preferred for policies.json; .NET UTF8Encoding($false) is BOM-less.
         $json = ($policy | ConvertTo-Json -Depth 10)
         $utf8 = New-Object System.Text.UTF8Encoding $false
         [System.IO.File]::WriteAllText($path, $json, $utf8)
         Write-Status ("Firefox policies -> {0}" -f $Mode) "Applied"
         if ($Mode -eq "Strict") {
             Write-Host "      Strict includes: HTTPS-Only force + ECH prefs locked on + tracking locks." -ForegroundColor DarkGray
-            Write-Host "      Revert: menu 6 or Recovery > Browser policies > Default (deletes policies.json)." -ForegroundColor DarkGray
+            Write-Host "      Revert: menu 6 or Recovery > Browser policies > Firefox > Default." -ForegroundColor DarkGray
         }
+        if ($script:BrowserPolicyModes.Contains("Firefox")) { $script:BrowserPolicyModes["Firefox"] = $Mode }
+        Record-BrowserPolicyChange -Browser "Firefox" -ModeBefore $modeBefore -ModeAfter $Mode `
+            -Detail ("Wrote Bastion {0} policies.json" -f $Mode) -BackupPath $bak
         return $true
     } catch {
         Write-Status ("Firefox policy failed: {0}" -f $_.Exception.Message) "Failed"
@@ -1560,37 +1581,262 @@ function Set-FirefoxPolicyMode {
     }
 }
 
-function Set-ChromePolicyMode {
-    param([ValidateSet("Default","Medium","Strict")][string]$Mode)
-    $base = "HKLM:\SOFTWARE\Policies\Google\Chrome"
+function Get-BrowserPolicyBackupDir {
+    $dir = Join-Path $script:Config.LogDirectory "browser-policy-backups"
+    try {
+        if (-not (Test-Path -LiteralPath $dir)) {
+            New-Item -Path $dir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        }
+    } catch {}
+    return $dir
+}
+
+function Get-BrowserPolicyStatePath {
+    return (Join-Path $script:Config.LogDirectory "Bastion-BrowserPolicies-State.json")
+}
+
+function Write-BrowserStrictDisclaimer {
+    Write-Host ""
+    Write-Host "  ========== STRICT MODE DISCLAIMER ==========" -ForegroundColor Yellow
+    Write-Host "  Strict is for privacy/hardening, not maximum compatibility." -ForegroundColor Yellow
+    Write-Host "  It may break or degrade:" -ForegroundColor Yellow
+    Write-Host "    - Sites that still need plain HTTP (or mixed content)" -ForegroundColor DarkYellow
+    Write-Host "    - Some SSO / corporate login / bank flows" -ForegroundColor DarkYellow
+    Write-Host "    - Embedded players, older payment widgets, captive portals" -ForegroundColor DarkYellow
+    Write-Host "  Common approach: keep one browser Strict (e.g. Firefox) for daily use," -ForegroundColor Cyan
+    Write-Host "  and another at Medium or Default (e.g. Chrome) for sites that fail Strict." -ForegroundColor Cyan
+    Write-Host "  System Restore remains the bulletproof rollback if something goes wrong." -ForegroundColor DarkGray
+    Write-Host "  =============================================" -ForegroundColor Yellow
+    Write-Host ""
+}
+
+function Get-BrowserPolicyModesSummary {
+    $parts = foreach ($k in @($script:BrowserPolicyModes.Keys)) {
+        "{0}={1}" -f $k, $script:BrowserPolicyModes[$k]
+    }
+    return ($parts -join ", ")
+}
+
+function Save-BrowserPolicyStateFile {
+    if (-not (Ensure-BastionPaths)) { return }
+    try {
+        $path = Get-BrowserPolicyStatePath
+        $data = @{
+            UpdatedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            ScriptVersion = $script:Config.ScriptVersion
+            Modes = [ordered]@{}
+            LastChange = $script:BrowserPolicyLastChange
+        }
+        foreach ($k in $script:BrowserPolicyModes.Keys) {
+            $data.Modes[$k] = $script:BrowserPolicyModes[$k]
+        }
+        ($data | ConvertTo-Json -Depth 8) | Out-File -LiteralPath $path -Encoding utf8 -Force
+        Write-Log ("Browser policy state saved: {0}" -f $path) -NoConsole
+    } catch {
+        Write-Log ("Browser policy state save failed: {0}" -f $_.Exception.Message) -Level Warning -NoConsole
+    }
+}
+
+function Record-BrowserPolicyChange {
+    param(
+        [string]$Browser,
+        [string]$ModeBefore,
+        [string]$ModeAfter,
+        [string]$Detail,
+        [string]$BackupPath = ""
+    )
+    $script:BrowserPolicyLastChange = @{
+        Timestamp  = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Browser    = $Browser
+        ModeBefore = $ModeBefore
+        ModeAfter  = $ModeAfter
+        Detail     = $Detail
+        BackupPath = $BackupPath
+        LogFile    = $script:logFile
+    }
+    Write-Log ("BrowserPolicy {0}: {1} -> {2} | {3} | backup={4}" -f $Browser, $ModeBefore, $ModeAfter, $Detail, $BackupPath)
+    Save-BrowserPolicyStateFile
+}
+
+function Backup-FirefoxPoliciesFile {
+    $path = Get-FirefoxPoliciesPath
+    if (-not (Test-Path -LiteralPath $path)) { return "" }
+    try {
+        $dir = Get-BrowserPolicyBackupDir
+        $dest = Join-Path $dir ("firefox-policies-{0}.json" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+        Copy-Item -LiteralPath $path -Destination $dest -Force -ErrorAction Stop
+        Write-Log ("Firefox policies backup: {0}" -f $dest) -NoConsole
+        return $dest
+    } catch {
+        Write-Log ("Firefox policies backup failed: {0}" -f $_.Exception.Message) -Level Warning -NoConsole
+        return ""
+    }
+}
+
+function Get-ChromiumPolicyBase {
+    param([ValidateSet("Chrome","Brave")][string]$Browser)
+    if ($Browser -eq "Brave") {
+        return "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave"
+    }
+    return "HKLM:\SOFTWARE\Policies\Google\Chrome"
+}
+
+function Backup-ChromiumPolicyValues {
+    param([ValidateSet("Chrome","Brave")][string]$Browser)
+    $base = Get-ChromiumPolicyBase -Browser $Browser
+    $snap = [ordered]@{ Browser = $Browser; Path = $base; Values = [ordered]@{}; Existed = $false }
+    if (-not (Test-Path -LiteralPath $base)) {
+        return $snap
+    }
+    $snap.Existed = $true
+    try {
+        $props = Get-ItemProperty -LiteralPath $base -ErrorAction Stop
+        foreach ($n in $script:ChromiumBastionValueNames) {
+            if ($null -ne $props.PSObject.Properties[$n]) {
+                $snap.Values[$n] = $props.$n
+            }
+        }
+        $dir = Get-BrowserPolicyBackupDir
+        $dest = Join-Path $dir ("{0}-policy-{1}.json" -f $Browser.ToLowerInvariant(), (Get-Date -Format "yyyyMMdd-HHmmss"))
+        ($snap | ConvertTo-Json -Depth 6) | Out-File -LiteralPath $dest -Encoding utf8 -Force
+        Write-Log ("{0} policy backup: {1}" -f $Browser, $dest) -NoConsole
+        $snap.BackupFile = $dest
+        return $snap
+    } catch {
+        Write-Log ("{0} policy backup failed: {1}" -f $Browser, $_.Exception.Message) -Level Warning -NoConsole
+        return $snap
+    }
+}
+
+function Get-ChromiumPolicyMode {
+    param([ValidateSet("Chrome","Brave")][string]$Browser)
+    $base = Get-ChromiumPolicyBase -Browser $Browser
+    if (-not (Test-Path -LiteralPath $base)) { return "Default" }
+    try {
+        $c = Get-ItemProperty -LiteralPath $base -ErrorAction SilentlyContinue
+        if ($null -eq $c) { return "Default" }
+        if ($c.HttpsOnlyMode -eq 2 -or $c.DefaultCookiesSetting -eq 4) { return "Strict" }
+        if ($null -ne $c.MetricsReportingEnabled -or $null -ne $c.BlockThirdPartyCookies -or $c.BastionManaged -eq 1) {
+            return "Medium"
+        }
+        # Key exists but no Bastion markers — treat as custom foreign policy.
+        return "Custom"
+    } catch {
+        return "Custom"
+    }
+}
+
+function Remove-ChromiumBastionValues {
+    param([ValidateSet("Chrome","Brave")][string]$Browser)
+    $base = Get-ChromiumPolicyBase -Browser $Browser
+    if (-not (Test-Path -LiteralPath $base)) {
+        Write-Status ("{0} already default (no policy key)" -f $Browser) "Already"
+        return $true
+    }
+    $removed = 0
+    foreach ($n in $script:ChromiumBastionValueNames) {
+        try {
+            if ($null -ne (Get-ItemProperty -LiteralPath $base -Name $n -ErrorAction SilentlyContinue)) {
+                Remove-ItemProperty -LiteralPath $base -Name $n -Force -ErrorAction Stop
+                $removed++
+                Write-Log ("Removed {0} policy value: {1}" -f $Browser, $n) -NoConsole
+            }
+        } catch {
+            Write-Log ("Could not remove {0}\{1}: {2}" -f $Browser, $n, $_.Exception.Message) -Level Warning -NoConsole
+        }
+    }
+    # If no values remain, remove the key.
+    try {
+        $key = Get-Item -LiteralPath $base -ErrorAction SilentlyContinue
+        if ($key -and @($key.GetValueNames()).Count -eq 0) {
+            Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Log ("Removed empty policy key: {0}" -f $base) -NoConsole
+        }
+    } catch {}
+    if ($removed -gt 0) {
+        Write-Status ("{0} Bastion policy values removed ({1})" -f $Browser, $removed) "Applied"
+        Write-Host "      Non-Bastion policy values (if any) were left in place." -ForegroundColor DarkGray
+    } else {
+        Write-Status ("{0}: no Bastion-managed values found" -f $Browser) "Already"
+    }
+    return $true
+}
+
+function Set-ChromiumPolicyMode {
+    param(
+        [ValidateSet("Chrome","Brave")][string]$Browser,
+        [ValidateSet("Default","Medium","Strict")][string]$Mode
+    )
+    $base = Get-ChromiumPolicyBase -Browser $Browser
+    $modeBefore = Get-ChromiumPolicyMode -Browser $Browser
     try {
         if ($Mode -eq "Default") {
-            if (Test-Path -LiteralPath $base) {
-                Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction Stop
-                Write-Status "Chrome policies removed" "Applied"
-            } else {
-                Write-Status "Chrome already default" "Already"
-            }
+            $bak = Backup-ChromiumPolicyValues -Browser $Browser
+            $bakPath = if ($bak.BackupFile) { [string]$bak.BackupFile } else { "" }
+            [void](Remove-ChromiumBastionValues -Browser $Browser)
+            if ($script:BrowserPolicyModes.Contains($Browser)) { $script:BrowserPolicyModes[$Browser] = "Default" }
+            Record-BrowserPolicyChange -Browser $Browser -ModeBefore $modeBefore -ModeAfter "Default" `
+                -Detail "Removed Bastion-managed Chromium policy values" -BackupPath $bakPath
             return $true
         }
-        if (-not (Test-Path "HKLM:\SOFTWARE\Policies\Google")) {
-            New-Item "HKLM:\SOFTWARE\Policies\Google" -Force | Out-Null
+
+        $bak = Backup-ChromiumPolicyValues -Browser $Browser
+        $bakPath = if ($bak.BackupFile) { [string]$bak.BackupFile } else { "" }
+
+        # Ensure parent keys exist.
+        if ($Browser -eq "Chrome") {
+            if (-not (Test-Path "HKLM:\SOFTWARE\Policies\Google")) {
+                New-Item "HKLM:\SOFTWARE\Policies\Google" -Force | Out-Null
+            }
+        } else {
+            if (-not (Test-Path "HKLM:\SOFTWARE\Policies\BraveSoftware")) {
+                New-Item "HKLM:\SOFTWARE\Policies\BraveSoftware" -Force | Out-Null
+            }
         }
         if (-not (Test-Path $base)) { New-Item $base -Force | Out-Null }
+
+        # Clear prior Bastion cookie-mode values so Medium/Strict do not stack conflicting cookie policies.
+        foreach ($n in @("BlockThirdPartyCookies","DefaultCookiesSetting","HttpsOnlyMode","DnsOverHttpsMode")) {
+            try { Remove-ItemProperty -LiteralPath $base -Name $n -Force -ErrorAction SilentlyContinue } catch {}
+        }
+
+        New-ItemProperty $base -Name "BastionManaged" -Value 1 -PropertyType DWord -Force | Out-Null
         New-ItemProperty $base -Name "MetricsReportingEnabled" -Value 0 -PropertyType DWord -Force | Out-Null
         New-ItemProperty $base -Name "SafeBrowsingEnabled" -Value 1 -PropertyType DWord -Force | Out-Null
+
         if ($Mode -eq "Strict") {
-            New-ItemProperty $base -Name "DefaultCookiesSetting" -Value 4 -PropertyType DWord -Force | Out-Null
+            # HttpsOnlyMode 2 = force enabled (Chrome enterprise).
             New-ItemProperty $base -Name "HttpsOnlyMode" -Value 2 -PropertyType DWord -Force | Out-Null
+            # Block third-party cookies (less nuclear than DefaultCookiesSetting=4 block-all).
+            New-ItemProperty $base -Name "BlockThirdPartyCookies" -Value 1 -PropertyType DWord -Force | Out-Null
+            # Prefer secure DNS where policy is honored (2 = enable DNS-over-HTTPS without hard template lock).
+            New-ItemProperty $base -Name "DnsOverHttpsMode" -Value 2 -PropertyType DWord -Force | Out-Null
+            Write-Host ("      {0} Strict: HTTPS-Only force + 3P cookie block + DoH preference + telemetry off." -f $Browser) -ForegroundColor DarkGray
         } else {
             New-ItemProperty $base -Name "BlockThirdPartyCookies" -Value 1 -PropertyType DWord -Force | Out-Null
+            Write-Host ("      {0} Medium: telemetry off, Safe Browsing on, third-party cookies blocked." -f $Browser) -ForegroundColor DarkGray
         }
-        Write-Status ("Chrome policies -> {0}" -f $Mode) "Applied"
+
+        Write-Status ("{0} policies -> {1}" -f $Browser, $Mode) "Applied"
+        if ($script:BrowserPolicyModes.Contains($Browser)) { $script:BrowserPolicyModes[$Browser] = $Mode }
+        Record-BrowserPolicyChange -Browser $Browser -ModeBefore $modeBefore -ModeAfter $Mode `
+            -Detail ("Wrote Bastion {0} policy pack under {1}" -f $Mode, $base) -BackupPath $bakPath
+        Write-Host ("      Revert: menu 6 / Recovery > Browser policies > {0} > Default." -f $Browser) -ForegroundColor DarkGray
         return $true
     } catch {
-        Write-Status ("Chrome policy failed: {0}" -f $_.Exception.Message) "Failed"
+        Write-Status ("{0} policy failed: {1}" -f $Browser, $_.Exception.Message) "Failed"
         return $false
     }
+}
+
+function Set-ChromePolicyMode {
+    param([ValidateSet("Default","Medium","Strict")][string]$Mode)
+    return (Set-ChromiumPolicyMode -Browser Chrome -Mode $Mode)
+}
+
+function Set-BravePolicyMode {
+    param([ValidateSet("Default","Medium","Strict")][string]$Mode)
+    return (Set-ChromiumPolicyMode -Browser Brave -Mode $Mode)
 }
 
 function Get-BastionDnsProvider {
@@ -1666,10 +1912,12 @@ function Save-BastionConfig {
             GlobalInstallRoot = $script:GlobalInstallRoot
             ProgramInstallRoots = @{}
             BrowserPolicyMode = $script:BrowserPolicyMode
+            BrowserPolicyModes = [ordered]@{}
             DnsProviderId = $script:DnsProviderId
         }
         foreach ($k in $script:Sections.Keys) { $data.Sections[$k] = [bool]$script:Sections[$k] }
         foreach ($k in $script:ProgramInstallRoots.Keys) { $data.ProgramInstallRoots[$k] = $script:ProgramInstallRoots[$k] }
+        foreach ($k in $script:BrowserPolicyModes.Keys) { $data.BrowserPolicyModes[$k] = [string]$script:BrowserPolicyModes[$k] }
         $data | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $script:configFile -Encoding utf8 -Force
     } catch {
         Write-Log ("Config save failed: {0}" -f $_.Exception.Message) -Level Warning
@@ -1696,6 +1944,21 @@ function Load-BastionConfig {
             Sync-ProgramInstallQueue
         }
         if ($data.BrowserPolicyMode) { $script:BrowserPolicyMode = [string]$data.BrowserPolicyMode }
+        if ($data.BrowserPolicyModes) {
+            foreach ($prop in $data.BrowserPolicyModes.PSObject.Properties) {
+                if ($script:BrowserPolicyModes.Contains($prop.Name)) {
+                    $v = [string]$prop.Value
+                    if ($v -in @("Default","Medium","Strict")) {
+                        $script:BrowserPolicyModes[$prop.Name] = $v
+                    }
+                }
+            }
+        } elseif ($data.BrowserPolicyMode -and $data.BrowserPolicyMode -in @("Default","Medium","Strict")) {
+            # Older configs: apply the single saved mode as intent for all browsers.
+            foreach ($k in @($script:BrowserPolicyModes.Keys)) {
+                $script:BrowserPolicyModes[$k] = [string]$data.BrowserPolicyMode
+            }
+        }
         if ($data.DnsProviderId -and $script:DnsProviders.Contains([string]$data.DnsProviderId)) {
             $script:DnsProviderId = [string]$data.DnsProviderId
             if ($script:DnsProviderId -eq "None") { $script:Sections["DNS"] = $false }
@@ -2122,22 +2385,21 @@ function Invoke-DryRun {
             if ($browsers.Count -eq 0) {
                 Show-DryItem "BrowserPolicies" "Already OK" "No supported browsers installed; nothing to apply"
             } else {
-                $mismatch = @($browsers | Where-Object { $_.Mode -ne $script:BrowserPolicyMode -and -not ($script:BrowserPolicyMode -eq "Default" -and $_.Mode -eq "Default") })
-                # Default vs Custom: treat Custom as not matching Default
                 $need = @()
                 foreach ($b in $browsers) {
-                    if ($script:BrowserPolicyMode -eq "Default" -and $b.Mode -in @("Default")) { continue }
-                    if ($b.Mode -eq $script:BrowserPolicyMode) { continue }
-                    $need += ("{0}={1}" -f $b.Name, $b.Mode)
+                    $want = if ($script:BrowserPolicyModes.Contains($b.Name)) { $script:BrowserPolicyModes[$b.Name] } else { "Default" }
+                    if ($b.Mode -ne $want) {
+                        $need += ("{0}: live={1} want={2}" -f $b.Name, $b.Mode, $want)
+                    }
                 }
                 if ($need.Count -eq 0) {
-                    Show-DryItem "BrowserPolicies" "Already OK" ("Installed browsers already at mode '{0}'" -f $script:BrowserPolicyMode)
+                    Show-DryItem "BrowserPolicies" "Already OK" ("Per-browser modes match: {0}" -f (Get-BrowserPolicyModesSummary))
                 } else {
-                    Show-DryItem "BrowserPolicies" "Would change" ("Apply '{0}' (current: {1})" -f $script:BrowserPolicyMode, ($need -join "; "))
+                    Show-DryItem "BrowserPolicies" "Would change" ($need -join "; ")
                 }
             }
         } catch {
-            Show-DryItem "BrowserPolicies" "Would change" ("Apply stored mode '{0}' to browsers during Apply" -f $script:BrowserPolicyMode)
+            Show-DryItem "BrowserPolicies" "Would change" ("Apply per-browser saved modes: {0}" -f (Get-BrowserPolicyModesSummary))
         }
     }
 
@@ -2204,7 +2466,7 @@ function Show-ApplyPreview {
     foreach ($k in $script:Sections.Keys) {
         if (-not $script:Sections[$k]) { continue }
         $extra = switch ($k) {
-            "BrowserPolicies" { (" [mode {0}]" -f $script:BrowserPolicyMode) }
+            "BrowserPolicies" { (" [{0}]" -f (Get-BrowserPolicyModesSummary)) }
             "DNS" {
                 $p = Get-BastionDnsProvider
                 if ($script:DnsProviderId -eq "None" -or -not $p.Primary) { " [leave unchanged]" }
@@ -2933,46 +3195,55 @@ function Show-DnsProviderMenu {
 function Get-InstalledBastionBrowsers {
     $list = [System.Collections.Generic.List[object]]::new()
     $map = @(
-        @{ Name = "Firefox"; Test = { Test-Installed -Name "Firefox" -Paths $script:ProgramDefs["Firefox"].Paths }; Set = "Firefox"; GetMode = {
-            return (Get-FirefoxPolicyModeFromFile)
-        }}
-        @{ Name = "Chrome"; Test = { Test-Installed -Name "Chrome" -Paths $script:ProgramDefs["Chrome"].Paths }; Set = "Chrome"; GetMode = {
-            $base = "HKLM:\SOFTWARE\Policies\Google\Chrome"
-            if (-not (Test-Path $base)) { return "Default" }
-            try {
-                $c = Get-ItemProperty $base -ErrorAction SilentlyContinue
-                if ($c.HttpsOnlyMode -eq 2 -or $c.DefaultCookiesSetting -eq 4) { return "Strict" }
-                if ($null -ne $c.MetricsReportingEnabled) { return "Medium" }
-                return "Custom"
-            } catch { return "Custom" }
-        }}
-        @{ Name = "Brave"; Test = { Test-Installed -Name "Brave" -Paths $script:ProgramDefs["Brave"].Paths }; Set = "Brave"; GetMode = {
-            # Brave uses Chromium; we only note install - policy via Chrome-like keys not applied unless we add later
-            return "Default"
-        }}
+        @{ Name = "Firefox"; Test = { Test-Installed -Name "Firefox" -Paths $script:ProgramDefs["Firefox"].Paths }; Set = "Firefox"; GetMode = { Get-FirefoxPolicyModeFromFile } }
+        @{ Name = "Chrome";  Test = { Test-Installed -Name "Chrome"  -Paths $script:ProgramDefs["Chrome"].Paths  }; Set = "Chrome";  GetMode = { Get-ChromiumPolicyMode -Browser Chrome } }
+        @{ Name = "Brave";   Test = { Test-Installed -Name "Brave"   -Paths $script:ProgramDefs["Brave"].Paths   }; Set = "Brave";   GetMode = { Get-ChromiumPolicyMode -Browser Brave } }
     )
     foreach ($m in $map) {
         $installed = & $m.Test
         if ($installed) {
             $mode = & $m.GetMode
-            [void]$list.Add([PSCustomObject]@{ Name = $m.Name; Mode = $mode; Key = $m.Set })
+            $saved = if ($script:BrowserPolicyModes.Contains($m.Name)) { $script:BrowserPolicyModes[$m.Name] } else { "Default" }
+            [void]$list.Add([PSCustomObject]@{
+                Name = $m.Name
+                Mode = $mode
+                SavedMode = $saved
+                Key = $m.Set
+            })
         }
     }
     return @($list)
+}
+
+function Invoke-BastionBrowserPolicy {
+    param(
+        [Parameter(Mandatory)][ValidateSet("Firefox","Chrome","Brave")][string]$Browser,
+        [Parameter(Mandatory)][ValidateSet("Default","Medium","Strict")][string]$Mode
+    )
+    switch ($Browser) {
+        "Firefox" { return (Set-FirefoxPolicyMode -Mode $Mode) }
+        "Chrome"  { return (Set-ChromePolicyMode -Mode $Mode) }
+        "Brave"   { return (Set-BravePolicyMode -Mode $Mode) }
+    }
+    return $false
 }
 
 function Show-BrowserPolicyMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "BROWSER PRIVACY POLICIES"
-        Write-Host "  Policies are applied per installed browser (not a blind blanket)." -ForegroundColor Cyan
-        Write-Host "  Strict can break SSO, payments, and embedded media (HTTPS-Only)." -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "  Firefox modes (enterprise policies.json under the install folder):" -ForegroundColor DarkGray
-        Write-Host "    Default = delete Bastion policies.json (full revert: HTTPS-Only, ECH locks, telemetry, etc.)" -ForegroundColor DarkGray
-        Write-Host "    Medium  = telemetry/studies off + tracking protection (crypto/fingerprinting)" -ForegroundColor DarkGray
-        Write-Host "    Strict  = Medium + HTTPS-Only forced + ECH preference locks + Pocket off + TP locked" -ForegroundColor DarkGray
-        Write-Host "  Chrome: Default removes HKLM policy key; Medium/Strict set privacy-related DWords." -ForegroundColor DarkGray
+        Write-Host "  Each browser is configured independently (pick one browser, then a mode)." -ForegroundColor Cyan
+        Write-BrowserStrictDisclaimer
+        Write-Host "  Mode summary:" -ForegroundColor White
+        Write-Host "    Default = remove Bastion policies for that browser (best-effort revert + backups kept)" -ForegroundColor DarkGray
+        Write-Host "    Medium  = privacy baseline (telemetry down / tracking / 3P cookies) without max breakage" -ForegroundColor DarkGray
+        Write-Host "    Strict  = Medium + HTTPS-Only force (+ Firefox ECH locks). Sites may fail." -ForegroundColor DarkGray
+        Write-Host "  Firefox file: distribution\\policies.json | Chrome/Brave: HKLM Policies (BastionManaged values)" -ForegroundColor DarkGray
+        Write-Host ("  Saved modes: {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor DarkGray
+        if ($script:BrowserPolicyLastChange) {
+            $lc = $script:BrowserPolicyLastChange
+            Write-Host ("  Last change: {0} {1} {2}->{3}" -f $lc.Timestamp, $lc.Browser, $lc.ModeBefore, $lc.ModeAfter) -ForegroundColor DarkGray
+        }
         Write-Host ""
 
         $browsers = @(Get-InstalledBastionBrowsers)
@@ -2985,14 +3256,14 @@ function Show-BrowserPolicyMenu {
             return
         }
 
-        Write-Host "  Installed browsers:" -ForegroundColor Cyan
+        Write-Host "  Installed browsers (live detect | saved intent):" -ForegroundColor Cyan
         for ($i = 0; $i -lt $browsers.Count; $i++) {
             $b = $browsers[$i]
-            Write-Host ("    {0}. {1,-10}  current policy: {2}" -f ($i + 1), $b.Name, $b.Mode) -ForegroundColor White
+            Write-Host ("    {0}. {1,-10}  live={2,-8}  saved={3}" -f ($i + 1), $b.Name, $b.Mode, $b.SavedMode) -ForegroundColor White
         }
         Write-Host ""
-        Write-Host "  Choose a browser number, then pick Default / Medium / Strict." -ForegroundColor DarkGray
-        Write-Host "  A  Apply same mode to ALL listed browsers" -ForegroundColor Yellow
+        Write-Host "  Choose a browser number, then Default / Medium / Strict for THAT browser only." -ForegroundColor DarkGray
+        Write-Host "  A  Apply the same mode to ALL listed browsers (you still pick the mode once)" -ForegroundColor Yellow
         Write-Host "  0  Back"
         $valid = @("0", "A", "a") + (1..$browsers.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
@@ -3009,30 +3280,26 @@ function Show-BrowserPolicyMenu {
 
         Write-Host ""
         Write-Host ("  Target: {0}" -f (($targets | ForEach-Object { $_.Name }) -join ", ")) -ForegroundColor Cyan
-        Write-Host "  1 Default (FULL revert / remove Bastion policies)  2 Medium  3 Strict  0 Cancel"
+        Write-Host "  1 Default (revert Bastion policies)  2 Medium  3 Strict  0 Cancel"
         $m = Read-MenuChoice -Prompt "  Mode" -Valid @("0", "1", "2", "3")
         if ($m -eq "0") { continue }
         $mode = switch ($m) { "1" { "Default" } "2" { "Medium" } "3" { "Strict" } }
-        if ($mode -eq "Strict" -and (Read-YesNo -Prompt "  Apply Strict (HTTPS-Only / may break sites) (Y/N)?") -ne "Y") { continue }
-        if ($mode -eq "Default" -and (Read-YesNo -Prompt "  Remove Bastion browser policies entirely (Y/N)?") -ne "Y") { continue }
+        if ($mode -eq "Strict") {
+            Write-BrowserStrictDisclaimer
+            if ((Read-YesNo -Prompt "  Apply Strict to the selected browser(s)? Sites may break (Y/N)") -ne "Y") { continue }
+        }
+        if ($mode -eq "Default" -and (Read-YesNo -Prompt "  Remove Bastion policies for selected browser(s) (Y/N)?") -ne "Y") { continue }
 
         foreach ($t in $targets) {
             Write-Host ("  Applying {0} -> {1}..." -f $t.Name, $mode) -ForegroundColor White
-            switch ($t.Key) {
-                "Firefox" { [void](Set-FirefoxPolicyMode -Mode $mode) }
-                "Chrome"  { [void](Set-ChromePolicyMode -Mode $mode) }
-                "Brave"   {
-                    if ($mode -eq "Default") {
-                        Write-Status "Brave: no Bastion policy file used (left default)" "Already"
-                    } else {
-                        Write-Status "Brave: Bastion does not force Chromium policy keys for Brave in this version. Set in browser settings or use Chrome policies only for Chrome." "Warn"
-                    }
-                }
-            }
+            [void](Invoke-BastionBrowserPolicy -Browser $t.Key -Mode $mode)
         }
+        # Legacy summary field = last mode chosen (does not force other browsers).
         $script:BrowserPolicyMode = $mode
         Save-BastionConfig
+        Save-BrowserPolicyStateFile
         Write-Host "  Restart affected browsers fully (all windows) to load or drop policies." -ForegroundColor Yellow
+        Write-Host ("  State log: {0}" -f (Get-BrowserPolicyStatePath)) -ForegroundColor DarkGray
         Wait-ForKey
     }
 }
@@ -3796,7 +4063,7 @@ function Show-RecoveryMenu {
         Write-Header "RECOVERY / FIX"
         Write-Host "  1 Undo last hardening (services / firewall groups from last Apply)"
         Write-Host "  2 Re-enable Print Spooler"
-        Write-Host "  3 Browser policies (Default = full revert including Firefox ECH locks)"
+        Write-Host "  3 Browser policies (per browser; Default reverts Bastion policies)"
         Write-Host "  4 Copilot / M365 tools"
         Write-Host "  5 Restore Widgets / Suggestions defaults" -ForegroundColor Green
         Write-Host "  0 Back"
@@ -3973,7 +4240,7 @@ function Show-Help {
         "## CONFIGURE",
         "4 Sections - toggle each hardening area on or off.",
         "5 Programs and paths - choose catalog apps and optional install roots.",
-        "6 Browser policies - per installed browser Default, Medium, or Strict.",
+        "6 Browser policies - set Firefox/Chrome/Brave independently. Strict can break some websites (HTTPS-Only / locks); many users keep one browser Strict and another looser.",
         "D DNS resolver - Quad9, Cloudflare, Cloudflare security, Google, OpenDNS, or do not change DNS.",
         "## EXECUTE",
         "7 Quick Harden - safe preset, restore-point gate, then Apply.",
@@ -4047,7 +4314,7 @@ function Show-Help {
         "## Recovery menu (option 9)",
         "1 Undo last hardening - services and firewall groups tracked in Bastion-LastApply.json.",
         "2 Re-enable Print Spooler - when HighRiskServices disabled printing.",
-        "3 Browser policies - set Default or Medium if Strict broke sites.",
+        "3 Browser policies - per browser Default/Medium/Strict. Strict may break sites (HTTPS-Only). Default reverts Bastion policies (best-effort; System Restore is bulletproof).",
         "4 Copilot / M365 tools - optional removal helpers.",
         "5 Restore Widgets/Suggestions defaults - reverses Suggestions registry work where possible.",
         "## System Restore",
@@ -4180,9 +4447,13 @@ function Reset-ToDefaults {
     $script:GlobalInstallRoot = $null
     $script:ProgramInstallRoots = @{}
     $script:BrowserPolicyMode = "Default"
+    foreach ($k in @($script:BrowserPolicyModes.Keys)) { $script:BrowserPolicyModes[$k] = "Default" }
+    $script:BrowserPolicyLastChange = $null
     $script:DnsProviderId = "Quad9"
     Save-BastionConfig
+    Save-BrowserPolicyStateFile
     Write-Host "  Bastion config reset. Windows hardening state unchanged." -ForegroundColor Green
+    Write-Host "  Note: browser enterprise policies already written to disk are not removed until you set Default in menu 6." -ForegroundColor Yellow
     Start-Sleep -Seconds 1
 }
 
@@ -4273,7 +4544,11 @@ function Invoke-ApplyHardening {
         FirewallGroups = @()
         ProgramsInstalledList = @()
         BrowserPolicyMode = $script:BrowserPolicyMode
+        BrowserPolicyModes = [ordered]@{}
         DnsProviderId = $script:DnsProviderId
+    }
+    foreach ($bk in $script:BrowserPolicyModes.Keys) {
+        $undoTrack.BrowserPolicyModes[$bk] = [string]$script:BrowserPolicyModes[$bk]
     }
 
     Clear-BastionScreen
@@ -4508,9 +4783,19 @@ function Invoke-ApplyHardening {
     }
 
     if ($script:Sections["BrowserPolicies"]) {
-        Write-Host ("  [BrowserPolicies] mode={0}" -f $script:BrowserPolicyMode) -ForegroundColor Cyan
-        [void](Set-FirefoxPolicyMode -Mode $script:BrowserPolicyMode)
-        [void](Set-ChromePolicyMode -Mode $script:BrowserPolicyMode)
+        Write-Host ("  [BrowserPolicies] {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor Cyan
+        Write-Host "    Strict may break some sites (HTTPS-Only / locks). Per-browser modes apply only to installed browsers." -ForegroundColor Yellow
+        $browsers = @(Get-InstalledBastionBrowsers)
+        if ($browsers.Count -eq 0) {
+            Write-Status "No supported browsers installed" "Skip"
+        } else {
+            foreach ($b in $browsers) {
+                $want = if ($script:BrowserPolicyModes.Contains($b.Name)) { $script:BrowserPolicyModes[$b.Name] } else { "Default" }
+                Write-Host ("    {0}: apply saved mode {1} (live was {2})" -f $b.Name, $want, $b.Mode) -ForegroundColor DarkGray
+                [void](Invoke-BastionBrowserPolicy -Browser $b.Key -Mode $want)
+            }
+        }
+        Save-BrowserPolicyStateFile
     }
 
     if ($script:Sections["BloatApps"]) {
@@ -4644,7 +4929,7 @@ function Show-MainMenu {
         if ($last) {
             Write-Host ("  Last Apply: {0} (v{1})" -f $last.Timestamp, $last.ScriptVersion) -ForegroundColor DarkGray
         }
-        Write-Host ("  Browser policy: {0}" -f $script:BrowserPolicyMode) -ForegroundColor DarkGray
+        Write-Host ("  Browser policies: {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor DarkGray
         Write-Host ("  DNS resolver:   {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
 
         Write-MenuGroup "REVIEW"
