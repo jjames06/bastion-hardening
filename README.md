@@ -14,10 +14,21 @@ Version **15.0**
 
 <p align="center">
   <a href="#how-to-install-properly"><strong>Install guide</strong></a> ·
+  <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> ·
+  <a href="#browser-policies"><strong>Browser / ECH</strong></a> ·
   <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> ·
   <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> ·
   <a href="SECURITY.md"><strong>Security</strong></a>
 </p>
+
+**Further reading in this repo**
+
+| Document | Topic |
+|----------|--------|
+| [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) | What folders/files Bastion creates, where, and why |
+| [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) | Per-browser modes and Encrypted Client Hello (ECH) — never default |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting and safe usage |
+| In-app Help (menu **11**) | Full guided documentation, including live data-directory path |
 
 ---
 
@@ -107,7 +118,7 @@ A guided, selective hardening assistant for Windows 10/11 that lets you:
 | Principle | Meaning |
 |-----------|---------|
 | **Selective** | Almost every section is optional |
-| **State-aware** | Detects what is already configured before changing it |
+| **State-aware** | Detects live Windows state before changing it; menu prefs live in a durable data directory (not faked Apply history) |
 | **Safety-first** | Restore-point gate, soft failures, honest documentation |
 | **Catalog-only installs** | No free-typed package IDs; never uses `--ignore-security-hash` |
 | **Reversible where practical** | Tracked Undo for services and firewall groups |
@@ -190,18 +201,29 @@ If you use Code ZIP: extract, keep files together, launch `Bastion-Hardening.bat
 
 ### How to run Bastion the first time
 
+On the **first elevated launch**, Bastion automatically:
+
+- Creates a **writable data directory** (prefer `C:\Temp\Bastion`; reuses any existing Bastion state folder; falls back to `%ProgramData%\Bastion`, `%LOCALAPPDATA%\Bastion`, then wipeable `%TEMP%\Bastion` only if needed)
+- Seeds **`Bastion-Config.json`** with safe defaults (menu choices only; Encrypted Client Hello (ECH) flags stay **off**)
+- Writes **`Bastion-Session.json`** from **live** detection (rewritten every launch)
+- Does **not** invent **`Bastion-LastApply.json`** until you actually Apply
+- Does **not** write browser enterprise policies or Encrypted Client Hello (ECH) until you use menu **6**
+
+If you delete that folder later, the next run re-seeds defaults and re-detects the live system. Dry Run / Apply still judge Windows itself — they do not pretend a prior Apply happened. Full inventory: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
+
 After the elevated menu opens:
 
-1. **13** or **R** — create a named System Restore Point  
-2. **1** — Dry Run (preview only; no hardening applied)  
-3. **2** — Security Audit (optional posture sample, including installed browsers)  
-4. **4** — enable only sections you understand  
-5. **5** — select programs only if you want installs (none are pre-selected)  
-6. **6** (optional) — browser policies for **installed** Firefox / Chrome / Brave only; Encrypted Client Hello (ECH) is a separate Yes/No under Strict and is never on by default  
-7. **D** — DNS resolver, or leave DNS unchanged  
-8. **7** Quick Harden or **8** Apply — type **YES** when asked  
-9. Reboot if prompted (e.g. LSA Protection / some optional features)  
-10. Run **Dry Run** again to verify  
+1. Confirm the **Data directory** line on the main menu (and “First run…” or “No Bastion Apply recorded yet” when appropriate)
+2. **13** or **R** — create a named System Restore Point  
+3. **1** — Dry Run (preview only; no hardening applied; live OS detection)  
+4. **2** — Security Audit (optional posture sample, including installed browsers)  
+5. **4** — enable only sections you understand  
+6. **5** — select programs only if you want installs (none are pre-selected)  
+7. **6** (optional) — browser policies for **installed** Firefox / Chrome / Brave only; Encrypted Client Hello (ECH) is a separate Yes/No under Strict and is never on by default  
+8. **D** — DNS resolver, or leave DNS unchanged  
+9. **7** Quick Harden or **8** Apply — type **YES** when asked  
+10. Reboot if prompted (e.g. LSA Protection / some optional features)  
+11. Run **Dry Run** again to verify  
 
 ### Common install / launch problems
 
@@ -213,13 +235,14 @@ After the elevated menu opens:
 | winget / Programs installs fail | Install **App Installer** from the Microsoft Store, open a new elevated window, retry |
 | Files “not found” after extract | Keep `.bat` and `.ps1` in the **same** directory; do not run a shortcut that points elsewhere |
 | Controlled Folder Access / AV blocks | Allow the script path temporarily, or run Dry Run first and apply in smaller steps |
+| Lost menu prefs after cleanup | Prefer the durable data dir (`C:\Temp\Bastion` / ProgramData / LocalAppData). `%TEMP%\Bastion` can be wiped by Disk Cleanup |
 
 ### What Bastion does **not** install for you
 
 - It does **not** add itself to Programs and Features as a permanent product installer  
 - It does **not** flash BIOS or auto-install GPU drivers  
 - Optional apps install **only** if you select them under Programs and run Apply  
-- Logs/config default under `C:\Temp` (or `%TEMP%\Bastion` / `%LOCALAPPDATA%\Bastion` fallbacks)
+- Logs/config live under a **data directory** shown on the main menu (prefer `C:\Temp\Bastion`; durable fallbacks before wipeable temp)
 
 ---
 
@@ -264,22 +287,70 @@ Quick Harden uses a safer subset and asks explicitly whether to keep the Print S
 
 ## Browser policies
 
-Main menu **6** (or Recovery **3**). Only **installed** supported browsers appear: **Firefox**, **Chrome**, **Brave**.
+Main menu **6** (or Recovery **3**). Full detail: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
+
+Only **installed** supported browsers appear: **Firefox**, **Chrome**, **Brave**. Missing engines are never listed.
 
 | Mode | What it does |
 |------|----------------|
-| **Default** | Removes Bastion policies for that browser only (best-effort revert; backups kept) |
+| **Default** | Removes Bastion policies for that browser only (best-effort revert; backups kept under the data directory) |
 | **Medium** | Privacy baseline (telemetry / tracking / cookies); usually fewer site breakages |
 | **Strict** | Medium + HTTPS-Only. Does **not** enable Encrypted Client Hello (ECH) by itself |
-| **ECH pack** | Optional second Yes/No after Strict, for the browsers you selected only. **Never on by default** |
+| **ECH pack** | Optional second **Yes/No after Strict**, for the browsers you selected only |
 
-**Encrypted Client Hello (ECH)** is a TLS privacy feature. Bastion only applies an ECH pack if you answer **Yes** under Strict for the chosen installed browser(s). Installing Bastion or a browser does not turn ECH on.
+### Encrypted Client Hello (ECH) — never on by default
 
-- **Firefox + ECH Yes:** locks ECH-related prefs in `distribution\policies.json`  
-- **Chrome / Brave + ECH Yes:** enterprise transport policies + ECH intent marker (not identical to Firefox prefs)  
+**Encrypted Client Hello (ECH)** is a TLS privacy feature: when supported, it can hide the destination hostname in the TLS Client Hello from passive network observers. Bastion only applies an **ECH pack** if you answer **Yes** under Strict for the chosen **installed** browser(s).
 
-**Revert one browser:** menu **6** → that browser → **Default**.  
-**Dry Run / Security audit** report live vs saved mode and Encrypted Client Hello (ECH) status for installed browsers only.
+Bastion will **not** enable Encrypted Client Hello (ECH) because you installed Bastion, installed a browser, chose Strict alone, ran Dry Run/Audit, or seeded first-run config. Fresh defaults keep ECH **off** for every browser. Quick Harden does **not** touch browser policies or ECH.
+
+| Browser | When you answer ECH **Yes** under Strict |
+|---------|------------------------------------------|
+| **Firefox** | Locks ECH-related prefs in `distribution\policies.json`. Bastion never sets `DisableEncryptedClientHello` (that turns ECH off) |
+| **Chrome / Brave** | Enterprise transport policies + Bastion ECH intent marker (`BastionEchLock`). Not the same preference model as Firefox |
+
+**Compatibility (honest):** Strict HTTPS-Only can break plain HTTP, captive portals, and some SSO/embeds. Encrypted Client Hello (ECH) can break networks or middleboxes that mishandle it. Common pattern: one browser Strict (optional ECH) for daily use; another Medium/Default for awkward sites.
+
+| Action | How |
+|--------|-----|
+| Revert one browser (and its ECH pack) | Menu **6** → that browser → **Default** |
+| Bulletproof rollback | System Restore (menu **13** / **R**) |
+| Verify after restart | Firefox `about:policies` · Chrome `chrome://policy` · Brave `brave://policy` |
+| Dry Run / Security audit | Live vs saved mode and Encrypted Client Hello (ECH) for **installed** browsers only |
+
+---
+
+## Files and folders Bastion creates
+
+Bastion is transparent about runtime artifacts. The **data directory path is shown on the main menu** every launch. Full reference: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
+
+### Location (resolved automatically)
+
+| Priority | Path | Role |
+|----------|------|------|
+| Prefer existing state | `C:\Temp\Bastion`, legacy `C:\Temp`, `%ProgramData%\Bastion`, `%LOCALAPPDATA%\Bastion`, then `%TEMP%\Bastion` | Reuse newest Bastion store if present and writable |
+| New install | `C:\Temp\Bastion` → ProgramData → LocalAppData → flat `C:\Temp` → `%TEMP%\Bastion` last | Durable first; wipeable temp only if necessary |
+
+Each candidate is **write-probed**. `%TEMP%\Bastion` can be removed by Disk Cleanup — prefer the durable paths.
+
+### Contents of the data directory
+
+| Item | When created | Purpose |
+|------|--------------|---------|
+| `Bastion-Config.json` | Seeded on **first elevated run** (or after the store is wiped) | Menu choices: sections, apps, DNS, browser **wanted** modes, ECH Yes/No flags |
+| `Bastion-Session.json` | **Rewritten every launch** | Live vs wanted browser posture; whether prior config/Apply existed. Not Apply history |
+| `Bastion-BrowserPolicies-State.json` | On init and after browser policy changes | Wanted + live modes, last policy change summary |
+| `Bastion-LastApply.json` | **Only after a real Apply** | Undo tracking for services / firewall groups from that Apply |
+| `Bastion-Log-*.txt` | Each session | Session transcript |
+| `Bastion-Report-*.html` | Only if you export from Help | Optional HTML snapshot |
+| `BastionInstallers/` | On path ensure | Staging for optional install work |
+| `browser-policy-backups/` | On path ensure; files when menu **6** overwrites policies | Snapshots before Bastion changes browser policies |
+
+**Important:** Missing `Bastion-LastApply.json` means Bastion has no Apply undo data yet — **not** that Windows is unmodified. Dry Run and Apply still detect **live** Windows state. Deleting the data directory does **not** un-harden Windows or remove browser enterprise policies; use Recovery, per-browser Default, Uninstall, or System Restore.
+
+### Outside the data directory (only when you choose features)
+
+Examples: Firefox `policies.json`, Chrome/Brave policy registry keys, services, firewall, DNS, Defender, AppX, Event Log source `BastionHardening`, System Restore points you create. See in-app Help and [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 
 ---
 
@@ -304,24 +375,27 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 
 - **Print Spooler** — Disabled by default for security. Quick Harden gives a clear choice to keep it.
 - **OneDrive & BloatApps** — Hard to reverse. System Restore is the reliable recovery path.
-- **Browser policies / Encrypted Client Hello (ECH)** — Off by default. ECH is never applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only can break some sites.
-- **Undo** — Restores tracked services and firewall groups from the last Apply only. It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers. Browser revert is menu **6** → Default per browser.
+- **Browser policies / Encrypted Client Hello (ECH)** — BrowserPolicies section defaults off. ECH is **never** applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only and ECH can break some sites or networks. Details: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
+- **Undo** — Restores tracked services and firewall groups from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers. Browser revert is menu **6** → Default per browser.
 - **DNS** — Optional. Choose a provider or leave DNS unchanged; VPN software may still override while connected.
 - **Custom install paths** — Only allowed on fixed local volumes outside system directories.
-- **Logs and config** — Prefer `C:\Temp`; fall back to `%TEMP%\Bastion` or `%LOCALAPPDATA%\Bastion` if needed. Browser policy state/backups live there too when you use menu 6.
+- **Logs and config** — Live under the **data directory** shown on the main menu (prefer `C:\Temp\Bastion`; durable fallbacks; `%TEMP%\Bastion` last). Full file list: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 
 ---
 
 ## Repository layout
 
-| File                      | Purpose                         |
-|---------------------------|---------------------------------|
-| `Bastion-Hardening.ps1`   | Main script                     |
-| `Bastion-Hardening.bat`   | Elevated launcher               |
-| `Bastion-Banner.utf8.txt` | Optional Unicode banner         |
-| `LICENSE`                 | MIT License + additional notice |
-| `SECURITY.md`             | Vulnerability reporting policy  |
-| `README.md`               | This documentation              |
+| Path | Purpose |
+|------|---------|
+| `Bastion-Hardening.ps1` | Main script (hardening, menus, data store, help) |
+| `Bastion-Hardening.bat` | Elevated launcher |
+| `Bastion-Banner.utf8.txt` | Optional Unicode banner |
+| `LICENSE` | MIT License + additional notice |
+| `SECURITY.md` | Vulnerability reporting and safe-usage notes |
+| `README.md` | This documentation |
+| `docs/DATA-DIRECTORY.md` | Runtime files and folders Bastion creates |
+| `docs/BROWSER-POLICIES-AND-ECH.md` | Browser modes and Encrypted Client Hello (ECH) |
+| `docs/images/` | Screenshots used in this README |
 
 ---
 
