@@ -284,7 +284,6 @@ $script:ProgramDefs = [ordered]@{
     "Git"            = @{ WingetId = "Git.Git"; Paths = @("C:\Program Files\Git\cmd\git.exe"); Category = "Dev" }
     "GitHub Desktop" = @{ WingetId = "GitHub.GitHubDesktop"; Paths = @("$env:LOCALAPPDATA\GitHubDesktop\GitHubDesktop.exe"); Category = "Dev" }
     "Node.js"        = @{ WingetId = "OpenJS.NodeJS.LTS"; Paths = @("C:\Program Files\nodejs\node.exe"); Category = "Dev" }
-    "Everything"     = @{ WingetId = "voidtools.Everything"; Paths = @("C:\Program Files\Everything\Everything.exe"); Category = "Utility" }
     "ShareX"         = @{ WingetId = "ShareX.ShareX"; Paths = @("C:\Program Files\ShareX\ShareX.exe"); Category = "Utility" }
     "Bitwarden"      = @{ WingetId = "Bitwarden.Bitwarden"; Paths = @("C:\Program Files\Bitwarden\Bitwarden.exe","$env:LOCALAPPDATA\Programs\Bitwarden\Bitwarden.exe"); Category = "Security" }
     "OBS Studio"     = @{ WingetId = "OBSProject.OBSStudio"; Paths = @("C:\Program Files\obs-studio\bin\64bit\obs64.exe"); Category = "Media" }
@@ -2663,32 +2662,17 @@ function Show-ProgramMenu {
         Write-Host ("  Queued install {0} | Missing {1} | Already installed {2} | Global {3}" -f `
             $pendingCount, $missingCount, $installedCount,
             $(if ($script:GlobalInstallRoot) { $script:GlobalInstallRoot } else { "(none)" })) -ForegroundColor Cyan
-        Write-Host "  A all-missing  N none  S same as A  L locations  C confirm  0 back" -ForegroundColor Yellow
-        $valid = @("A","N","S","L","C","0","a","n","s","l","c") + (1..$apps.Count | ForEach-Object { "$_" })
+        # No bulk "select everything" for installs: users opt in app-by-app (safer, clearer).
+        Write-Host "  N clear-queue  L locations  C confirm  0 back" -ForegroundColor Yellow
+        $valid = @("N","L","C","0","n","l","c") + (1..$apps.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
         switch ($c.ToUpper()) {
             "0" {
                 Sync-ProgramInstallQueue
                 return
             }
-            "A" {
-                # Queue every catalog app that is not installed.
-                $script:SelectedApps.Clear()
-                foreach ($a in $apps) {
-                    if (-not $a.Installed) { [void]$script:SelectedApps.Add($a.Name) }
-                }
-                Clear-StaleInstallRoots
-            }
             "N" {
                 $script:SelectedApps.Clear()
-                Clear-StaleInstallRoots
-            }
-            "S" {
-                # Alias: select all missing (same as A).
-                $script:SelectedApps.Clear()
-                foreach ($a in $apps) {
-                    if (-not $a.Installed) { [void]$script:SelectedApps.Add($a.Name) }
-                }
                 Clear-StaleInstallRoots
             }
             "L" {
