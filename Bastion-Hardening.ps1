@@ -257,10 +257,10 @@ $script:SectionDocs = [ordered]@{
     }
     "BrowserPolicies" = @{
         Intent  = "Optional privacy-oriented policy packs per installed browser (Firefox, Chrome, Brave)."
-        Changes = "Each browser has its own Default/Medium/Strict mode (menu 6). Firefox uses distribution/policies.json (Strict adds HTTPS-Only + ECH locks). Chrome/Brave use HKLM policy DWords (telemetry/Safe Browsing, third-party cookies, HTTPS-Only). Changes are logged and prior Bastion artifacts are snapshotted under the Bastion data directory for best-effort revert."
-        Impact  = "STRICT WARNING: HTTPS-Only and hard cookie/tracking policies can break SSO, bank flows, older HTTP sites, embed/players, and some captive portals. Many people keep one browser Strict for daily privacy and another at Medium/Default for sites that need looser settings."
-        Revert  = "Menu 6 or Recovery > 3: set that browser to Default (removes Bastion Firefox policies.json and Bastion-managed Chrome/Brave registry values). System Restore remains the bulletproof rollback."
-        Notes   = "Modes are independent per browser. Restart each browser after changes. Firefox: about:policies. Chrome: chrome://policy. Brave: brave://policy."
+        Changes = "Each browser has its own Default/Medium/Strict mode (menu 6). Firefox uses distribution/policies.json. Strict for Firefox forces HTTPS-Only and locks Encrypted Client Hello (ECH) related preferences on. Chrome and Brave use HKLM policy values (telemetry/Safe Browsing, third-party cookies, HTTPS-Only, DNS-over-HTTPS preference). Changes are logged; prior Bastion artifacts are snapshotted for best-effort revert."
+        Impact  = "Strict can break some websites. HTTPS-Only may fail older HTTP-only or misconfigured hosts, captive portals, and some SSO or payment embeds. Encrypted Client Hello (ECH) improves privacy of the TLS handshake (hides the destination hostname from passive observers on supporting networks); a few networks or middleboxes handle ECH poorly and may cause connection errors. Common setup: Firefox Strict for everyday browsing, Chrome or Brave at Medium/Default for sites that need looser settings."
+        Revert  = "Menu 6 or Recovery > 3: set that browser to Default (removes Bastion Firefox policies.json including Encrypted Client Hello (ECH) locks, and Bastion-managed Chrome/Brave registry values). System Restore remains the bulletproof rollback."
+        Notes   = "Modes are independent per browser. Restart each browser after changes. Firefox: about:policies. Chrome: chrome://policy. Brave: brave://policy. Bastion never sets DisableEncryptedClientHello (that would turn Encrypted Client Hello (ECH) off)."
     }
     "BloatApps" = @{
         Intent  = "Remove a curated list of consumer Appx packages many users do not want on a clean workstation."
@@ -1515,7 +1515,7 @@ function Set-FirefoxPolicyMode {
                 Remove-Item -LiteralPath $path -Force -ErrorAction Stop
                 Write-Status "Firefox policies.json removed (full Bastion revert)" "Applied"
                 Write-Host "      Cleared: telemetry/studies locks, tracking protection locks," -ForegroundColor DarkGray
-                Write-Host "      HTTPS-Only force, Pocket disable, ECH preference locks (if present)." -ForegroundColor DarkGray
+                Write-Host "      HTTPS-Only force, Pocket disable, Encrypted Client Hello (ECH) preference locks." -ForegroundColor DarkGray
                 Write-Host ("      File was: {0}" -f $path) -ForegroundColor DarkGray
                 Write-Host "      Restart Firefox. about:policies should show no active Bastion file." -ForegroundColor DarkGray
             } else {
@@ -1528,8 +1528,9 @@ function Set-FirefoxPolicyMode {
         }
 
         $bak = Backup-FirefoxPoliciesFile
-        # Medium: privacy baseline (no HTTPS-Only force, no ECH locks).
-        # Strict: Medium + HTTPS-Only + explicit ECH enable via Preferences (not DisableEncryptedClientHello).
+        # Medium: privacy baseline (no HTTPS-Only force, no Encrypted Client Hello (ECH) locks).
+        # Strict: Medium + HTTPS-Only + Encrypted Client Hello (ECH) prefs locked on.
+        # Note: DisableEncryptedClientHello=true would turn ECH OFF; Bastion never sets that.
         $policy = if ($Mode -eq "Medium") {
             @{ policies = @{
                 DisableTelemetry = $true
@@ -1568,7 +1569,9 @@ function Set-FirefoxPolicyMode {
         [System.IO.File]::WriteAllText($path, $json, $utf8)
         Write-Status ("Firefox policies -> {0}" -f $Mode) "Applied"
         if ($Mode -eq "Strict") {
-            Write-Host "      Strict includes: HTTPS-Only force + ECH prefs locked on + tracking locks." -ForegroundColor DarkGray
+            Write-Host "      Strict includes: HTTPS-Only force, Encrypted Client Hello (ECH) prefs locked on," -ForegroundColor DarkGray
+            Write-Host "      tracking protection locked, Pocket off, telemetry/studies off." -ForegroundColor DarkGray
+            Write-Host "      Encrypted Client Hello (ECH) can improve handshake privacy; a few networks break it." -ForegroundColor DarkGray
             Write-Host "      Revert: menu 6 or Recovery > Browser policies > Firefox > Default." -ForegroundColor DarkGray
         }
         if ($script:BrowserPolicyModes.Contains("Firefox")) { $script:BrowserPolicyModes["Firefox"] = $Mode }
@@ -1596,17 +1599,28 @@ function Get-BrowserPolicyStatePath {
 }
 
 function Write-BrowserStrictDisclaimer {
+    param([switch]$Compact)
     Write-Host ""
-    Write-Host "  ========== STRICT MODE DISCLAIMER ==========" -ForegroundColor Yellow
-    Write-Host "  Strict is for privacy/hardening, not maximum compatibility." -ForegroundColor Yellow
-    Write-Host "  It may break or degrade:" -ForegroundColor Yellow
-    Write-Host "    - Sites that still need plain HTTP (or mixed content)" -ForegroundColor DarkYellow
-    Write-Host "    - Some SSO / corporate login / bank flows" -ForegroundColor DarkYellow
-    Write-Host "    - Embedded players, older payment widgets, captive portals" -ForegroundColor DarkYellow
-    Write-Host "  Common approach: keep one browser Strict (e.g. Firefox) for daily use," -ForegroundColor Cyan
-    Write-Host "  and another at Medium or Default (e.g. Chrome) for sites that fail Strict." -ForegroundColor Cyan
-    Write-Host "  System Restore remains the bulletproof rollback if something goes wrong." -ForegroundColor DarkGray
-    Write-Host "  =============================================" -ForegroundColor Yellow
+    Write-Host "  ---------- Strict mode notice ----------" -ForegroundColor Yellow
+    Write-Host "  Strict favors privacy and transport hardening over maximum site compatibility." -ForegroundColor Yellow
+    if (-not $Compact) {
+        Write-Host "  HTTPS-Only: the browser prefers or requires HTTPS. Plain HTTP, mixed content," -ForegroundColor DarkYellow
+        Write-Host "  captive portals, and some older or misconfigured hosts may fail or warn." -ForegroundColor DarkYellow
+        Write-Host "  Encrypted Client Hello (ECH): Firefox Strict also locks ECH-related preferences" -ForegroundColor DarkYellow
+        Write-Host "  so the TLS Client Hello can hide the destination hostname from passive network" -ForegroundColor DarkYellow
+        Write-Host "  observers (when the site and path support ECH). Some networks or middleboxes" -ForegroundColor DarkYellow
+        Write-Host "  handle Encrypted Client Hello (ECH) poorly and connections may fail there." -ForegroundColor DarkYellow
+        Write-Host "  Other Strict effects: stronger tracking/cookie limits (varies by browser)." -ForegroundColor DarkYellow
+        Write-Host "  Suggested pattern: one browser Strict for daily use; another Medium/Default" -ForegroundColor Cyan
+        Write-Host "  for sites that need looser settings (for example Firefox Strict + Chrome Medium)." -ForegroundColor Cyan
+        Write-Host "  Revert: menu 6 or Recovery > 3 > choose browser > Default (best-effort)." -ForegroundColor DarkGray
+        Write-Host "  Bulletproof rollback: System Restore (menu 13 / R)." -ForegroundColor DarkGray
+    } else {
+        Write-Host "  May break HTTP-only or misconfigured sites, some SSO/embeds, and paths that" -ForegroundColor DarkYellow
+        Write-Host "  mishandle Encrypted Client Hello (ECH) (Firefox Strict locks ECH preferences)." -ForegroundColor DarkYellow
+        Write-Host "  Tip: Strict on one browser, Medium/Default on another. Restore Point if unsure." -ForegroundColor Cyan
+    }
+    Write-Host "  ----------------------------------------" -ForegroundColor Yellow
     Write-Host ""
 }
 
@@ -1811,7 +1825,8 @@ function Set-ChromiumPolicyMode {
             New-ItemProperty $base -Name "BlockThirdPartyCookies" -Value 1 -PropertyType DWord -Force | Out-Null
             # Prefer secure DNS where policy is honored (2 = enable DNS-over-HTTPS without hard template lock).
             New-ItemProperty $base -Name "DnsOverHttpsMode" -Value 2 -PropertyType DWord -Force | Out-Null
-            Write-Host ("      {0} Strict: HTTPS-Only force + 3P cookie block + DoH preference + telemetry off." -f $Browser) -ForegroundColor DarkGray
+            Write-Host ("      {0} Strict: HTTPS-Only force, third-party cookie block, DNS-over-HTTPS preference, telemetry off." -f $Browser) -ForegroundColor DarkGray
+            Write-Host ("      {0} does not apply Firefox Encrypted Client Hello (ECH) preference locks." -f $Browser) -ForegroundColor DarkGray
         } else {
             New-ItemProperty $base -Name "BlockThirdPartyCookies" -Value 1 -PropertyType DWord -Force | Out-Null
             Write-Host ("      {0} Medium: telemetry off, Safe Browsing on, third-party cookies blocked." -f $Browser) -ForegroundColor DarkGray
@@ -3232,23 +3247,33 @@ function Show-BrowserPolicyMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "BROWSER PRIVACY POLICIES"
-        Write-Host "  Each browser is configured independently (pick one browser, then a mode)." -ForegroundColor Cyan
-        Write-BrowserStrictDisclaimer
-        Write-Host "  Mode summary:" -ForegroundColor White
-        Write-Host "    Default = remove Bastion policies for that browser (best-effort revert + backups kept)" -ForegroundColor DarkGray
-        Write-Host "    Medium  = privacy baseline (telemetry down / tracking / 3P cookies) without max breakage" -ForegroundColor DarkGray
-        Write-Host "    Strict  = Medium + HTTPS-Only force (+ Firefox ECH locks). Sites may fail." -ForegroundColor DarkGray
-        Write-Host "  Firefox file: distribution\\policies.json | Chrome/Brave: HKLM Policies (BastionManaged values)" -ForegroundColor DarkGray
+        Write-Host "  Configure Firefox, Chrome, and Brave independently (one browser, then one mode)." -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "  Modes" -ForegroundColor White
+        Write-Host "    Default  Remove Bastion policies for that browser (best-effort revert; backups kept)." -ForegroundColor DarkGray
+        Write-Host "    Medium   Privacy baseline: less telemetry / stronger tracking or cookie limits." -ForegroundColor DarkGray
+        Write-Host "             Usually fewer site breakages than Strict." -ForegroundColor DarkGray
+        Write-Host "    Strict   Medium plus HTTPS-Only (all supported browsers). Firefox Strict also locks" -ForegroundColor DarkGray
+        Write-Host "             Encrypted Client Hello (ECH) preferences for TLS handshake privacy." -ForegroundColor DarkGray
+        Write-Host "             Compatibility is lower; some sites or networks will fail." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  Encrypted Client Hello (ECH) in short" -ForegroundColor White
+        Write-Host "    ECH is a TLS feature that can hide the destination hostname inside the Client Hello" -ForegroundColor DarkGray
+        Write-Host "    from passive observers on the path (when both ends support it). Bastion only locks" -ForegroundColor DarkGray
+        Write-Host "    Encrypted Client Hello (ECH) prefs under Firefox Strict. Chrome/Brave Strict use" -ForegroundColor DarkGray
+        Write-Host "    HTTPS-Only and related Chromium policies, not the same ECH preference locks." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-BrowserStrictDisclaimer -Compact
         Write-Host ("  Saved modes: {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor DarkGray
         if ($script:BrowserPolicyLastChange) {
             $lc = $script:BrowserPolicyLastChange
-            Write-Host ("  Last change: {0} {1} {2}->{3}" -f $lc.Timestamp, $lc.Browser, $lc.ModeBefore, $lc.ModeAfter) -ForegroundColor DarkGray
+            Write-Host ("  Last change: {0}  {1}  {2} -> {3}" -f $lc.Timestamp, $lc.Browser, $lc.ModeBefore, $lc.ModeAfter) -ForegroundColor DarkGray
         }
         Write-Host ""
 
         $browsers = @(Get-InstalledBastionBrowsers)
         if ($browsers.Count -eq 0) {
-            Write-Host "  No supported browsers detected (Firefox/Chrome/Brave)." -ForegroundColor Yellow
+            Write-Host "  No supported browsers detected (Firefox / Chrome / Brave)." -ForegroundColor Yellow
             Write-Host "  Install from Programs (option 5), then return here." -ForegroundColor DarkGray
             Write-Host ""
             Write-Host "  0 Back"
@@ -3256,14 +3281,14 @@ function Show-BrowserPolicyMenu {
             return
         }
 
-        Write-Host "  Installed browsers (live detect | saved intent):" -ForegroundColor Cyan
+        Write-Host "  Installed browsers (live detect | saved intent)" -ForegroundColor Cyan
         for ($i = 0; $i -lt $browsers.Count; $i++) {
             $b = $browsers[$i]
             Write-Host ("    {0}. {1,-10}  live={2,-8}  saved={3}" -f ($i + 1), $b.Name, $b.Mode, $b.SavedMode) -ForegroundColor White
         }
         Write-Host ""
-        Write-Host "  Choose a browser number, then Default / Medium / Strict for THAT browser only." -ForegroundColor DarkGray
-        Write-Host "  A  Apply the same mode to ALL listed browsers (you still pick the mode once)" -ForegroundColor Yellow
+        Write-Host "  Choose a browser number, then a mode for that browser only." -ForegroundColor DarkGray
+        Write-Host "  A  Apply one mode to all listed browsers" -ForegroundColor Yellow
         Write-Host "  0  Back"
         $valid = @("0", "A", "a") + (1..$browsers.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
@@ -3286,7 +3311,7 @@ function Show-BrowserPolicyMenu {
         $mode = switch ($m) { "1" { "Default" } "2" { "Medium" } "3" { "Strict" } }
         if ($mode -eq "Strict") {
             Write-BrowserStrictDisclaimer
-            if ((Read-YesNo -Prompt "  Apply Strict to the selected browser(s)? Sites may break (Y/N)") -ne "Y") { continue }
+            if ((Read-YesNo -Prompt "  Apply Strict to the selected browser(s)? Some sites may fail (Y/N)") -ne "Y") { continue }
         }
         if ($mode -eq "Default" -and (Read-YesNo -Prompt "  Remove Bastion policies for selected browser(s) (Y/N)?") -ne "Y") { continue }
 
@@ -3294,11 +3319,10 @@ function Show-BrowserPolicyMenu {
             Write-Host ("  Applying {0} -> {1}..." -f $t.Name, $mode) -ForegroundColor White
             [void](Invoke-BastionBrowserPolicy -Browser $t.Key -Mode $mode)
         }
-        # Legacy summary field = last mode chosen (does not force other browsers).
         $script:BrowserPolicyMode = $mode
         Save-BastionConfig
         Save-BrowserPolicyStateFile
-        Write-Host "  Restart affected browsers fully (all windows) to load or drop policies." -ForegroundColor Yellow
+        Write-Host "  Restart affected browsers fully (close all windows) so policies load or drop." -ForegroundColor Yellow
         Write-Host ("  State log: {0}" -f (Get-BrowserPolicyStatePath)) -ForegroundColor DarkGray
         Wait-ForKey
     }
@@ -4199,9 +4223,9 @@ function Show-Help {
         return (Show-LineChunks -Title $Title -DisplayLines @($display) -Page $Page -Total $Total)
     }
 
-    $total = 12
+    $total = 13
 
-    $r = Show-HelpPage -Title "HELP 1/12 - WHAT BASTION IS" -Page 1 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 1/13 - WHAT BASTION IS" -Page 1 -Total $total -Lines @(
         "## Purpose",
         "Bastion is a selective, state-aware hardening assistant for a single Windows PC you administer.",
         "It helps you measure risk, choose sections, apply changes with logging, and recover common side effects.",
@@ -4216,7 +4240,7 @@ function Show-Help {
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpPage -Title "HELP 2/12 - RECOMMENDED WORKFLOW" -Page 2 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 2/13 - RECOMMENDED WORKFLOW" -Page 2 -Total $total -Lines @(
         "## First-time flow",
         "1. Main menu 13 or R - create a named System Restore Point.",
         "2. Option 1 Dry Run - read Would change vs Already OK with your current toggles.",
@@ -4232,7 +4256,7 @@ function Show-Help {
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpPage -Title "HELP 3/12 - MAIN MENU MAP" -Page 3 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 3/13 - MAIN MENU MAP" -Page 3 -Total $total -Lines @(
         "## REVIEW",
         "1 Dry Run - preview only, no changes. Shows Would change, Already OK, or Skipped per section.",
         "2 Audit - live posture sample with a simple scoreboard.",
@@ -4240,7 +4264,7 @@ function Show-Help {
         "## CONFIGURE",
         "4 Sections - toggle each hardening area on or off.",
         "5 Programs and paths - choose catalog apps and optional install roots.",
-        "6 Browser policies - set Firefox/Chrome/Brave independently. Strict can break some websites (HTTPS-Only / locks); many users keep one browser Strict and another looser.",
+        "6 Browser policies - Firefox/Chrome/Brave independently. Strict can break sites; see help page on browsers and Encrypted Client Hello (ECH).",
         "D DNS resolver - Quad9, Cloudflare, Cloudflare security, Google, OpenDNS, or do not change DNS.",
         "## EXECUTE",
         "7 Quick Harden - safe preset, restore-point gate, then Apply.",
@@ -4257,22 +4281,48 @@ function Show-Help {
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpSectionDocs -Title "HELP 4/12 - NETWORK AND SERVICES" -Page 4 -Total $total -Keys @(
+    $r = Show-HelpSectionDocs -Title "HELP 4/13 - NETWORK AND SERVICES" -Page 4 -Total $total -Keys @(
         "Firewall","HighRiskServices","SMBv1","OneDrive","DeliveryOptimization","DNS"
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpSectionDocs -Title "HELP 5/12 - DEFENDER AND OS HARDENING" -Page 5 -Total $total -Keys @(
+    $r = Show-HelpSectionDocs -Title "HELP 5/13 - DEFENDER AND OS HARDENING" -Page 5 -Total $total -Keys @(
         "Defender","PowerShellAuditing","ExploitProtection","LSAProtection","ScheduledTasks","XboxGaming"
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpSectionDocs -Title "HELP 6/12 - APPS AND UI SURFACES" -Page 6 -Total $total -Keys @(
+    $r = Show-HelpSectionDocs -Title "HELP 6/13 - APPS AND UI SURFACES" -Page 6 -Total $total -Keys @(
         "Programs","BrowserPolicies","BloatApps","Suggestions","CopilotM365"
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpPage -Title "HELP 7/12 - DRY RUN, APPLY, VERIFY" -Page 7 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 7/13 - BROWSERS, STRICT MODE, AND ECH" -Page 7 -Total $total -Lines @(
+        "## Where to configure",
+        "Main menu 6 (or Recovery > 3). Each installed browser is listed with live mode and saved intent.",
+        "You choose one browser (or all), then Default, Medium, or Strict for that selection only.",
+        "## What each mode does",
+        "Default - remove Bastion policies for that browser (best-effort revert). Backups are kept under the Bastion data directory.",
+        "Medium - privacy baseline: less telemetry and stronger tracking or third-party cookie limits. Fewer breakages than Strict.",
+        "Strict - Medium plus HTTPS-Only where supported. Firefox Strict also locks Encrypted Client Hello (ECH) preferences.",
+        "## Encrypted Client Hello (ECH)",
+        "Encrypted Client Hello (ECH) is a TLS feature. In a traditional handshake, the Client Hello can expose the destination hostname to passive observers on the network path.",
+        "With Encrypted Client Hello (ECH), supporting clients and servers can encrypt that material so on-path observers learn less about which site you are opening (when the network path cooperates).",
+        "Bastion Firefox Strict locks related preferences on (network.dns.echconfig.enabled and http3 ECH). Bastion does not set DisableEncryptedClientHello (that would turn ECH off).",
+        "Chrome and Brave Strict do not use those Firefox preference locks; they use Chromium HTTPS-Only and related policy values instead.",
+        "## Why some sites break under Strict",
+        "HTTPS-Only: plain HTTP, mixed content, captive portals, and misconfigured HTTPS hosts may fail or require exceptions.",
+        "Encrypted Client Hello (ECH): a minority of networks, middleboxes, or enterprise filters mishandle ECH and connections can fail until you use a looser browser profile or Default mode.",
+        "Tracking and cookie limits: some SSO, banks, embeds, and older payment widgets rely on third-party cookies or loose tracking.",
+        "## Practical recommendation",
+        "Keep one browser Strict for everyday privacy (for example Firefox Strict) and another at Medium or Default (for example Chrome) for sites that need compatibility.",
+        "After any change, fully restart the browser. Check Firefox about:policies, Chrome chrome://policy, Brave brave://policy.",
+        "## Revert and logging",
+        "Set that browser to Default in menu 6. Session logs, Bastion-BrowserPolicies-State.json, and browser-policy-backups support best-effort recovery.",
+        "System Restore (menu 13 / R) remains the bulletproof rollback if enterprise policy state is messy."
+    )
+    if ($r -eq "back" -or $r -eq "quit") { return }
+
+    $r = Show-HelpPage -Title "HELP 8/13 - DRY RUN, APPLY, VERIFY" -Page 8 -Total $total -Lines @(
         "## Dry Run",
         "Reads the live system and compares it to enabled sections. It never changes configuration.",
         "Would change means Apply would still do work. Already OK means detection believes the goal is met. Skipped means the section toggle is off.",
@@ -4284,7 +4334,7 @@ function Show-Help {
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpPage -Title "HELP 8/12 - INSTALL SECURITY" -Page 8 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 9/13 - INSTALL SECURITY" -Page 9 -Total $total -Lines @(
         "## Why installs are locked down",
         "Supply-chain risk is real. Bastion only installs IDs that appear in its built-in catalog.",
         "## Rules enforced",
@@ -4295,11 +4345,11 @@ function Show-Help {
         "5. Optional custom install paths must sit on fixed local volumes and outside system directories.",
         "6. After install, Bastion checks known paths; some vendors still ignore --location.",
         "## Uninstall",
-        "Menu 10 lists detected catalog apps, lets you toggle selection, confirms with YES, then runs winget uninstall -e --id. If validation fails, you are told the ID and a manual next step."
+        "Menu 10 lists detected catalog apps only, selection starts empty, confirms with YES, then uninstalls and re-checks paths."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpPage -Title "HELP 9/12 - HARDWARE GUIDANCE" -Page 9 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 10/13 - HARDWARE GUIDANCE" -Page 10 -Total $total -Lines @(
         "## Design choice",
         "Bastion detects hardware and opens official support pages. It does not download or flash GPU drivers or BIOS images.",
         "## What you get",
@@ -4310,11 +4360,11 @@ function Show-Help {
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpPage -Title "HELP 10/12 - RECOVERY AND SAFE MODE" -Page 10 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 11/13 - RECOVERY AND SAFE MODE" -Page 11 -Total $total -Lines @(
         "## Recovery menu (option 9)",
         "1 Undo last hardening - services and firewall groups tracked in Bastion-LastApply.json.",
         "2 Re-enable Print Spooler - when HighRiskServices disabled printing.",
-        "3 Browser policies - per browser Default/Medium/Strict. Strict may break sites (HTTPS-Only). Default reverts Bastion policies (best-effort; System Restore is bulletproof).",
+        "3 Browser policies - per browser Default/Medium/Strict. Strict may break sites (HTTPS-Only; Firefox also Encrypted Client Hello (ECH) locks). Default reverts Bastion policies (best-effort; System Restore is bulletproof).",
         "4 Copilot / M365 tools - optional removal helpers.",
         "5 Restore Widgets/Suggestions defaults - reverses Suggestions registry work where possible.",
         "## System Restore",
@@ -4324,10 +4374,12 @@ function Show-Help {
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpPage -Title "HELP 11/12 - FILES AND LOGS" -Page 11 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 12/13 - FILES AND LOGS" -Page 12 -Total $total -Lines @(
         ("## Directory: {0}" -f $script:Config.LogDirectory),
         "Preferred path is C:\Temp; falls back to %TEMP%\Bastion or %LOCALAPPDATA%\Bastion if needed.",
-        "Bastion-Config.json - section toggles, selected apps, install roots, browser mode, DNS provider.",
+        "Bastion-Config.json - section toggles, selected apps, install roots, per-browser policy modes, DNS provider.",
+        "Bastion-BrowserPolicies-State.json - saved browser modes and last policy change summary.",
+        "browser-policy-backups/ - snapshots taken before Bastion overwrites browser policies.",
         "Bastion-LastApply.json - last Apply timestamp, sections run, tracked undo data.",
         "Bastion-Log-*.txt - session transcript lines for support and review.",
         "Bastion-Report-*.html - optional HTML snapshot from Help and Reports.",
@@ -4336,10 +4388,11 @@ function Show-Help {
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
-    $r = Show-HelpPage -Title "HELP 12/12 - LIMITS AND EXPECTATIONS" -Page 12 -Total $total -Lines @(
+    $r = Show-HelpPage -Title "HELP 13/13 - LIMITS AND EXPECTATIONS" -Page 13 -Total $total -Lines @(
         "## Expected behaviors",
         "VPN DNS while connected may differ from the chosen public resolver on the physical adapter. That is normal.",
         "Menu D lets you pick Quad9, Cloudflare, Cloudflare security, Google Public DNS, Cisco OpenDNS, or leave DNS unchanged.",
+        "Browser Strict mode (especially HTTPS-Only and Firefox Encrypted Client Hello (ECH) locks) can break some sites or networks; use a second browser at Medium/Default if needed.",
         "Optional HKLM policy values for News/Interests may be denied by Windows even when elevated; that is a Soft skip, not a hard failure.",
         "Some installers ignore custom --location after path validation succeeds.",
         "## Deliberate non-goals",
@@ -4784,7 +4837,8 @@ function Invoke-ApplyHardening {
 
     if ($script:Sections["BrowserPolicies"]) {
         Write-Host ("  [BrowserPolicies] {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor Cyan
-        Write-Host "    Strict may break some sites (HTTPS-Only / locks). Per-browser modes apply only to installed browsers." -ForegroundColor Yellow
+        Write-Host "    Strict may break sites (HTTPS-Only; Firefox also Encrypted Client Hello (ECH) locks)." -ForegroundColor Yellow
+        Write-Host "    Per-browser modes apply only to installed browsers. Prefer menu 6 for interactive control." -ForegroundColor DarkGray
         $browsers = @(Get-InstalledBastionBrowsers)
         if ($browsers.Count -eq 0) {
             Write-Status "No supported browsers installed" "Skip"
