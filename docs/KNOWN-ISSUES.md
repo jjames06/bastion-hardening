@@ -4,66 +4,53 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 ---
 
-## World of Warcraft fails to start (Eidolon / `INVALID_HANDLE`) — [#18](https://github.com/jjames06/bastion-hardening/issues/18)
+## World of Warcraft / Eidolon `INVALID_HANDLE` vs StrictHandle — [#18](https://github.com/jjames06/bastion-hardening/issues/18)
 
-**Status:** Known issue. **Fix shipping** in current tree: Bastion does **not** enable system-wide **StrictHandle**, and ExploitProtection Apply best-effort **disables** StrictHandle if a prior run left it on.
+**Status:** Understood and **handled in current Bastion**.
 
-### Symptoms
+| Mode | Behavior |
+|------|----------|
+| **Current Bastion** | Enables system-wide **StrictHandle** for protection, then sets **per-app StrictHandle OFF** for discovered **`Wow*.exe`** under common World of Warcraft install paths. Rest of the system keeps StrictHandle. |
+| **Older Bastion** | Enabled system StrictHandle with **no** game exceptions → WoW Play / `Wow.exe` could crash instantly. |
 
-- Battle.net launcher works (login, library, updates).
-- Clicking **Play** on World of Warcraft fails **instantly** with Blizzard **Eidolon** (*The application encountered an unexpected error*).
-- Running `C:\Program Files (x86)\World of Warcraft\_retail_\Wow.exe` directly fails the same way.
-- Under `_retail_\errors\<timestamp>\Crash.txt`:
+### Symptoms (when unmitigated)
 
-```text
-<BlizzardError.Summary:>
-INVALID_HANDLE
+- Battle.net works; **Play** on WoW (or direct `Wow.exe`) fails with **Eidolon**.
+- `_retail_\errors\…\Crash.txt` summary: **`INVALID_HANDLE`**, stack through **`Wow_loader.dll`**.
+
+### Why a system kill-switch is not required anymore
+
+Windows process mitigations support:
+
+1. **System** policy: StrictHandle **ON** (protects most processes).  
+2. **Image / full path** policy: StrictHandle **OFF** for that EXE only (WoW exception).
+
+`Wow_loader.dll` is loaded by `Wow.exe`, so the exception on the game EXE is the correct scope.
+
+### If WoW still fails after a new Apply
+
+1. Confirm exception paths were found (Apply log should list `StrictHandle exception (OFF for this app): …\Wow.exe`).  
+2. If you installed WoW **after** Apply, **re-Apply** ExploitProtection so Bastion can discover new `Wow*.exe` paths.  
+3. Manual one-off:
+
+```powershell
+Set-ProcessMitigation -Name "C:\Program Files (x86)\World of Warcraft\_retail_\Wow.exe" -Disable StrictHandle
 ```
 
-Stack typically shows `ntdll.dll` and **`Wow_loader.dll`** very early (main thread).
+(Use your real full path; reboot if needed.)
 
-### Cause
-
-Older Bastion **ExploitProtection** (enabled by default / Quick Harden) ran:
-
-```text
-Set-ProcessMitigation -System -Enable DEP, SEHOP, BottomUp, HighEntropy, StrictHandle
-```
-
-**StrictHandle** (strict handle checks) is process-mitigation policy for the **whole system**. Some game loaders (WoW’s included) can trip invalid-handle paths and terminate immediately. That is **not** the same as firewall blocking or a corrupt Battle.net Agent install.
-
-### What usually does *not* fix it
-
-- Deleting only Battle.net / Agent / ProgramData and reinstalling the launcher  
-- Controlled Folder Access toggles alone  
-- Firewall reset alone  
-- Scan and Repair of the game (files can be fine)
-
-### Workaround (machines already affected)
-
-1. Open **elevated** PowerShell:
+4. Emergency only (turns StrictHandle off for **everyone**):
 
 ```powershell
 Set-ProcessMitigation -System -Disable StrictHandle
-Get-ProcessMitigation -System
 ```
 
-2. **Reboot** (important).  
-3. Start WoW via Battle.net **Play** or direct `Wow.exe`.
+### What usually does *not* fix INVALID_HANDLE
 
-Optional: also relax other mild flags if needed:
-
-```powershell
-Set-ProcessMitigation -System -Disable SEHOP,BottomUp,HighEntropy
-```
-
-(DEP is usually left enabled.)
-
-### After updating Bastion
-
-Re-run Apply with **ExploitProtection** enabled on a fixed build: it will apply DEP/SEHOP/BottomUp/HighEntropy only and attempt to **clear StrictHandle**.
+- Wiping Battle.net / Agent alone while Crash.txt still says `INVALID_HANDLE`  
+- CFA / firewall-only changes when the launcher already works  
 
 ### Related
 
-- Section docs in-app: **ExploitProtection**  
+- Section docs: **ExploitProtection**  
 - README: [Known issues](../README.md#known-issues)  
