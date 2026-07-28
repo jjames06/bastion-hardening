@@ -1,0 +1,44 @@
+﻿Bastion Hardening Framework
+Copyright (c) 2026 Bastion Hardening Framework contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program (see the file LICENSE).  If not, see
+<https://www.gnu.org/licenses/>.
+
+------------------------------------------------------------------------------
+ADDITIONAL DISCLAIMER (Bastion Hardening Framework)
+
+This tool makes significant changes to Windows (services, firewall, registry,
+optional features, AppX packages, DNS, Microsoft Defender settings, and related
+components).
+
+- Always create a System Restore Point before using Apply or Quick Harden.
+- It can disable printing (Print Spooler), network discovery, the OneDrive
+  client, Xbox clients, Widgets, and other features.
+- It is intended for a single personal workstation you administer.
+- It is NOT designed for domain-joined, Intune/MDM-managed, or corporate machines.
+- The author(s) and contributors accept no responsibility for data loss, broken
+  functionality, security incidents, or any other consequences of using this
+  software.
+
+Use at your own risk.
+
+------------------------------------------------------------------------------
+NOTE ON PRIOR RELEASES
+
+Published tags and release zips of Bastion Hardening Framework that shipped under
+the MIT License remain available under the license terms included in those
+artifacts. This repository's current LICENSE (GPLv3) applies to the project as of
+the commit that introduced GPLv3, and to future distributions based on that tree.
