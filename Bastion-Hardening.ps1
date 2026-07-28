@@ -303,11 +303,11 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Pairs well with process creation auditing if you enable that separately outside Bastion."
     }
     "ExploitProtection" = @{
-        Intent  = "Apply a mild system exploit mitigation profile, including StrictHandle for general protection, with automatic exceptions for World of Warcraft."
-        Changes = "Set-ProcessMitigation -System enabling DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle. Then disables StrictHandle only for discovered Wow*.exe under common World of Warcraft install trees (per-app override; rest of system keeps StrictHandle)."
-        Impact  = "System-wide handle strictness for most processes. WoW loaders that crash with Eidolon INVALID_HANDLE under system StrictHandle get a per-exe exception when Bastion finds them at Apply time."
-        Revert  = "Windows Security > App and browser control > Exploit protection, or: Set-ProcessMitigation -System -Disable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle (elevated). System Restore for full rollback."
-        Notes   = "Discovery: Battle.net Agent product.db/aggregate.json, uninstall registry, well-known folders on fixed drives, plus optional Bastion-Config.json WowInstallRoots and StrictHandleExceptionPaths for fully custom layouts. Re-Apply after installing WoW elsewhere. See GitHub issue #18 and docs/KNOWN-ISSUES.md."
+        Intent  = "Apply a mild system exploit mitigation profile, including StrictHandle for general protection, with automatic exceptions for World of Warcraft when discovered."
+        Changes = "Set-ProcessMitigation -System enabling DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle. Then disables StrictHandle only for discovered Wow*.exe (per-app override; rest of system keeps StrictHandle)."
+        Impact  = "Most processes get stricter handle checks. Without an exception, some games can fail to start. World of Warcraft historically failed with Blizzard Eidolon and Crash.txt INVALID_HANDLE in Wow_loader.dll when StrictHandle was system-wide with no exception. Bastion auto-excepts discovered Wow*.exe. Counter-Strike 2 was tested and is not affected. Other titles are unknown until reported."
+        Revert  = "If a game breaks after Apply: elevated Set-ProcessMitigation -System -Disable StrictHandle then reboot (whole-PC off), or add the game EXE path under StrictHandleExceptionPaths in Bastion-Config.json and re-Apply. Full: Set-ProcessMitigation -System -Disable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle. System Restore remains bulletproof."
+        Notes   = "READ BEFORE ENABLE: StrictHandle is the setting that broke WoW. Bastion now excepts discovered WoW; CS2 tested OK. If another game fails after hardening, turn StrictHandle off (or except that EXE), confirm the game works, then report the game name and full EXE path on GitHub issue #18 or Discussions (Game compatibility) so we can add an automatic exception. Discovery: product.db/aggregate.json, uninstall registry, fixed-drive well-known folders, optional WowInstallRoots / StrictHandleExceptionPaths. See docs/KNOWN-ISSUES.md."
     }
     "LSAProtection" = @{
         Intent  = "Protect the Local Security Authority process (credential material) with RunAsPPL."
@@ -3008,8 +3008,11 @@ function Invoke-DryRun {
             } else {
                 Show-DryItem "ExploitProtection" "Would change" ("Enable DEP, SEHOP, BottomUp, HighEntropy, StrictHandle; {0}" -f $wowNote)
             }
+            Write-Host "      Note: StrictHandle can break some games (WoW did; auto-excepted when found). CS2 tested OK." -ForegroundColor DarkYellow
+            Write-Host "      If a game breaks: Disable StrictHandle (or except its EXE), then report game + path on GitHub #18." -ForegroundColor DarkYellow
         } catch {
             Show-DryItem "ExploitProtection" "Would change" "Apply mild mitigations + WoW StrictHandle exceptions (could not query ProcessMitigation)"
+            Write-Host "      Note: StrictHandle can break some games; see Help / docs/KNOWN-ISSUES.md / GitHub #18." -ForegroundColor DarkYellow
         }
     }
 
@@ -3155,6 +3158,37 @@ function Invoke-DryRun {
     Wait-ForKey
 }
 
+function Show-ExploitProtectionGameNotice {
+    # Pre-Apply / Dry Run honesty: StrictHandle can break some games; WoW is handled; others need reports.
+    param([switch]$Compact)
+    Write-Host ""
+    Write-Host "  ---------- Games / ExploitProtection (read this) ----------" -ForegroundColor Yellow
+    Write-Host "  Setting of interest: system-wide StrictHandle (strict handle checks)." -ForegroundColor White
+    Write-Host "  Why it matters: Windows process mitigations can stop a game loader that" -ForegroundColor DarkGray
+    Write-Host "  uses invalid handles. World of Warcraft was affected: Battle.net worked," -ForegroundColor DarkGray
+    Write-Host "  but Play / Wow.exe failed with Eidolon; Crash.txt said INVALID_HANDLE in" -ForegroundColor DarkGray
+    Write-Host "  Wow_loader.dll. Bastion now enables StrictHandle for the PC, then turns" -ForegroundColor DarkGray
+    Write-Host "  it OFF only for discovered Wow*.exe paths. Counter-Strike 2 was tested OK." -ForegroundColor DarkGray
+    if (-not $Compact) {
+        $wowEx = @()
+        try { $wowEx = @(Get-BastionStrictHandleExceptionPaths) } catch { $wowEx = @() }
+        if ($wowEx.Count -gt 0) {
+            Write-Host ("  This PC: {0} WoW-related EXE exception(s) will be applied/refreshed." -f $wowEx.Count) -ForegroundColor Green
+        } else {
+            Write-Host "  This PC: no Wow*.exe found yet (OK if WoW is not installed)." -ForegroundColor DarkGray
+            Write-Host "  After installing WoW, re-Apply so exceptions attach." -ForegroundColor DarkGray
+        }
+        Write-Host "  If ANY game fails after Apply: revert StrictHandle, confirm the game works," -ForegroundColor Cyan
+        Write-Host "  then report the game + full .exe path on GitHub so we can add an exception." -ForegroundColor Cyan
+        Write-Host "  Report: github.com/jjames06/bastion-hardening/issues/18" -ForegroundColor Cyan
+        Write-Host "  or Discussions #23: Game compatibility reports" -ForegroundColor Cyan
+        Write-Host "  Quick whole-PC revert (elevated, then reboot):" -ForegroundColor White
+        Write-Host "    Set-ProcessMitigation -System -Disable StrictHandle" -ForegroundColor DarkGray
+    }
+    Write-Host "  -----------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host ""
+}
+
 function Show-ApplyPreview {
     Write-Host ""
     Write-Host "  Enabled sections:" -ForegroundColor Cyan
@@ -3173,11 +3207,16 @@ function Show-ApplyPreview {
             }
             "LSAProtection" { " [reboot required]" }
             "BloatApps" { " [hard to reverse]" }
+            "ExploitProtection" { " [StrictHandle: games notice below]" }
             default { "" }
         }
         Write-Host ("    * {0}{1}" -f $k, $extra) -ForegroundColor White
     }
-    Write-Host ""
+    if ($script:Sections["ExploitProtection"]) {
+        Show-ExploitProtectionGameNotice
+    } else {
+        Write-Host ""
+    }
 }
 
 function Get-HardwareInventory {
@@ -5178,11 +5217,12 @@ function Show-Help {
         "Browser Strict (HTTPS-Only) and an optional Encrypted Client Hello (ECH) pack can break some sites or networks; ECH is never applied unless you choose Yes. Use different modes per installed browser if needed.",
         "Optional HKLM policy values for News/Interests may be denied by Windows even when elevated; that is a Soft skip, not a hard failure.",
         "Some installers ignore custom --location after path validation succeeds.",
-        "## Games / ExploitProtection (StrictHandle)",
-        "Bastion enables system-wide StrictHandle for protection, then sets per-app StrictHandle OFF for discovered Wow*.exe. Other processes keep StrictHandle.",
-        "Discovery uses Battle.net Agent product.db/aggregate.json, uninstall registry, well-known folders on fixed drives, and optional Bastion-Config.json WowInstallRoots / StrictHandleExceptionPaths for custom layouts.",
-        "Older builds without exceptions could crash WoW at Play with Eidolon INVALID_HANDLE (issue #18). Install WoW after Apply? Re-Apply. Fully custom path? Add WowInstallRoots or StrictHandleExceptionPaths to config.",
-        "Emergency only: Set-ProcessMitigation -System -Disable StrictHandle then reboot (disables for entire PC).",
+        "## Games / ExploitProtection (StrictHandle) - read before Apply",
+        "Setting: system-wide StrictHandle (strict handle checks) via Windows process mitigations.",
+        "Why WoW broke: with StrictHandle ON and no per-app exception, World of Warcraft failed at Play / Wow.exe with Blizzard Eidolon; Crash.txt summary INVALID_HANDLE in Wow_loader.dll. Battle.net itself still worked.",
+        "What Bastion does now: StrictHandle ON for the system; OFF only for discovered Wow*.exe. Counter-Strike 2 was tested and is not an issue. Other games are unknown until reported.",
+        "If a game breaks after Apply: (1) Set-ProcessMitigation -System -Disable StrictHandle then reboot, or except that EXE; (2) confirm the game works; (3) report game name + full .exe path on GitHub issue #18 or Discussions (Game compatibility reports).",
+        "Discovery: product.db/aggregate.json, uninstall registry, fixed-drive well-known folders, optional WowInstallRoots / StrictHandleExceptionPaths in Bastion-Config.json.",
         "## Deliberate non-goals",
         "No aggressive system-wide exploit mitigation sets that previously caused black-screen logons on some hardware.",
         "No automatic NVIDIA App or BIOS flashing from winget.",
@@ -5611,6 +5651,8 @@ function Invoke-ApplyHardening {
 
     if ($script:Sections["ExploitProtection"]) {
         Write-Host "  [ExploitProtection]" -ForegroundColor Cyan
+        Write-Host "    StrictHandle ON system-wide (security). WoW Wow*.exe get per-app OFF when found." -ForegroundColor DarkGray
+        Write-Host "    CS2 tested OK. Other games: if broken, revert StrictHandle and report on GitHub #18." -ForegroundColor DarkGray
         try {
             $already = $false
             try {
@@ -5622,9 +5664,7 @@ function Invoke-ApplyHardening {
                 } catch {}
                 if ($depOn -and $strictOn) { $already = $true }
             } catch {}
-            # System-wide hardening includes StrictHandle. WoW loaders crash under that policy
-            # (Eidolon INVALID_HANDLE in Wow_loader.dll) unless we set a per-exe exception.
-            # Other processes keep system StrictHandle. See issue #18.
+            # System-wide StrictHandle; per-exe OFF for discovered Wow*.exe (issue #18).
             Set-ProcessMitigation -System -Enable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle -ErrorAction Stop
             if ($already) {
                 Write-Status "Mild system mitigations already present (re-applied; StrictHandle ON system-wide)" "Already"
@@ -5632,7 +5672,9 @@ function Invoke-ApplyHardening {
                 Write-Status "Mild system mitigations applied (DEP/SEHOP/ASLR + StrictHandle system-wide)" "Applied"
             }
             [void](Set-BastionStrictHandleExceptions)
-            Write-Host "    Note: if you install WoW later, re-Apply ExploitProtection so exceptions attach to new Wow*.exe paths." -ForegroundColor DarkGray
+            Write-Host "    If you install WoW later, re-Apply so exceptions attach to new Wow*.exe paths." -ForegroundColor DarkGray
+            Write-Host "    If another game fails: Set-ProcessMitigation -System -Disable StrictHandle then reboot;" -ForegroundColor DarkGray
+            Write-Host "    report game name + full .exe path on github.com/jjames06/bastion-hardening/issues/18" -ForegroundColor DarkGray
             Write-Host "    Reboot recommended after mitigation changes before testing games." -ForegroundColor DarkGray
         } catch {
             Write-Status ("Exploit Protection failed: {0}. Next step: Windows Security > App and browser control." -f $_.Exception.Message) "Failed"
