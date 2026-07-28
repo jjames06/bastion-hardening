@@ -15,6 +15,7 @@ Version **15.1**
 <p align="center">
   <a href="#how-to-install-properly"><strong>Install guide</strong></a> ·
   <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> ·
+  <a href="#known-issues"><strong>Known issues</strong></a> ·
   <a href="#browser-policies"><strong>Browser / ECH</strong></a> ·
   <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> ·
   <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> ·
@@ -383,6 +384,26 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 
 ---
 
+## Known issues
+
+Tracked on GitHub; workarounds below. See also [Issues](https://github.com/jjames06/bastion-hardening/issues).
+
+### World of Warcraft / Eidolon `INVALID_HANDLE` after ExploitProtection ([#18](https://github.com/jjames06/bastion-hardening/issues/18))
+
+**Status:** Documented; product fix shipping (Bastion no longer enables system-wide **StrictHandle**, and re-Apply turns it off).
+
+| | |
+|--|--|
+| **Symptom** | Battle.net opens; **Play** on WoW (or direct `Wow.exe`) fails instantly with Blizzard **Eidolon**. Crash.txt summary: **`INVALID_HANDLE`** in **`Wow_loader.dll`**. |
+| **Cause** | Older Bastion **ExploitProtection** enabled system-wide `StrictHandle` (strict handle checks) via `Set-ProcessMitigation -System`. |
+| **Not the cause** | Missing Battle.net Agent folders alone, CFA, or firewall outbound block (launcher can still work). |
+| **Workaround (already applied)** | Elevated PowerShell, then **reboot**: `Set-ProcessMitigation -System -Disable StrictHandle` |
+| **Going forward** | Use a Bastion build that omits StrictHandle; or re-Apply **ExploitProtection** after updating so StrictHandle is disabled. |
+
+If you are hit: prefer the one-liner above before wiping Battle.net/Agent again.
+
+---
+
 ## Repository layout
 
 | Path | Purpose |
@@ -395,6 +416,7 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 | `README.md` | This documentation |
 | `docs/DATA-DIRECTORY.md` | Runtime files and folders Bastion creates |
 | `docs/BROWSER-POLICIES-AND-ECH.md` | Browser modes and Encrypted Client Hello (ECH) |
+| `docs/KNOWN-ISSUES.md` | Known issues and workarounds (e.g. WoW / StrictHandle) |
 | `docs/images/` | Screenshots used in this README |
 
 ---
