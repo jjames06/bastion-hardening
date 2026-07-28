@@ -123,3 +123,42 @@ Comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) 
 
 - Section docs: **ExploitProtection**  
 - README: [Known issues](../README.md#known-issues)  
+
+---
+
+## `ms-gamingoverlay` / “Get an app to open this link” when launching games
+
+**Symptom:** A Windows dialog: *Get an app to open this `ms-gamingoverlay` link* (or similar) when starting Steam/Battle.net games.
+
+**Cause (typical after Xbox cleanup):**
+
+| Piece | State |
+|-------|--------|
+| Games | Still try to open **Xbox Game Bar** via the `ms-gamingoverlay:` protocol |
+| **Game DVR** | Still **enabled** in the user profile (`GameDVR_Enabled = 1`) |
+| **Xbox Gaming Overlay** package | Missing (removed via BloatApps or never installed) |
+| Xbox services | Often disabled if **XboxGaming** was applied |
+
+This is **not** a mysterious service “failing to start.” It is a **protocol open with no handler app**.
+
+**What Bastion does now**
+
+- **XboxGaming** Apply: disables Xbox services **and** silences Game DVR / Game Bar capture flags so games stop prompting.  
+- **BloatApps** when Xbox Gaming Overlay is removed (or already gone): same Game DVR silence.  
+- **Recovery → 6 Game Bar / ms-gamingoverlay prompt**: silence or re-enable Game DVR flags.
+
+**Manual silence (current user):**
+
+```powershell
+Set-ItemProperty "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -Value 0 -Type DWord -Force
+New-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Force | Out-Null
+Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name AppCaptureEnabled -Value 0 -Type DWord -Force
+```
+
+(Admin Apply also sets `HKLM\...\Policies\Microsoft\Windows\GameDVR\AllowGameDVR = 0`.)
+
+**If you want Game Bar back:** Recovery → 6 → re-enable flags, then install **Xbox Game Bar** from Microsoft Store (`Microsoft.XboxGamingOverlay`).
+
+### Related
+
+- Section docs: **XboxGaming**, **BloatApps**  

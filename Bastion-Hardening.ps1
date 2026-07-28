@@ -325,10 +325,10 @@ $script:SectionDocs = [ordered]@{
     }
     "XboxGaming" = @{
         Intent  = "Optional: disable Xbox-related services when you do not use Xbox features on this PC."
-        Changes = "Disables XblAuthManager, XblGameSave, XboxNetApiSvc, XboxGipSvc when present."
-        Impact  = "Xbox app, some Game Bar features, and Xbox networking services will not run."
-        Revert  = "Re-enable services in services.msc or Undo when tracked."
-        Notes   = "Defaults to off in Quick Harden. Enable only if you want this trade-off."
+        Changes = "Disables XblAuthManager, XblGameSave, XboxNetApiSvc, XboxGipSvc when present. Also turns off Game DVR / Game Bar capture flags so games stop opening ms-gamingoverlay when Xbox Gaming Overlay is missing (avoids the 'Get an app to open this link' dialog)."
+        Impact  = "Xbox networking services stop. Win+G / Game Bar capture is discouraged via registry so titles do not prompt for a missing overlay handler every launch."
+        Revert  = "Re-enable services in services.msc or Undo when tracked. Recovery > Silence Game Bar prompt has a reverse option to re-enable Game DVR flags, or reinstall Xbox Game Bar from Microsoft Store."
+        Notes   = "Defaults to off in Quick Harden. If you only removed the overlay via BloatApps, Apply also silences Game DVR when that package is removed. See docs/KNOWN-ISSUES.md (ms-gamingoverlay)."
     }
     "Programs" = @{
         Intent  = "Install selected catalog applications via winget with security checks."
@@ -347,9 +347,9 @@ $script:SectionDocs = [ordered]@{
     "BloatApps" = @{
         Intent  = "Remove a curated list of consumer Appx packages many users do not want on a clean workstation."
         Changes = "Removes matching user and provisioned packages for items such as Bing News/Weather, Solitaire, Clipchamp, Phone Link, Feedback Hub, Maps, Get Started, Power Automate Desktop, and selected Xbox overlays when present."
-        Impact  = "Those apps disappear for existing and new users on this image. Reinstall is not always trivial."
-        Revert  = "System Restore is the reliable rollback. Microsoft Store may reinstall some apps. Bastion Undo does not reinstall Appx."
-        Notes   = "Path-not-found and already-removed cases are treated as Already, not hard failures. Defaults to off until you opt in."
+        Impact  = "Those apps disappear for existing and new users on this image. Reinstall is not always trivial. Removing Xbox Gaming Overlay without silencing Game DVR can leave games opening ms-gamingoverlay (Windows 'Get an app to open this link' dialog); Bastion silences Game DVR when that overlay is removed or already absent."
+        Revert  = "System Restore is the reliable rollback. Microsoft Store may reinstall some apps. Bastion Undo does not reinstall Appx. Recovery > 6 can re-enable Game DVR flags if you restore Game Bar from the Store."
+        Notes   = "Path-not-found and already-removed cases are treated as Already, not hard failures. Defaults to off until you opt in. See docs/KNOWN-ISSUES.md (ms-gamingoverlay)."
     }
     "Suggestions" = @{
         Intent  = "Reduce Widgets/News distraction and Start/Settings suggestion surfaces."
@@ -436,6 +436,118 @@ function Get-HighRiskServicesForApply {
     return $list
 }
 $script:XboxServiceList = @("XblAuthManager","XblGameSave","XboxNetApiSvc","XboxGipSvc")
+
+function Test-BastionGameDvrSilenced {
+    # True when common Game DVR / capture flags are off (games titles less likely to open ms-gamingoverlay).
+    try {
+        $gcs = (Get-ItemProperty "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -ErrorAction SilentlyContinue).GameDVR_Enabled
+        $cap = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name AppCaptureEnabled -ErrorAction SilentlyContinue).AppCaptureEnabled
+        $pol = $null
+        try {
+            $pol = (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name AllowGameDVR -ErrorAction SilentlyContinue).AllowGameDVR
+        } catch {}
+        $userOff = ($gcs -eq 0 -or "$gcs" -eq "0") -and ($cap -eq 0 -or "$cap" -eq "0" -or $null -eq $cap)
+        $polOff = ($pol -eq 0 -or "$pol" -eq "0")
+        return [bool]($userOff -or $polOff)
+    } catch {
+        return $false
+    }
+}
+
+function Disable-BastionGameDvrOverlay {
+    # Silence "Get an app to open this ms-gamingoverlay link" when Game Bar / XboxGamingOverlay is gone
+    # but GameDVR is still enabled and games keep invoking the protocol.
+    # Does not reinstall Xbox; only policy/registry so apps stop asking for the overlay.
+    param([switch]$Quiet)
+    $changed = 0
+    try {
+        if (-not (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR")) {
+            New-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Force | Out-Null
+        }
+        $curCap = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name AppCaptureEnabled -ErrorAction SilentlyContinue).AppCaptureEnabled
+        if ($curCap -ne 0) {
+            Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name AppCaptureEnabled -Value 0 -Type DWord -Force
+            $changed++
+        }
+        if (-not (Test-Path "HKCU:\System\GameConfigStore")) {
+            New-Item "HKCU:\System\GameConfigStore" -Force | Out-Null
+        }
+        $curG = (Get-ItemProperty "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -ErrorAction SilentlyContinue).GameDVR_Enabled
+        if ($curG -ne 0) {
+            Set-ItemProperty "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -Value 0 -Type DWord -Force
+            $changed++
+        }
+        if (-not (Test-Path "HKCU:\Software\Microsoft\GameBar")) {
+            New-Item "HKCU:\Software\Microsoft\GameBar" -Force | Out-Null
+        }
+        foreach ($pair in @(
+                @{ N = "AutoGameModeEnabled"; V = 0 },
+                @{ N = "AllowAutoGameMode"; V = 0 },
+                @{ N = "UseNexusForGameBarEnabled"; V = 0 }
+            )) {
+            try {
+                $c = (Get-ItemProperty "HKCU:\Software\Microsoft\GameBar" -Name $pair.N -ErrorAction SilentlyContinue).($pair.N)
+                if ($c -ne $pair.V) {
+                    Set-ItemProperty "HKCU:\Software\Microsoft\GameBar" -Name $pair.N -Value $pair.V -Type DWord -Force
+                    $changed++
+                }
+            } catch {
+                Set-ItemProperty "HKCU:\Software\Microsoft\GameBar" -Name $pair.N -Value $pair.V -Type DWord -Force -ErrorAction SilentlyContinue
+                $changed++
+            }
+        }
+        # Machine policy (elevated Apply): discourages Game DVR system-wide for this user profile policy scope
+        try {
+            if (-not (Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR")) {
+                New-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Force | Out-Null
+            }
+            $pol = (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name AllowGameDVR -ErrorAction SilentlyContinue).AllowGameDVR
+            if ($pol -ne 0) {
+                Set-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name AllowGameDVR -Value 0 -Type DWord -Force
+                $changed++
+            }
+        } catch {
+            Write-Log ("GameDVR policy write skipped: {0}" -f $_.Exception.Message) -Level Warning -NoConsole
+        }
+        if ($changed -gt 0) {
+            Write-Status "Game DVR / Game Bar capture disabled (silences missing ms-gamingoverlay prompts)" "Applied"
+        } else {
+            if (-not $Quiet) {
+                Write-Status "Game DVR / Game Bar capture already silenced" "Already"
+            }
+        }
+        Write-Log "Disable-BastionGameDvrOverlay changed=$changed" -NoConsole
+        return $changed
+    } catch {
+        Write-Status ("Game DVR silence failed: {0}" -f $_.Exception.Message) "Warn"
+        return 0
+    }
+}
+
+function Enable-BastionGameDvrOverlay {
+    # Reverse of silence: re-enable Game DVR flags so Xbox Game Bar can work again if reinstalled from Store.
+    try {
+        if (-not (Test-Path "HKCU:\System\GameConfigStore")) {
+            New-Item "HKCU:\System\GameConfigStore" -Force | Out-Null
+        }
+        Set-ItemProperty "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -Value 1 -Type DWord -Force
+        if (-not (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR")) {
+            New-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Force | Out-Null
+        }
+        Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name AppCaptureEnabled -Value 1 -Type DWord -Force
+        try {
+            if (Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR") {
+                Remove-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name AllowGameDVR -Force -ErrorAction SilentlyContinue
+            }
+        } catch {}
+        Write-Status "Game DVR flags re-enabled (install Xbox Game Bar from Microsoft Store if overlay is still missing)" "Applied"
+        Write-Host "      Settings > Gaming > Xbox Game Bar, or Store package Microsoft.XboxGamingOverlay." -ForegroundColor DarkGray
+        return $true
+    } catch {
+        Write-Status ("Could not re-enable Game DVR: {0}" -f $_.Exception.Message) "Warn"
+        return $false
+    }
+}
 $script:FirewallGroups = @(
     "File and Printer Sharing","Network Discovery","Remote Assistance",
     "Remote Desktop","Windows Remote Management","mDNS"
@@ -3054,10 +3166,11 @@ function Invoke-DryRun {
             $svc = Get-ServiceState $s
             if ($svc -and $svc.StartType -ne "Disabled") { $need += $s }
         }
+        $dvrNote = if (Test-BastionGameDvrSilenced) { "Game DVR already silenced" } else { "will silence Game DVR / ms-gamingoverlay prompts" }
         if ($need.Count -eq 0) {
-            Show-DryItem "XboxGaming" "Already OK" "Xbox services absent or already disabled"
+            Show-DryItem "XboxGaming" "Already OK" ("Xbox services absent or already disabled; {0}" -f $dvrNote)
         } else {
-            Show-DryItem "XboxGaming" "Would change" ("Disable: {0}" -f ($need -join ", "))
+            Show-DryItem "XboxGaming" "Would change" ("Disable: {0}; {1}" -f ($need -join ", "), $dvrNote)
         }
     }
 
@@ -4887,10 +5000,11 @@ function Show-RecoveryMenu {
         Write-Host "  3 Browser policies (per browser; Default reverts Bastion policies)"
         Write-Host "  4 Copilot / M365 tools"
         Write-Host "  5 Restore Widgets / Suggestions defaults" -ForegroundColor Green
+        Write-Host "  6 Game Bar / ms-gamingoverlay prompt" -ForegroundColor Yellow
         Write-Host "  0 Back"
         Write-Host ""
         Write-Host "  Note: Appx bloat removal is not reinstallable here - use System Restore or Microsoft Store." -ForegroundColor DarkGray
-        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5")
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6")
         switch ($c) {
             "0" { return }
             "1" { Invoke-UndoHardening }
@@ -4903,6 +5017,31 @@ function Show-RecoveryMenu {
                     Restore-SuggestionDefaults
                 }
                 Wait-ForKey
+            }
+            "6" {
+                Clear-BastionScreen
+                Write-Header "GAME BAR / MS-GAMINGOVERLAY"
+                Write-Host "  Games may open ms-gamingoverlay when Game DVR is on but Xbox Game Bar is missing." -ForegroundColor Cyan
+                Write-Host "  That shows: Get an app to open this 'ms-gamingoverlay' link." -ForegroundColor DarkGray
+                Write-Host ""
+                $silenced = Test-BastionGameDvrSilenced
+                Write-Host ("  Game DVR silence status: {0}" -f $(if ($silenced) { "ON (capture discouraged)" } else { "OFF (games may still prompt)" })) -ForegroundColor White
+                Write-Host ""
+                Write-Host "  1 Silence prompt (disable Game DVR / capture flags)  [recommended if you do not use Game Bar]"
+                Write-Host "  2 Re-enable Game DVR flags (then install Xbox Game Bar from Store if needed)"
+                Write-Host "  0 Back"
+                $g = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2")
+                switch ($g) {
+                    "1" {
+                        [void](Disable-BastionGameDvrOverlay)
+                        Write-Host "  Fully quit and relaunch games to confirm the dialog is gone." -ForegroundColor DarkGray
+                        Wait-ForKey
+                    }
+                    "2" {
+                        [void](Enable-BastionGameDvrOverlay)
+                        Wait-ForKey
+                    }
+                }
             }
         }
     }
@@ -5183,6 +5322,7 @@ function Show-Help {
         "3 Browser policies - only installed Firefox/Chrome/Brave. Default/Medium/Strict per browser; Encrypted Client Hello (ECH) only if you opt in. Default reverts that browser (best-effort; System Restore is bulletproof).",
         "4 Copilot / M365 tools - optional removal helpers.",
         "5 Restore Widgets/Suggestions defaults - reverses Suggestions registry work where possible.",
+        "6 Game Bar / ms-gamingoverlay - silence Game DVR so games stop opening a missing Xbox Game Bar link, or re-enable DVR flags if you restore Game Bar from the Store.",
         "## System Restore",
         "Preferred full rollback. Create points from menu 13 or R. If Windows will not log on normally: hold Shift while selecting Restart, open Troubleshoot > Advanced > Startup Settings > Restart, then Safe Mode, then rstrui.exe.",
         "## Honest limits of Undo",
@@ -5541,6 +5681,8 @@ function Invoke-ApplyHardening {
             $entry = Disable-BastionService -Name $s
             if ($entry) { [void]$disabledServices.Add($entry) }
         }
+        # Games still open ms-gamingoverlay when Game DVR is on but Game Bar was removed/disabled.
+        [void](Disable-BastionGameDvrOverlay)
     }
 
     if ($script:Sections["LSAProtection"]) {
@@ -5743,6 +5885,15 @@ function Invoke-ApplyHardening {
                     }
                 }
             }
+        }
+        # If Xbox Gaming Overlay was in scope or is now absent, silence ms-gamingoverlay prompts.
+        $overlayGone = $true
+        try {
+            $overlayGone = -not [bool](Get-AppxPackage -Name "Microsoft.XboxGamingOverlay*" -ErrorAction SilentlyContinue)
+        } catch {}
+        $removedOverlay = @($targets | Where-Object { $_.DisplayName -match 'Xbox Gaming Overlay' }).Count -gt 0
+        if ($overlayGone -or $removedOverlay) {
+            [void](Disable-BastionGameDvrOverlay)
         }
     }
 
