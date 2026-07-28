@@ -161,4 +161,36 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 
 ### Related
 
-- Section docs: **XboxGaming**, **BloatApps**  
+- Section docs: **XboxGaming**, **BloatApps**
+
+---
+
+## Remote Desktop / Remote Assistance / WinRM blocked after Firewall Apply
+
+**Symptom:** Cannot RDP into the PC, cannot use Remote Assistance, or WinRM / PowerShell remoting fails after Bastion Firewall Apply.
+
+**Cause (by design):** Firewall Apply disables inbound rule groups for **Remote Desktop**, **Remote Assistance**, and **Windows Remote Management** (plus file sharing / discovery / mDNS). Profile defaults stay **Inbound=Block**. That is intentional exposure reduction for a single-user workstation.
+
+**What Bastion does *not* do on Firewall Apply:** It does not rewrite `fDenyTSConnections` or force-stop **TermService**. Those are optional system RDP controls under Recovery.
+
+**Recovery (preferred):** Main menu **9 → 7 Remote access (RDP / Assistance / WinRM)**
+
+| Need | Action |
+|------|--------|
+| Temporary help session | Open **Remote Assistance** only; lock again when done |
+| Host RDP again | Remote Desktop: enable firewall group **and** allow system RDP (`fDenyTSConnections=0` + start TermService). Full host RDP usually needs both. |
+| PowerShell remoting / WinRM | Open **Windows Remote Management** only if you truly need it |
+| Return to Bastion posture | **Lock all three** firewall groups (option 5). Optionally deny system RDP. |
+
+**Honest limits**
+
+- Opening remote paths **increases attack surface**. Prefer locked when idle.  
+- Windows **Home** often cannot host full RDP the way Pro/Enterprise can.  
+- File and Printer Sharing / Network Discovery / mDNS are **not** on this submenu (use Undo or `wf.msc`).  
+- System Restore remains the strongest full rollback.
+
+### Related
+
+- Section docs: **Firewall**  
+- In-app Help page 11 (Recovery)  
+

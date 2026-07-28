@@ -1,12 +1,12 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.3 FINAL
+    Bastion Hardening Framework v15.4 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     to avoid smart-quote / em-dash parse failures when pasting into editors.
 .NOTES
-    Version 15.3 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.4 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
 #>
 
 $ErrorActionPreference = "Continue"
@@ -14,7 +14,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.3"
+    ScriptVersion = "15.4"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
@@ -250,8 +250,8 @@ $script:SectionDocs = [ordered]@{
         Intent  = "Reduce unsolicited inbound exposure while keeping normal outbound traffic working (browsing, VPN, Windows Update)."
         Changes = "Enables the firewall on Domain, Private, and Public profiles; sets DefaultInboundAction=Block and leaves DefaultOutboundAction=Allow; disables inbound rule groups for File and Printer Sharing, Network Discovery, Remote Assistance, Remote Desktop, Windows Remote Management, and mDNS when those groups are present and enabled."
         Impact  = "Inbound discovery, SMB sharing, RDP, and WinRM from the network are blocked unless you later re-enable specific rules. Outbound apps continue to work."
-        Revert  = "Recovery > Undo last hardening restores tracked firewall groups from the last Apply. You can also use Windows Defender Firewall with Advanced Security, or System Restore."
-        Notes   = "Verify with Get-NetFirewallProfile and Get-NetFirewallRule. This is profile hardening plus group toggles, not a full custom rule set."
+        Revert  = "Recovery > Undo last hardening restores tracked firewall groups from the last Apply. Recovery > Remote access lets you enable or lock Remote Desktop, Remote Assistance, and WinRM groups anytime (with optional system RDP allow/deny). You can also use Windows Defender Firewall with Advanced Security, or System Restore."
+        Notes   = "Verify with Get-NetFirewallProfile and Get-NetFirewallRule. This is profile hardening plus group toggles, not a full custom rule set. Enabling remote groups increases attack surface; only open what you need."
     }
     "HighRiskServices" = @{
         Intent  = "Turn off local services that are common attack surface or rarely needed on a single hardened workstation."
@@ -551,6 +551,12 @@ function Enable-BastionGameDvrOverlay {
 $script:FirewallGroups = @(
     "File and Printer Sharing","Network Discovery","Remote Assistance",
     "Remote Desktop","Windows Remote Management","mDNS"
+)
+# Subset of FirewallGroups that Recovery "Remote access" manages explicitly.
+$script:RemoteAccessFirewallGroups = @(
+    "Remote Desktop",
+    "Remote Assistance",
+    "Windows Remote Management"
 )
 $script:CopilotM365PackageMatch = 'Copilot|MicrosoftOfficeHub|Microsoft.Copilot'
 $script:BloatAppxList = @(
@@ -1756,7 +1762,7 @@ function Get-BastionWowInstallRoots {
 
 function Get-BastionStrictHandleExceptionPaths {
     # Per-app StrictHandle OFF targets. System keeps StrictHandle ON for everything else.
-    # Wow_loader.dll is loaded by Wow*.exe — exception on the EXE covers the loader crash (issue #18).
+    # Wow_loader.dll is loaded by Wow*.exe - exception on the EXE covers the loader crash (issue #18).
     # Only scan known product subfolders (not Data\) so Apply stays fast on large installs.
     $paths = [System.Collections.Generic.List[string]]::new()
     function Add-Exe([string]$e) {
@@ -3008,8 +3014,18 @@ function Invoke-DryRun {
             foreach ($p in (Get-NetFirewallProfile -ErrorAction Stop)) {
                 if (-not $p.Enabled -or $p.DefaultInboundAction -ne "Block") { $fwOk = $false }
             }
-            if ($fwOk) { Show-DryItem "Firewall" "Already OK" "Profiles enabled, Inbound=Block" }
-            else { Show-DryItem "Firewall" "Would change" "Set profiles Enabled + Inbound=Block; disable discovery/RDP/WinRM/mDNS inbound groups if enabled" }
+            $openGroups = @()
+            foreach ($g in $script:FirewallGroups) {
+                $gst = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
+                if ($gst.Open) { $openGroups += $g }
+            }
+            if ($fwOk -and $openGroups.Count -eq 0) {
+                Show-DryItem "Firewall" "Already OK" "Profiles enabled, Inbound=Block; discovery/RDP/WinRM/mDNS groups locked"
+            } elseif ($fwOk) {
+                Show-DryItem "Firewall" "Would change" ("Profiles OK; would lock open group(s): {0}" -f ($openGroups -join ", "))
+            } else {
+                Show-DryItem "Firewall" "Would change" "Set profiles Enabled + Inbound=Block; disable discovery/RDP/WinRM/mDNS inbound groups if enabled"
+            }
         } catch { Show-DryItem "Firewall" "Would change" "Could not read profiles; Apply would set Inbound=Block" }
     }
 
@@ -3318,6 +3334,7 @@ function Show-ApplyPreview {
                 else { (" -> {0} ({1})" -f $p.DisplayName, $p.Primary) }
             }
             "HighRiskServices" { " [includes Print Spooler]" }
+            "Firewall" { " [locks RDP/Assistance/WinRM groups; Recovery > 7 to re-open]" }
             "Programs" {
                 if ($script:SelectedApps.Count) { (" -> {0}" -f ($script:SelectedApps -join ", ")) } else { " -> none" }
             }
@@ -4746,6 +4763,7 @@ function Invoke-UndoHardening {
         }
     }
     Write-Host "  Undo finished (partial by design). Next step if issues remain: System Restore." -ForegroundColor Green
+    Write-Host "  Need only RDP / Assistance / WinRM? Recovery > 7 Remote access is more precise than full Undo." -ForegroundColor DarkGray
     Wait-ForKey
 }
 
@@ -4991,6 +5009,390 @@ function Invoke-CopilotM365Removal {
 }
 
 
+function Get-BastionFirewallGroupInboundStatus {
+    param([Parameter(Mandatory)][string]$DisplayGroup)
+    $all = @()
+    $enabledAllow = @()
+    try {
+        $all = @(Get-NetFirewallRule -DisplayGroup $DisplayGroup -ErrorAction SilentlyContinue |
+            Where-Object { $_.Direction -eq "Inbound" })
+        $enabledAllow = @($all | Where-Object {
+            ($_.Enabled -eq $true -or $_.Enabled -eq "True") -and $_.Action -eq "Allow"
+        })
+    } catch {}
+    $present = $all.Count -gt 0
+    $open = $enabledAllow.Count -gt 0
+    $label = if (-not $present) { "NOT PRESENT" } elseif ($open) { "OPEN" } else { "LOCKED" }
+    return [PSCustomObject]@{
+        DisplayGroup       = $DisplayGroup
+        Present            = $present
+        Open               = $open
+        EnabledAllowCount  = $enabledAllow.Count
+        InboundRuleCount   = $all.Count
+        Label              = $label
+    }
+}
+
+function Enable-BastionFirewallGroupInbound {
+    param([Parameter(Mandatory)][string]$DisplayGroup)
+    # Match Undo: re-enable inbound rules in the group so the remote path can work again.
+    try {
+        $rules = @(Get-NetFirewallRule -DisplayGroup $DisplayGroup -ErrorAction Stop |
+            Where-Object { $_.Direction -eq "Inbound" })
+        if ($rules.Count -eq 0) {
+            Write-Status ("No inbound rules found for group: {0}" -f $DisplayGroup) "Warn"
+            return $false
+        }
+        $n = 0
+        foreach ($rule in $rules) {
+            try {
+                Set-NetFirewallRule -InputObject $rule -Enabled True -Confirm:$false -ErrorAction Stop
+                $n++
+            } catch {
+                Write-Status ("Rule fail in {0}: {1}" -f $DisplayGroup, $rule.DisplayName) "Warn"
+            }
+        }
+        Write-Status ("Enabled {0} inbound rule(s) in {1}" -f $n, $DisplayGroup) "Applied"
+        Write-Log ("Enable-BastionFirewallGroupInbound group={0} count={1}" -f $DisplayGroup, $n) -NoConsole
+        return $true
+    } catch {
+        Write-Status ("Enable group '{0}' failed: {1}" -f $DisplayGroup, $_.Exception.Message) "Failed"
+        return $false
+    }
+}
+
+function Disable-BastionFirewallGroupInbound {
+    param([Parameter(Mandatory)][string]$DisplayGroup)
+    # Bastion Apply style: disable currently enabled inbound rules in the group.
+    try {
+        $rules = @(Get-NetFirewallRule -DisplayGroup $DisplayGroup -ErrorAction Stop |
+            Where-Object {
+                $_.Direction -eq "Inbound" -and (
+                    $_.Enabled -eq $true -or $_.Enabled -eq "True"
+                )
+            })
+        if ($rules.Count -eq 0) {
+            Write-Status ("Already locked / no enabled inbound rules: {0}" -f $DisplayGroup) "Already"
+            return $true
+        }
+        $n = 0
+        foreach ($rule in $rules) {
+            try {
+                Set-NetFirewallRule -InputObject $rule -Enabled False -Confirm:$false -ErrorAction Stop
+                $n++
+            } catch {
+                Write-Status ("Rule fail in {0}: {1}" -f $DisplayGroup, $rule.DisplayName) "Warn"
+            }
+        }
+        Write-Status ("Disabled {0} inbound rule(s) in {1}" -f $n, $DisplayGroup) "Applied"
+        Write-Log ("Disable-BastionFirewallGroupInbound group={0} count={1}" -f $DisplayGroup, $n) -NoConsole
+        return $true
+    } catch {
+        Write-Status ("Disable group '{0}' failed: {1}" -f $DisplayGroup, $_.Exception.Message) "Failed"
+        return $false
+    }
+}
+
+function Get-BastionRemoteDesktopSystemStatus {
+    $deny = $null
+    try {
+        $deny = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
+            -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections
+    } catch {}
+    $svc = $null
+    try { $svc = Get-Service -Name TermService -ErrorAction SilentlyContinue } catch {}
+    $allowed = ($deny -eq 0)
+    $sysLabel = if ($null -eq $deny) { "UNKNOWN" } elseif ($allowed) { "ALLOWED" } else { "DENIED" }
+    return [PSCustomObject]@{
+        fDenyTSConnections = $deny
+        SystemAllowed      = $allowed
+        SystemLabel        = $sysLabel
+        ServiceName        = "TermService"
+        ServiceStatus      = if ($svc) { [string]$svc.Status } else { "Not found" }
+        ServiceStartType   = if ($svc) { [string]$svc.StartType } else { "Not found" }
+        ServicePresent     = [bool]$svc
+    }
+}
+
+function Enable-BastionRemoteDesktopSystem {
+    # Optional layer beyond firewall groups: Windows "allow remote connections to this computer".
+    try {
+        $path = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
+        if (-not (Test-Path -LiteralPath $path)) {
+            Write-Status "Terminal Server registry path missing on this edition/build" "Failed"
+            return $false
+        }
+        Set-ItemProperty -Path $path -Name fDenyTSConnections -Value 0 -Type DWord -Force -ErrorAction Stop
+        Write-Status "fDenyTSConnections=0 (system allows Remote Desktop connections)" "Applied"
+        try {
+            Set-Service -Name TermService -StartupType Automatic -ErrorAction Stop
+            Start-Service -Name TermService -ErrorAction Stop
+            Write-Status "TermService: Automatic and running" "Applied"
+        } catch {
+            Write-Status ("TermService start/config failed: {0}. Next step: services.msc -> Remote Desktop Services." -f $_.Exception.Message) "Warn"
+        }
+        Write-Log "Enable-BastionRemoteDesktopSystem done" -NoConsole
+        return $true
+    } catch {
+        Write-Status ("Allow RDP system failed: {0}" -f $_.Exception.Message) "Failed"
+        return $false
+    }
+}
+
+function Disable-BastionRemoteDesktopSystem {
+    param([switch]$StopService)
+    try {
+        $path = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
+        if (-not (Test-Path -LiteralPath $path)) {
+            Write-Status "Terminal Server registry path missing on this edition/build" "Failed"
+            return $false
+        }
+        Set-ItemProperty -Path $path -Name fDenyTSConnections -Value 1 -Type DWord -Force -ErrorAction Stop
+        Write-Status "fDenyTSConnections=1 (system denies Remote Desktop connections)" "Applied"
+        if ($StopService) {
+            try {
+                Stop-Service -Name TermService -Force -ErrorAction SilentlyContinue
+                Set-Service -Name TermService -StartupType Manual -ErrorAction Stop
+                Write-Status "TermService: stopped and Manual (can be started later if needed)" "Applied"
+            } catch {
+                Write-Status ("TermService stop/config: {0}" -f $_.Exception.Message) "Warn"
+            }
+        }
+        Write-Log ("Disable-BastionRemoteDesktopSystem stopService={0}" -f [bool]$StopService) -NoConsole
+        return $true
+    } catch {
+        Write-Status ("Deny RDP system failed: {0}" -f $_.Exception.Message) "Failed"
+        return $false
+    }
+}
+
+function Write-BastionRemoteAccessStatusBlock {
+    Write-Host "  Live status" -ForegroundColor Cyan
+    foreach ($g in $script:RemoteAccessFirewallGroups) {
+        $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
+        $color = switch ($st.Label) {
+            "OPEN" { "Yellow" }
+            "LOCKED" { "Green" }
+            default { "DarkGray" }
+        }
+        $detail = if ($st.Present) {
+            "{0} inbound allow rule(s) enabled; {1} inbound rule(s) total" -f $st.EnabledAllowCount, $st.InboundRuleCount
+        } else {
+            "group not found on this PC"
+        }
+        Write-Host ("    Firewall  {0,-28} {1,-11}  {2}" -f $g, $st.Label, $detail) -ForegroundColor $color
+    }
+    $rdp = Get-BastionRemoteDesktopSystemStatus
+    $rdpColor = switch ($rdp.SystemLabel) {
+        "ALLOWED" { "Yellow" }
+        "DENIED" { "Green" }
+        default { "DarkGray" }
+    }
+    $denyVal = if ($null -eq $rdp.fDenyTSConnections) { "?" } else { [string]$rdp.fDenyTSConnections }
+    Write-Host ("    System    Remote Desktop allow      {0,-11}  fDenyTSConnections={1}" -f $rdp.SystemLabel, $denyVal) -ForegroundColor $rdpColor
+    $svcColor = if ($rdp.ServiceStatus -eq "Running") { "Yellow" } else { "DarkGray" }
+    Write-Host ("    Service   TermService               {0,-11}  StartType={1}" -f $rdp.ServiceStatus, $rdp.ServiceStartType) -ForegroundColor $svcColor
+}
+
+function Show-RemoteDesktopRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "REMOTE DESKTOP"
+        $fw = Get-BastionFirewallGroupInboundStatus -DisplayGroup "Remote Desktop"
+        $rdp = Get-BastionRemoteDesktopSystemStatus
+        Write-Host "  Live status" -ForegroundColor Cyan
+        Write-Host ("    Firewall group:  {0}  ({1} allow rule(s) on)" -f $fw.Label, $fw.EnabledAllowCount) `
+            -ForegroundColor $(if ($fw.Open) { "Yellow" } else { "Green" })
+        Write-Host ("    System allow:    {0}  (fDenyTSConnections={1})" -f $rdp.SystemLabel, $(if ($null -eq $rdp.fDenyTSConnections) { "?" } else { $rdp.fDenyTSConnections })) `
+            -ForegroundColor $(if ($rdp.SystemAllowed) { "Yellow" } else { "Green" })
+        Write-Host ("    TermService:     {0} / {1}" -f $rdp.ServiceStatus, $rdp.ServiceStartType) -ForegroundColor White
+        Write-Host ""
+        Write-Host "  What this controls" -ForegroundColor Cyan
+        Write-Host "    Firewall rules  - whether the network can reach RDP ports (group Bastion disables on Apply)." -ForegroundColor White
+        Write-Host "    System allow    - Windows policy fDenyTSConnections (Settings > System > Remote Desktop)." -ForegroundColor White
+        Write-Host "    TermService     - Remote Desktop Services process that actually hosts sessions." -ForegroundColor White
+        Write-Host ""
+        Write-Host "  Honest notes" -ForegroundColor Yellow
+        Write-Host "    Full host RDP usually needs OPEN firewall + system ALLOWED + TermService running." -ForegroundColor DarkGray
+        Write-Host "    Windows Home often cannot act as a full RDP host the way Pro/Enterprise can." -ForegroundColor DarkGray
+        Write-Host "    Opening RDP is a real security trade-off. Prefer DENIED/LOCKED when you do not need it." -ForegroundColor DarkGray
+        Write-Host "    Bastion Firewall Apply does not set fDenyTSConnections; that is optional here only." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  -- Firewall rule group --" -ForegroundColor DarkCyan
+        Write-Host "  1  Enable Remote Desktop inbound rules" -ForegroundColor Yellow
+        Write-Host "  2  Disable / lock Remote Desktop inbound rules" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "  -- System Remote Desktop (optional) --" -ForegroundColor DarkCyan
+        Write-Host "  3  Allow remote connections (fDenyTSConnections=0; start TermService)" -ForegroundColor Yellow
+        Write-Host "  4  Deny remote connections (fDenyTSConnections=1; stop TermService -> Manual)" -ForegroundColor Green
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4")
+        switch ($c) {
+            "0" { return }
+            "1" {
+                Write-Host ""
+                Write-Host "  This opens inbound RDP firewall rules. Anyone who can reach this PC on the network" -ForegroundColor Yellow
+                Write-Host "  may attempt to connect if system RDP is also allowed and accounts permit it." -ForegroundColor Yellow
+                if ((Read-YesNo -Prompt "  Enable Remote Desktop firewall group (Y/N)?") -eq "Y") {
+                    [void](Enable-BastionFirewallGroupInbound -DisplayGroup "Remote Desktop")
+                }
+                Wait-ForKey "Press any key to return to Remote Desktop..."
+            }
+            "2" {
+                Write-Host ""
+                if ((Read-YesNo -Prompt "  Lock Remote Desktop firewall group (Y/N)?") -eq "Y") {
+                    [void](Disable-BastionFirewallGroupInbound -DisplayGroup "Remote Desktop")
+                }
+                Wait-ForKey "Press any key to return to Remote Desktop..."
+            }
+            "3" {
+                Write-Host ""
+                Write-Host "  This sets Windows to allow Remote Desktop connections and starts TermService." -ForegroundColor Yellow
+                Write-Host "  You still need open firewall rules (option 1) for remote clients to reach this PC." -ForegroundColor DarkGray
+                Write-Host "  Use a strong password / Windows Hello, and prefer private networks only." -ForegroundColor DarkGray
+                if ((Read-YesNo -Prompt "  Allow system RDP and start TermService (Y/N)?") -eq "Y") {
+                    [void](Enable-BastionRemoteDesktopSystem)
+                }
+                Wait-ForKey "Press any key to return to Remote Desktop..."
+            }
+            "4" {
+                Write-Host ""
+                Write-Host "  Denies new Remote Desktop logons via fDenyTSConnections=1 and stops TermService." -ForegroundColor White
+                if ((Read-YesNo -Prompt "  Deny system RDP and stop TermService (Y/N)?") -eq "Y") {
+                    [void](Disable-BastionRemoteDesktopSystem -StopService)
+                }
+                Wait-ForKey "Press any key to return to Remote Desktop..."
+            }
+        }
+    }
+}
+
+function Show-RemoteFirewallGroupMenu {
+    param(
+        [Parameter(Mandatory)][string]$DisplayGroup,
+        [Parameter(Mandatory)][string]$Title,
+        [string]$Purpose = ""
+    )
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header $Title
+        $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $DisplayGroup
+        Write-Host "  Live status" -ForegroundColor Cyan
+        Write-Host ("    Group:   {0}" -f $DisplayGroup) -ForegroundColor White
+        Write-Host ("    State:   {0}" -f $st.Label) -ForegroundColor $(if ($st.Open) { "Yellow" } else { "Green" })
+        Write-Host ("    Detail:  {0} inbound allow rule(s) enabled; {1} inbound rule(s) total" -f $st.EnabledAllowCount, $st.InboundRuleCount) -ForegroundColor DarkGray
+        if (-not $st.Present) {
+            Write-Host "    Note:    This rule group was not found. Edition/feature may not include it." -ForegroundColor Yellow
+        }
+        Write-Host ""
+        if ($Purpose) {
+            Write-Host "  What this is" -ForegroundColor Cyan
+            foreach ($line in @(Get-WrappedLines -Text $Purpose -Indent 4)) {
+                Write-Host $line -ForegroundColor White
+            }
+            Write-Host ""
+        }
+        Write-Host "  Honest notes" -ForegroundColor Yellow
+        Write-Host "    OPEN means inbound allow rules in this group are enabled (more exposure)." -ForegroundColor DarkGray
+        Write-Host "    LOCKED matches Bastion Firewall Apply for this group (safer default)." -ForegroundColor DarkGray
+        Write-Host "    Profile-level Inbound=Block from Bastion is not changed here." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  Enable inbound rules (open this path)" -ForegroundColor Yellow
+        Write-Host "  2  Disable / lock inbound rules (Bastion-style)" -ForegroundColor Green
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2")
+        switch ($c) {
+            "0" { return }
+            "1" {
+                Write-Host ""
+                if ((Read-YesNo -Prompt ("  Enable firewall group '{0}' (Y/N)?" -f $DisplayGroup)) -eq "Y") {
+                    [void](Enable-BastionFirewallGroupInbound -DisplayGroup $DisplayGroup)
+                }
+                Wait-ForKey ("Press any key to return to {0}..." -f $Title)
+            }
+            "2" {
+                Write-Host ""
+                if ((Read-YesNo -Prompt ("  Lock firewall group '{0}' (Y/N)?" -f $DisplayGroup)) -eq "Y") {
+                    [void](Disable-BastionFirewallGroupInbound -DisplayGroup $DisplayGroup)
+                }
+                Wait-ForKey ("Press any key to return to {0}..." -f $Title)
+            }
+        }
+    }
+}
+
+function Show-RemoteAccessRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "REMOTE ACCESS (RDP / ASSISTANCE / WINRM)"
+        Write-BastionRemoteAccessStatusBlock
+        Write-Host ""
+        Write-Host "  What this menu is for" -ForegroundColor Cyan
+        Write-Host "    After Firewall Apply, Bastion disables inbound rule groups for Remote Desktop," -ForegroundColor White
+        Write-Host "    Remote Assistance, and Windows Remote Management so this PC is not reachable" -ForegroundColor White
+        Write-Host "    on those remote-control / remote-management paths." -ForegroundColor White
+        Write-Host "    Use this menu only when YOU need one of those features again." -ForegroundColor White
+        Write-Host ""
+        Write-Host "  Honest limits" -ForegroundColor Yellow
+        Write-Host "    Enabling any path increases network attack surface. Prefer LOCKED when idle." -ForegroundColor DarkGray
+        Write-Host "    This does not flip overall firewall profiles; only named groups (and optional RDP system)." -ForegroundColor DarkGray
+        Write-Host "    File and Printer Sharing / Network Discovery / mDNS are not here (use Undo or wf.msc)." -ForegroundColor DarkGray
+        Write-Host "    System Restore remains the strongest full rollback." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  Remote Desktop (firewall + optional system allow / TermService)" -ForegroundColor White
+        Write-Host "  2  Remote Assistance (firewall group)" -ForegroundColor White
+        Write-Host "  3  WinRM / Windows Remote Management (firewall group)" -ForegroundColor White
+        Write-Host "  4  Enable all three firewall groups (requires YES - opens remote surface)" -ForegroundColor Yellow
+        Write-Host "  5  Lock all three firewall groups (Bastion-style; recommended default)" -ForegroundColor Green
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5")
+        switch ($c) {
+            "0" { return }
+            "1" { Show-RemoteDesktopRecoveryMenu }
+            "2" {
+                Show-RemoteFirewallGroupMenu -DisplayGroup "Remote Assistance" -Title "REMOTE ASSISTANCE" `
+                    -Purpose "Remote Assistance lets a trusted helper connect to view or control this session when both parties accept. Bastion disables its inbound firewall group on Apply. Enable only for a temporary help session, then lock again."
+            }
+            "3" {
+                Show-RemoteFirewallGroupMenu -DisplayGroup "Windows Remote Management" -Title "WINRM / WINDOWS REMOTE MANAGEMENT" `
+                    -Purpose "WinRM (Windows Remote Management) is used by PowerShell remoting and some admin tools. Bastion disables its inbound firewall group on Apply. Enable only if you deliberately administer this PC over WinRM; leave locked for a normal single-user workstation."
+            }
+            "4" {
+                Write-Host ""
+                Write-Host "  This enables inbound firewall rules for:" -ForegroundColor Yellow
+                foreach ($g in $script:RemoteAccessFirewallGroups) {
+                    Write-Host ("    - {0}" -f $g) -ForegroundColor Yellow
+                }
+                Write-Host "  It does NOT change fDenyTSConnections or TermService (use menu 1 for system RDP)." -ForegroundColor DarkGray
+                Write-Host "  Only do this if you need remote access paths open on purpose." -ForegroundColor Yellow
+                if (-not (Read-ConfirmYes -Prompt "  Type YES to enable all three remote-access firewall groups")) {
+                    Write-Host "  Cancelled." -ForegroundColor Yellow
+                    Wait-ForKey "Press any key to return to Remote access..."
+                    continue
+                }
+                foreach ($g in $script:RemoteAccessFirewallGroups) {
+                    [void](Enable-BastionFirewallGroupInbound -DisplayGroup $g)
+                }
+                Wait-ForKey "Press any key to return to Remote access..."
+            }
+            "5" {
+                Write-Host ""
+                Write-Host "  Locks Remote Desktop, Remote Assistance, and WinRM inbound groups (Bastion Apply style)." -ForegroundColor White
+                Write-Host "  Does not change fDenyTSConnections / TermService (use Remote Desktop menu 4 to deny system RDP)." -ForegroundColor DarkGray
+                if ((Read-YesNo -Prompt "  Lock all three remote-access firewall groups (Y/N)?") -eq "Y") {
+                    foreach ($g in $script:RemoteAccessFirewallGroups) {
+                        [void](Disable-BastionFirewallGroupInbound -DisplayGroup $g)
+                    }
+                }
+                Wait-ForKey "Press any key to return to Remote access..."
+            }
+        }
+    }
+}
+
 function Show-RecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -5001,10 +5403,12 @@ function Show-RecoveryMenu {
         Write-Host "  4 Copilot / M365 tools"
         Write-Host "  5 Restore Widgets / Suggestions defaults" -ForegroundColor Green
         Write-Host "  6 Game Bar / ms-gamingoverlay prompt" -ForegroundColor Yellow
+        Write-Host "  7 Remote access (RDP / Assistance / WinRM)" -ForegroundColor Cyan
         Write-Host "  0 Back"
         Write-Host ""
         Write-Host "  Note: Appx bloat removal is not reinstallable here - use System Restore or Microsoft Store." -ForegroundColor DarkGray
-        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6")
+        Write-Host "  Tip:  Item 7 re-opens or re-locks remote paths Bastion Firewall Apply closes." -ForegroundColor DarkGray
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6","7")
         switch ($c) {
             "0" { return }
             "1" { Invoke-UndoHardening }
@@ -5043,6 +5447,7 @@ function Show-RecoveryMenu {
                     }
                 }
             }
+            "7" { Show-RemoteAccessRecoveryMenu }
         }
     }
 }
@@ -5175,6 +5580,7 @@ function Show-Help {
         "Not an antivirus product, not enterprise MDM, not a guarantee against zero-days, and not an automated GPU or BIOS flasher.",
         "## Safety model",
         "System Restore is the real safety net. Use main menu 13 or R before major changes. Undo covers tracked services and firewall groups from the last Apply only.",
+        "Recovery also has targeted fixes (Spooler, browsers, Suggestions, Game Bar silence, Remote access) that do not require a full Undo.",
         "Irreversible or hard-to-reverse items (BloatApps, OneDrive removal) stay off until you opt in and are called out explicitly."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
@@ -5192,10 +5598,10 @@ function Show-Help {
         "7. Option 7 Quick Harden or 8 Apply - confirm restore-point gate, then type YES.",
         "8. Reboot if LSA Protection or optional features require it, then Dry Run again.",
         "## Everyday flow",
-        "Change one area at a time, Dry Run, Apply, verify. Use Recovery for Spooler, per-browser Default (revert), Suggestions, or Undo.",
+        "Change one area at a time, Dry Run, Apply, verify. Use Recovery for Spooler, per-browser Default (revert), Suggestions, remote access, or Undo.",
         "If you delete the Bastion data folder, the next launch re-seeds defaults and re-detects the live system - it does not invent a prior Apply.",
         "## If something goes wrong",
-        "Recovery menu first. For browser breakage after Strict or Encrypted Client Hello (ECH): menu 6 > that browser > Default. For deep failure: Safe Mode then System Restore."
+        "Recovery menu first. For browser breakage after Strict or Encrypted Client Hello (ECH): menu 6 > that browser > Default. Need RDP/Assistance/WinRM after Firewall Apply: Recovery > 7. For deep failure: Safe Mode then System Restore."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -5213,7 +5619,7 @@ function Show-Help {
         "7 Quick Harden - safe preset, restore-point gate, then Apply.",
         "8 Apply - runs every enabled section with logging and undo tracking.",
         "## MAINTAIN AND SAFETY",
-        "9 Recovery - Undo, Spooler, browser policies, Copilot/M365 tools, Suggestions restore.",
+        "9 Recovery - Undo, Spooler, browser policies, Copilot/M365, Suggestions, Game Bar silence, Remote access (RDP/Assistance/WinRM).",
         "10 Uninstall - remove catalog apps via winget with confirmation.",
         "13 or R - create or name a System Restore Point anytime (recommended before Apply).",
         "11 Help and reports - this documentation, last Apply JSON, HTML export.",
@@ -5323,10 +5729,15 @@ function Show-Help {
         "4 Copilot / M365 tools - optional removal helpers.",
         "5 Restore Widgets/Suggestions defaults - reverses Suggestions registry work where possible.",
         "6 Game Bar / ms-gamingoverlay - silence Game DVR so games stop opening a missing Xbox Game Bar link, or re-enable DVR flags if you restore Game Bar from the Store.",
+        "7 Remote access (RDP / Assistance / WinRM) - live status, per-group enable or lock, enable-all with YES confirm, lock-all Bastion-style. Optional system RDP: fDenyTSConnections and TermService (separate from firewall groups).",
+        "## Remote access honesty",
+        "Firewall Apply disables inbound groups for Remote Desktop, Remote Assistance, and Windows Remote Management. That blocks those network paths; it does not by itself rewrite fDenyTSConnections.",
+        "OPEN firewall + system ALLOWED + TermService running is usually required for full RDP host access. Windows Home may not host RDP like Pro/Enterprise.",
+        "Enabling remote paths increases attack surface. Prefer LOCKED when you do not need remote control. File Sharing, Network Discovery, and mDNS are not on this submenu (use Undo or wf.msc).",
         "## System Restore",
         "Preferred full rollback. Create points from menu 13 or R. If Windows will not log on normally: hold Shift while selecting Restart, open Troubleshoot > Advanced > Startup Settings > Restart, then Safe Mode, then rstrui.exe.",
         "## Honest limits of Undo",
-        "Undo does not reinstall Appx bloat or OneDrive, and does not remove winget-installed programs (use Uninstall)."
+        "Undo does not reinstall Appx bloat or OneDrive, and does not remove winget-installed programs (use Uninstall). Remote access Recovery can re-open or re-lock groups anytime without needing LastApply data."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -5390,7 +5801,7 @@ function Show-HelpReportsMenu {
         Clear-BastionScreen
         Write-Header "HELP AND REPORTS"
         Write-Host ""
-        Write-Host "  1  Full documentation (12 pages)" -ForegroundColor White
+        Write-Host "  1  Full documentation (13 pages)" -ForegroundColor White
         Write-Host "  2  Last Apply report" -ForegroundColor White
         Write-Host "  3  Export HTML snapshot" -ForegroundColor White
         Write-Host "  0  Back" -ForegroundColor DarkGray
@@ -5492,6 +5903,7 @@ function Invoke-QuickHardening {
     foreach ($s in $script:QuickSections) { Write-Host ("  * {0}" -f $s) -ForegroundColor Green }
     Write-Host ""
     Write-Host "  Note: HighRiskServices can disable the Print Spooler (printing will stop)." -ForegroundColor Yellow
+    Write-Host "  Note: Firewall disables inbound RDP / Remote Assistance / WinRM groups (Recovery > 7 to re-open)." -ForegroundColor Yellow
     Write-Host ""
     if ((Read-YesNo -Prompt "  Continue with this preset (Y/N)?") -ne "Y") { return }
     foreach ($k in @($script:Sections.Keys)) { $script:Sections[$k] = $false }
