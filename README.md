@@ -86,6 +86,7 @@ Read these before you run anything:
 - **Requires Administrator privileges**
 - Makes real system changes (services, firewall, registry, AppX packages, DNS, Defender, and more)
 - **Create a System Restore Point** before Apply or Quick Harden
+- **ExploitProtection** enables system **StrictHandle**, which can break some games (World of Warcraft did; Bastion auto-excepts discovered `Wow*.exe`. CS2 tested OK). See [Known issues](#known-issues)
 - Can break printing (Print Spooler), network discovery, OneDrive sync, Xbox features, Widgets, and related functionality
 - Intended **only** for a single personal PC you fully control
 - **Not** for work, school, domain-joined, or MDM-managed devices
@@ -386,21 +387,32 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 
 ## Known issues
 
-Tracked on GitHub; workarounds below. See also [Issues](https://github.com/jjames06/bastion-hardening/issues).
+Tracked on GitHub. Full write-up: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
 
-### World of Warcraft / Eidolon `INVALID_HANDLE` vs StrictHandle ([#18](https://github.com/jjames06/bastion-hardening/issues/18))
+### Before you enable ExploitProtection (games)
 
-**Status:** Handled in current Bastion — **system StrictHandle ON**, with **automatic per-app StrictHandle OFF** for discovered `Wow*.exe`. Details: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
+**Setting:** system-wide **StrictHandle** (strict handle checks) via Windows process mitigations.
 
-| | |
-|--|--|
-| **Symptom (older Applies)** | Battle.net works; **Play** / direct `Wow.exe` → Eidolon. Crash.txt: **`INVALID_HANDLE`** in **`Wow_loader.dll`**. |
-| **Cause** | System-wide `StrictHandle` without a WoW exception. |
-| **Current design** | System StrictHandle stays on for the PC; exceptions only for discovered game EXEs. |
-| **Path discovery** | Battle.net `product.db` / `aggregate.json`, uninstall registry, well-known folders on **all fixed drives**, plus optional `WowInstallRoots` / `StrictHandleExceptionPaths` in `Bastion-Config.json` for fully custom directories. |
-| **If you install WoW later** | Re-Apply so discovery runs again. |
-| **Other games break?** | Comment on [#18](https://github.com/jjames06/bastion-hardening/issues/18) with the full `.exe` path so we can extend the same pattern. |
-| **Emergency workaround** | `Set-ProcessMitigation -System -Disable StrictHandle` then reboot (whole PC). |
+**Why it can break games:** Some loaders crash when StrictHandle is forced on. **World of Warcraft** was the confirmed case: Battle.net worked, but **Play** / `Wow.exe` failed with **Eidolon** and Crash.txt **`INVALID_HANDLE`** in **`Wow_loader.dll`**.
+
+**What Bastion does now**
+
+- Turns **StrictHandle ON** for the system (security).  
+- Turns it **OFF only** for discovered **`Wow*.exe`** (automatic exception).  
+- **Counter-Strike 2** was tested and is **not** affected.  
+- **Other games** are unknown until reported.
+
+**If a game breaks after Apply**
+
+1. Revert (elevated, then reboot): `Set-ProcessMitigation -System -Disable StrictHandle`  
+2. Confirm the game works again.  
+3. **Report it** so we can add an automatic exception like WoW:  
+   - [Issue #18](https://github.com/jjames06/bastion-hardening/issues/18) (comments welcome), or  
+   - [Discussions #23 — Game compatibility reports](https://github.com/jjames06/bastion-hardening/discussions/23)  
+
+Include: game name, how it fails, and the **full path** to the game `.exe`.
+
+Dry Run and Apply show this notice when **ExploitProtection** is enabled.
 
 ---
 
@@ -423,7 +435,8 @@ Tracked on GitHub; workarounds below. See also [Issues](https://github.com/jjame
 
 ## Feedback and contributions
 
-- **Testing feedback / “I ran this on …”:** [GitHub Discussions](https://github.com/jjames06/bastion-hardening/discussions) (see the pinned **Testing feedback** thread)
+- **Testing feedback / “I ran this on …”:** [GitHub Discussions](https://github.com/jjames06/bastion-hardening/discussions) (see the **Testing feedback** thread)
+- **Game broken after ExploitProtection / StrictHandle?** Comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) or [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23) — include game name + full `.exe` path
 - **Bugs and feature requests:** open a [GitHub Issue](https://github.com/jjames06/bastion-hardening/issues)
 - **Pull requests:** welcome for clear fixes and documentation improvements
 - Maintained on a best-effort basis
