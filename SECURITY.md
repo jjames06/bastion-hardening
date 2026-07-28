@@ -15,6 +15,10 @@
 
 Prefer the **latest published release** of Bastion Hardening Framework for security fixes and product updates.
 
+## License (distribution)
+
+Current tree: **GNU GPLv3** (see [LICENSE](LICENSE)). Treat every distributed copy as privileged software **and** as free software under GPLv3 (source must travel with modified redistributions). Older release zips that still contain an MIT `LICENSE` file remain under the terms shipped in those artifacts.
+
 ## What this project does
 
 Bastion makes deliberate system changes on Windows (services, firewall, registry, DNS, Defender settings, AppX packages, browser enterprise policies when you opt in, and related areas). Treat every copy of the script as **privileged software**:

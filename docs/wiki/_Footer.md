@@ -1,1 +1,1 @@
-﻿**Bastion wiki** — handbook for [bastion-hardening](https://github.com/jjames06/bastion-hardening). Prefer [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest).
+﻿**Bastion wiki** - handbook for [bastion-hardening](https://github.com/jjames06/bastion-hardening). Prefer [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest). License: [GPLv3](https://github.com/jjames06/bastion-hardening/blob/main/LICENSE).
