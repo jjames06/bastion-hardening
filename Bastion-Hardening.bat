@@ -22,6 +22,7 @@ echo  - Session logs and config live there; path is shown on the main menu.
 echo  - Apply history (Bastion-LastApply.json) is written only after a real Apply.
 echo  - Encrypted Client Hello (ECH) is never enabled unless you opt in under Strict.
 echo  - Dry Run / Apply detect live Windows state; they do not fake prior hardening.
+echo  - License: GNU GPLv3 (LICENSE + NOTICE). Free software; modified distributions must stay GPLv3 with source.
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"%~dp0Bastion-Hardening.ps1\"'"
