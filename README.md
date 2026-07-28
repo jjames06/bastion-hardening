@@ -87,6 +87,7 @@ Read these before you run anything:
 - Makes real system changes (services, firewall, registry, AppX packages, DNS, Defender, and more)
 - **Create a System Restore Point** before Apply or Quick Harden
 - **ExploitProtection** enables system **StrictHandle**, which can break some games (World of Warcraft did; Bastion auto-excepts discovered `Wow*.exe`. CS2 tested OK). See [Known issues](#known-issues)
+- Disabling Xbox services / removing **Xbox Gaming Overlay** without silencing **Game DVR** can make games show *Get an app to open this ms-gamingoverlay link* — Bastion now silences Game DVR when XboxGaming or overlay removal runs (Recovery → 6)
 - Can break printing (Print Spooler), network discovery, OneDrive sync, Xbox features, Widgets, and related functionality
 - Intended **only** for a single personal PC you fully control
 - **Not** for work, school, domain-joined, or MDM-managed devices
