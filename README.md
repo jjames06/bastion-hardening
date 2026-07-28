@@ -2,7 +2,7 @@
 
 **Selective · State-aware · Safety-first Windows hardening for a personal workstation**
 
-Version **15.4**
+Version **15.5**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -55,7 +55,7 @@ Programs and install paths — catalog apps via winget; selection is opt-in (not
 
 ![Bastion programs and install paths](docs/images/programs-menu.png)
 
-Recovery / fix — undo last services/firewall groups, Spooler, browser policies, Game Bar silence, **Remote access** (RDP / Assistance / WinRM), and related helpers:
+Recovery / fix — modular hubs (not a long flat list): Undo, **Services**, **Network**, browsers, **Apps and UI**, **Security mitigations**:
 
 ![Bastion recovery menu](docs/images/recovery-menu.png)
 
@@ -71,7 +71,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.4** | Full product line through remote-access Recovery, ms-gamingoverlay silence, WoW path discovery, StrictHandle docs as of 2026-07-28 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.5** | Modular Recovery hubs (services, network, StrictHandle, Defender, policies) without main-menu bloat; as of 2026-07-28 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions → Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -86,9 +86,9 @@ Read these before you run anything:
 - **Requires Administrator privileges**
 - Makes real system changes (services, firewall, registry, AppX packages, DNS, Defender, and more)
 - **Create a System Restore Point** before Apply or Quick Harden
-- **ExploitProtection** enables system **StrictHandle**, which can break some games (World of Warcraft did; Bastion auto-excepts discovered `Wow*.exe`. CS2 tested OK). See [Known issues](#known-issues)
-- Disabling Xbox services / removing **Xbox Gaming Overlay** without silencing **Game DVR** can make games show *Get an app to open this ms-gamingoverlay link* — Bastion now silences Game DVR when XboxGaming or overlay removal runs (Recovery → 6)
-- **Firewall Apply** disables inbound groups for **Remote Desktop**, **Remote Assistance**, and **WinRM**. That is intentional. Re-open only if you need them: Recovery → **7** (optional system RDP allow/deny + TermService is separate from firewall groups). Opening remote paths increases attack surface.
+- **ExploitProtection** enables system **StrictHandle**, which can break some games (World of Warcraft did; Bastion auto-excepts discovered `Wow*.exe`. CS2 tested OK). Reverse: Recovery → **6** → StrictHandle. See [Known issues](#known-issues)
+- Disabling Xbox services / removing **Xbox Gaming Overlay** without silencing **Game DVR** can make games show *Get an app to open this ms-gamingoverlay link* — Bastion now silences Game DVR when XboxGaming or overlay removal runs (Recovery → **5** → Game Bar)
+- **Firewall Apply** disables remote and LAN discovery inbound groups. Re-open only if needed: Recovery → **3 Network** (remote access, LAN/discovery, DNS reset). Opening those paths increases attack surface.
 - Can break printing (Print Spooler), network discovery, remote desktop / remote management, OneDrive sync, Xbox features, Widgets, and related functionality
 - Intended **only** for a single personal PC you fully control
 - **Not** for work, school, domain-joined, or MDM-managed devices
@@ -125,7 +125,7 @@ A guided, selective hardening assistant for Windows 10/11 that lets you:
 | **State-aware** | Detects live Windows state before changing it; menu prefs live in a durable data directory (not faked Apply history) |
 | **Safety-first** | Restore-point gate, soft failures, honest documentation |
 | **Catalog-only installs** | No free-typed package IDs; never uses `--ignore-security-hash` |
-| **Reversible where practical** | Tracked Undo for services and firewall groups; Recovery → 7 for RDP/Assistance/WinRM anytime |
+| **Reversible where practical** | Tracked Undo plus modular Recovery hubs (Services, Network, Security mitigations, Apps/UI, browsers) — single main-menu entry |
 
 System Restore remains the strongest rollback path.
 
@@ -158,7 +158,7 @@ Best for most people.
 1. Open the latest release:  
    **https://github.com/jjames06/bastion-hardening/releases/latest**  
    (pinned older tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain available if you need them)
-2. Download **`bastion-hardening-v15.4.zip`** (or the current release asset with a similar name).
+2. Download **`bastion-hardening-v15.5.zip`** (or the current release asset with a similar name).
 3. Right-click the zip → **Properties** → if you see **Unblock**, check it → **OK**  
    (reduces SmartScreen / “downloaded from the internet” friction on the extracted scripts)
 4. Extract the zip to a folder **you** control, for example:  
@@ -380,8 +380,8 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 - **Print Spooler** — Disabled by default for security. Quick Harden gives a clear choice to keep it.
 - **OneDrive & BloatApps** — Hard to reverse. System Restore is the reliable recovery path.
 - **Browser policies / Encrypted Client Hello (ECH)** — BrowserPolicies section defaults off. ECH is **never** applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only and ECH can break some sites or networks. Details: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
-- **Undo** — Restores tracked services and firewall groups from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers. Browser revert is menu **6** → Default per browser.
-- **Remote access Recovery (menu 9 → 7)** — Live status for Remote Desktop, Remote Assistance, and WinRM firewall groups; enable or lock each; enable-all (YES confirm) or lock-all Bastion-style. Optional system RDP: `fDenyTSConnections` and **TermService**. Does not change File Sharing / Network Discovery / mDNS (use Undo or `wf.msc`). Prefer locked when you do not need remote control. Full host RDP usually needs open firewall + system allow + TermService; Windows Home may not host RDP like Pro.
+- **Undo** — Restores tracked services and firewall groups from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers. Prefer Recovery hubs when you know what broke.
+- **Recovery hubs (menu 9)** — One main-menu entry, six hubs with live status: **1** Undo · **2** Services (Spooler / high-risk / Xbox) · **3** Network (remote access, LAN discovery, DNS reset) · **4** Browser policies · **5** Apps and UI (Copilot, Widgets, Game Bar) · **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
 - **DNS** — Optional. Choose a provider or leave DNS unchanged; VPN software may still override while connected.
 - **Custom install paths** — Only allowed on fixed local volumes outside system directories.
 - **Logs and config** — Live under the **data directory** shown on the main menu (prefer `C:\Temp\Bastion`; durable fallbacks; `%TEMP%\Bastion` last). Full file list: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).

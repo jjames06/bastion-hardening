@@ -1,12 +1,12 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.4 FINAL
+    Bastion Hardening Framework v15.5 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     to avoid smart-quote / em-dash parse failures when pasting into editors.
 .NOTES
-    Version 15.4 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.5 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
 #>
 
 $ErrorActionPreference = "Continue"
@@ -14,7 +14,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.4"
+    ScriptVersion = "15.5"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
@@ -250,15 +250,15 @@ $script:SectionDocs = [ordered]@{
         Intent  = "Reduce unsolicited inbound exposure while keeping normal outbound traffic working (browsing, VPN, Windows Update)."
         Changes = "Enables the firewall on Domain, Private, and Public profiles; sets DefaultInboundAction=Block and leaves DefaultOutboundAction=Allow; disables inbound rule groups for File and Printer Sharing, Network Discovery, Remote Assistance, Remote Desktop, Windows Remote Management, and mDNS when those groups are present and enabled."
         Impact  = "Inbound discovery, SMB sharing, RDP, and WinRM from the network are blocked unless you later re-enable specific rules. Outbound apps continue to work."
-        Revert  = "Recovery > Undo last hardening restores tracked firewall groups from the last Apply. Recovery > Remote access lets you enable or lock Remote Desktop, Remote Assistance, and WinRM groups anytime (with optional system RDP allow/deny). You can also use Windows Defender Firewall with Advanced Security, or System Restore."
-        Notes   = "Verify with Get-NetFirewallProfile and Get-NetFirewallRule. This is profile hardening plus group toggles, not a full custom rule set. Enabling remote groups increases attack surface; only open what you need."
+        Revert  = "Recovery > 3 Network: Remote access (RDP/Assistance/WinRM) and LAN/discovery (File Sharing, Network Discovery, mDNS) with live OPEN/LOCKED status. Recovery > 1 Undo restores tracked groups from last Apply. Or use wf.msc / System Restore."
+        Notes   = "Verify with Get-NetFirewallProfile and Get-NetFirewallRule. This is profile hardening plus group toggles, not a full custom rule set. Enabling remote or LAN groups increases attack surface; only open what you need."
     }
     "HighRiskServices" = @{
         Intent  = "Turn off local services that are common attack surface or rarely needed on a single hardened workstation."
         Changes = "Stops and disables when present: LanmanServer, CDPSvc, SSDPSRV, upnphost, Spooler, bowser, RemoteRegistry, SharedAccess, Fax. Original startup types are recorded for Undo when possible."
         Impact  = "File sharing, SSDP/UPnP discovery, Remote Registry, and printing via the local spooler stop until re-enabled. Network printers and some device discovery may stop working."
-        Revert  = "Recovery > Undo for tracked services, Recovery > Re-enable Print Spooler for printing only, or services.msc. System Restore for a full rollback."
-        Notes   = "Spooler is included because of PrintNightmare-class risk. If you print often, disable this section or re-enable Spooler after Apply."
+        Revert  = "Recovery > 2 Services: Spooler shortcut, high-risk group enable/disable with live status, or Recovery > 1 Undo for tracked originals. Or services.msc / System Restore."
+        Notes   = "Spooler is included because of PrintNightmare-class risk. If you print often, disable this section or re-enable Spooler from Recovery > 2 after Apply."
     }
     "SMBv1" = @{
         Intent  = "Remove the legacy SMBv1 stack, which is obsolete and historically exploited (for example EternalBlue-class issues)."
@@ -278,56 +278,56 @@ $script:SectionDocs = [ordered]@{
         Intent  = "Stop Windows Update from using peer-to-peer sharing on the LAN or Internet."
         Changes = "Sets policy HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization DODownloadMode=0 (HTTP only from Microsoft)."
         Impact  = "Updates download only from Microsoft (or your configured update source), not from other PCs. May slightly increase WAN usage on large fleets; fine for a single PC."
-        Revert  = "Remove DODownloadMode or set another documented mode. Settings UI is overridden while the policy exists."
+        Revert  = "Recovery > 6 Security mitigations > Policies and tasks: clear DODownloadMode. Settings UI is overridden while the policy exists."
         Notes   = "Dry Run reads the current policy value so repeated runs show Already OK when set."
     }
     "DNS" = @{
         Intent  = "Optionally set eligible network adapters to a user-chosen public recursive DNS provider, or leave DNS unchanged."
         Changes = "When a provider is selected (menu D), sets IPv4 DNS on active adapters via Set-DnsClientServerAddress. Providers: Quad9 malware-blocking, Cloudflare 1.1.1.1, Cloudflare security 1.1.1.2, Google Public DNS, Cisco OpenDNS. Choose 'Do not change DNS' to skip."
         Impact  = "Name resolution uses the chosen resolver while those adapter settings apply. A connected VPN may override DNS while the tunnel is up; that is expected."
-        Revert  = "Reset DNS on the adapter (automatic/DHCP) or set your preferred servers. VPN apps may manage DNS independently. Bastion Undo does not restore previous DNS servers."
+        Revert  = "Recovery > 3 Network > Reset DNS to automatic (DHCP) on eligible adapters. Menu D still holds Bastion intent for the next Apply. VPN apps may override while connected. Undo does not restore prior DNS servers."
         Notes   = "Default provider is Quad9. Dry Run and Audit compare the first configured IPv4 DNS server per adapter against the selected primary."
     }
     "Defender" = @{
         Intent  = "Turn on stronger Microsoft Defender workstation protections that are often left off by default."
         Changes = "Enables Network Protection and Controlled Folder Access when Defender is available; refreshes a CFA allow-list for known catalog app paths and a few common system paths."
         Impact  = "Suspicious network connections and untrusted apps writing to protected folders are more likely to be blocked. Rare false positives may need an allow path."
-        Revert  = "Set-MpPreference to disable NP/CFA if required, or adjust Controlled Folder Access allow-list in Windows Security."
+        Revert  = "Recovery > 6 Security mitigations > Defender: soften NP and/or CFA, or re-harden with allow-path refresh. Or Windows Security UI."
         Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings."
     }
     "PowerShellAuditing" = @{
         Intent  = "Record PowerShell script block activity for later investigation if malware uses scripts."
         Changes = "Enables policy Script Block Logging (and invocation logging when available) under HKLM PowerShell policies."
         Impact  = "More events written to the PowerShell operational log. Minor disk use; helpful for forensics, not a prevention control by itself."
-        Revert  = "Clear EnableScriptBlockLogging policy values or set them to 0."
+        Revert  = "Recovery > 6 > Policies and tasks: turn off Script Block Logging policy. Or set EnableScriptBlockLogging to 0 manually."
         Notes   = "Pairs well with process creation auditing if you enable that separately outside Bastion."
     }
     "ExploitProtection" = @{
         Intent  = "Apply a mild system exploit mitigation profile, including StrictHandle for general protection, with automatic exceptions for World of Warcraft when discovered."
         Changes = "Set-ProcessMitigation -System enabling DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle. Then disables StrictHandle only for discovered Wow*.exe (per-app override; rest of system keeps StrictHandle)."
         Impact  = "Most processes get stricter handle checks. Without an exception, some games can fail to start. World of Warcraft historically failed with Blizzard Eidolon and Crash.txt INVALID_HANDLE in Wow_loader.dll when StrictHandle was system-wide with no per-app exception. That is a process-mitigation compatibility issue with WoW early load (custom loader / multi-process handoff), not a claim about Blizzard product intent. Bastion auto-excepts discovered Wow*.exe. Counter-Strike 2 was tested and is not affected. Other titles are unknown until reported."
-        Revert  = "If a game breaks after Apply: elevated Set-ProcessMitigation -System -Disable StrictHandle then reboot (whole-PC off), or add the game EXE path under StrictHandleExceptionPaths in Bastion-Config.json and re-Apply. Full: Set-ProcessMitigation -System -Disable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle. System Restore remains bulletproof."
-        Notes   = "READ BEFORE ENABLE: StrictHandle is the Windows mitigation that conflicted with WoW launch. Common, non-accusatory reasons include custom loaders (Wow_loader.dll), Agent-to-game process handoff, anti-cheat/integrity init, IPC, or normal multi-process clients. Bastion excepts discovered Wow*.exe; CS2 tested OK. If another game fails: revert StrictHandle (or except that EXE), confirm, then report game name + full EXE path on GitHub issue #18 or Discussions #23. Discovery: product.db/aggregate.json, uninstall registry, fixed-drive well-known folders, optional WowInstallRoots / StrictHandleExceptionPaths. See docs/KNOWN-ISSUES.md."
+        Revert  = "Recovery > 6 > StrictHandle: disable system StrictHandle (reboot), refresh Wow exceptions only, or re-enable Bastion-style profile. Or StrictHandleExceptionPaths in Bastion-Config.json. System Restore remains bulletproof."
+        Notes   = "READ BEFORE ENABLE: StrictHandle is the Windows mitigation that conflicted with WoW launch. Common, non-accusatory reasons include custom loaders (Wow_loader.dll), Agent-to-game process handoff, anti-cheat/integrity init, IPC, or normal multi-process clients. Bastion excepts discovered Wow*.exe; CS2 tested OK. If another game fails: Recovery > 6 reverse, confirm, then report game name + full EXE path on GitHub issue #18 or Discussions #23. Discovery: product.db/aggregate.json, uninstall registry, fixed-drive well-known folders, optional WowInstallRoots / StrictHandleExceptionPaths. See docs/KNOWN-ISSUES.md."
     }
     "LSAProtection" = @{
         Intent  = "Protect the Local Security Authority process (credential material) with RunAsPPL."
         Changes = "Sets HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa RunAsPPL=1 when not already set."
         Impact  = "Harder for some credential-dumping techniques. Requires a reboot before full enforcement. A few poorly signed drivers/tools may conflict."
-        Revert  = "Set RunAsPPL back to 0 and reboot (only if you accept weaker credential protection)."
+        Revert  = "Recovery > 6 > Policies and tasks: RunAsPPL OFF (or ON), then reboot. Only turn off if you accept weaker credential protection."
         Notes   = "Main menu and Apply both stress reboot after enabling."
     }
     "ScheduledTasks" = @{
         Intent  = "Disable selected Microsoft telemetry/compatibility scheduled tasks that are safe to turn off on a personal workstation."
         Changes = "Disables when present and enabled: Microsoft Compatibility Appraiser, ProgramDataUpdater, CEIP Consolidator, UsbCeip."
         Impact  = "Less background compatibility telemetry. Does not remove Windows Update itself."
-        Revert  = "Re-enable the tasks in Task Scheduler, or System Restore."
+        Revert  = "Recovery > 6 > Policies and tasks: re-enable or re-disable the Bastion task list. Or Task Scheduler / System Restore."
         Notes   = "Dry Run lists only tasks that are still enabled so repeated runs go quiet."
     }
     "XboxGaming" = @{
         Intent  = "Optional: disable Xbox-related services when you do not use Xbox features on this PC."
         Changes = "Disables XblAuthManager, XblGameSave, XboxNetApiSvc, XboxGipSvc when present. Also turns off Game DVR / Game Bar capture flags so games stop opening ms-gamingoverlay when Xbox Gaming Overlay is missing (avoids the 'Get an app to open this link' dialog)."
         Impact  = "Xbox networking services stop. Win+G / Game Bar capture is discouraged via registry so titles do not prompt for a missing overlay handler every launch."
-        Revert  = "Re-enable services in services.msc or Undo when tracked. Recovery > Silence Game Bar prompt has a reverse option to re-enable Game DVR flags, or reinstall Xbox Game Bar from Microsoft Store."
+        Revert  = "Recovery > 2 Services > Xbox for services; Recovery > 5 Apps and UI > Game Bar for DVR silence reverse. Or Undo when tracked / Microsoft Store for Game Bar."
         Notes   = "Defaults to off in Quick Harden. If you only removed the overlay via BloatApps, Apply also silences Game DVR when that package is removed. See docs/KNOWN-ISSUES.md (ms-gamingoverlay)."
     }
     "Programs" = @{
@@ -341,28 +341,28 @@ $script:SectionDocs = [ordered]@{
         Intent  = "Optional privacy-oriented policy packs for installed Firefox, Chrome, and Brave only."
         Changes = "Menu 6 (works even if this section is off). Only installed engines are listed. Default / Medium / Strict per browser. Encrypted Client Hello (ECH) is a separate Yes/No under Strict and is never default. Dry Run and Security audit report live vs saved mode and ECH for each installed browser."
         Impact  = "Strict (HTTPS-Only) can break some sites. Encrypted Client Hello (ECH), only if you opt in, can break a few networks or middleboxes. Common pattern: one browser Strict (optional ECH), another Medium/Default."
-        Revert  = "Menu 6 or Recovery > 3: that browser > Default (clears Bastion policies and any ECH pack for that browser only). System Restore is the bulletproof rollback."
+        Revert  = "Menu 6 or Recovery > 4: that browser > Default (clears Bastion policies and any ECH pack for that browser only). System Restore is the bulletproof rollback."
         Notes   = "Installing Bastion or a browser does not enable Encrypted Client Hello (ECH). Restart browsers after changes. Firefox: about:policies. Chrome: chrome://policy. Brave: brave://policy."
     }
     "BloatApps" = @{
         Intent  = "Remove a curated list of consumer Appx packages many users do not want on a clean workstation."
         Changes = "Removes matching user and provisioned packages for items such as Bing News/Weather, Solitaire, Clipchamp, Phone Link, Feedback Hub, Maps, Get Started, Power Automate Desktop, and selected Xbox overlays when present."
         Impact  = "Those apps disappear for existing and new users on this image. Reinstall is not always trivial. Removing Xbox Gaming Overlay without silencing Game DVR can leave games opening ms-gamingoverlay (Windows 'Get an app to open this link' dialog); Bastion silences Game DVR when that overlay is removed or already absent."
-        Revert  = "System Restore is the reliable rollback. Microsoft Store may reinstall some apps. Bastion Undo does not reinstall Appx. Recovery > 6 can re-enable Game DVR flags if you restore Game Bar from the Store."
+        Revert  = "System Restore is the reliable rollback. Microsoft Store may reinstall some apps. Bastion Undo does not reinstall Appx. Recovery > 5 Apps and UI > Game Bar can re-enable Game DVR flags if you restore Game Bar from the Store."
         Notes   = "Path-not-found and already-removed cases are treated as Already, not hard failures. Defaults to off until you opt in. See docs/KNOWN-ISSUES.md (ms-gamingoverlay)."
     }
     "Suggestions" = @{
         Intent  = "Reduce Widgets/News distraction and Start/Settings suggestion surfaces."
         Changes = "Sets HKCU values for TaskbarDa, Feeds view mode, and ContentDeliveryManager suggestion flags; optionally attempts HKLM Windows Feeds / Dsh policies when Windows allows."
         Impact  = "Widgets button and many suggestions hide or reduce after Explorer refresh or sign-out."
-        Revert  = "Recovery > Restore Widgets/Suggestions defaults."
+        Revert  = "Recovery > 5 Apps and UI > Restore Widgets/Suggestions defaults."
         Notes   = "Some HKLM policy keys return unauthorized even when elevated; those are Soft and will not fail the whole Apply. HKCU controls still apply."
     }
     "CopilotM365" = @{
         Intent  = "Optional: disable Windows Copilot UI and remove Microsoft 365 Copilot / Office Hub style Appx packages when present."
         Changes = "Sets TurnOffWindowsCopilot policy and hides ShowCopilotButton; removes user Appx packages matching Copilot or MicrosoftOfficeHub. Does NOT uninstall full Microsoft 365 desktop (Word/Excel Click-to-Run) during Apply."
         Impact  = "Copilot taskbar entry and M365 hub/Copilot Store apps may disappear. Full Office suite remains unless you use Recovery > Office remover."
-        Revert  = "Reinstall from Microsoft Store or Microsoft 365 installer. Policy keys can be cleared manually. System Restore for a full rollback."
+        Revert  = "Recovery > 5 Apps and UI > Copilot / M365 tools. Or reinstall from Microsoft Store / Microsoft 365 installer. System Restore for a full rollback."
         Notes   = "Defaults to OFF. Enable only if you do not want the M365 Copilot hub. Sign-out may be required for taskbar changes."
     }
 }
@@ -436,6 +436,34 @@ function Get-HighRiskServicesForApply {
     return $list
 }
 $script:XboxServiceList = @("XblAuthManager","XblGameSave","XboxNetApiSvc","XboxGipSvc")
+# Recovery catalog: friendly labels + preferred start type when re-enabling from Recovery.
+$script:ServiceRecoveryCatalog = @(
+    @{ Name = "Spooler";        Group = "HighRisk"; Display = "Print Spooler";              PreferStart = "Automatic"; Why = "Local and network printing" }
+    @{ Name = "LanmanServer";   Group = "HighRisk"; Display = "Server (SMB file sharing)"; PreferStart = "Automatic"; Why = "Host shared folders" }
+    @{ Name = "CDPSvc";         Group = "HighRisk"; Display = "Connected Devices Platform"; PreferStart = "Automatic"; Why = "Nearby sharing / some device features" }
+    @{ Name = "SSDPSRV";        Group = "HighRisk"; Display = "SSDP Discovery";            PreferStart = "Manual";    Why = "UPnP / media device discovery" }
+    @{ Name = "upnphost";       Group = "HighRisk"; Display = "UPnP Device Host";          PreferStart = "Manual";    Why = "UPnP host features" }
+    @{ Name = "bowser";         Group = "HighRisk"; Display = "Computer Browser";          PreferStart = "Manual";    Why = "Legacy network browse list" }
+    @{ Name = "RemoteRegistry"; Group = "HighRisk"; Display = "Remote Registry";           PreferStart = "Manual";    Why = "Remote registry access (higher risk)" }
+    @{ Name = "SharedAccess";   Group = "HighRisk"; Display = "Internet Connection Sharing"; PreferStart = "Manual";  Why = "ICS / some hotspot features" }
+    @{ Name = "Fax";            Group = "HighRisk"; Display = "Fax";                       PreferStart = "Manual";    Why = "Fax modem service" }
+    @{ Name = "XblAuthManager"; Group = "Xbox";     Display = "Xbox Live Auth Manager";    PreferStart = "Manual";    Why = "Xbox / Game Pass auth" }
+    @{ Name = "XblGameSave";    Group = "Xbox";     Display = "Xbox Live Game Save";       PreferStart = "Manual";    Why = "Xbox cloud saves" }
+    @{ Name = "XboxNetApiSvc";  Group = "Xbox";     Display = "Xbox Live Networking";      PreferStart = "Manual";    Why = "Xbox networking" }
+    @{ Name = "XboxGipSvc";     Group = "Xbox";     Display = "Xbox Accessory Management"; PreferStart = "Manual";    Why = "Xbox accessories / GIP" }
+)
+# Firewall groups for LAN discovery (sibling to Remote access Recovery).
+$script:LanDiscoveryFirewallGroups = @(
+    "File and Printer Sharing",
+    "Network Discovery",
+    "mDNS"
+)
+$script:BastionScheduledTaskPaths = @(
+    "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+    "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+    "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+    "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
+)
 
 function Test-BastionGameDvrSilenced {
     # True when common Game DVR / capture flags are off (games titles less likely to open ms-gamingoverlay).
@@ -1409,6 +1437,69 @@ function Disable-BastionService {
     } catch {
         Write-Status ("Failed to disable {0}. Next step: services.msc -> {0} -> Disabled." -f $Name) "Failed"
         return $null
+    }
+}
+
+function Get-BastionServiceCatalogEntry {
+    param([Parameter(Mandatory)][string]$Name)
+    foreach ($e in $script:ServiceRecoveryCatalog) {
+        if ($e.Name -eq $Name) { return $e }
+    }
+    return @{ Name = $Name; Group = "Other"; Display = $Name; PreferStart = "Manual"; Why = "" }
+}
+
+function Get-BastionServiceStatusRow {
+    param([Parameter(Mandatory)][string]$Name)
+    $meta = Get-BastionServiceCatalogEntry -Name $Name
+    $svc = Get-ServiceState $Name
+    if (-not $svc) {
+        return [PSCustomObject]@{
+            Name = $Name; Display = $meta.Display; Group = $meta.Group; Why = $meta.Why
+            Present = $false; Status = "Absent"; StartType = "Absent"; PreferStart = $meta.PreferStart
+            Hardened = $false; Label = "ABSENT"
+        }
+    }
+    $st = [string]$svc.Status
+    $start = [string]$svc.StartType
+    $hardened = ($start -eq "Disabled")
+    $label = if ($hardened) { "DISABLED" } elseif ($st -eq "Running") { "RUNNING" } else { "STOPPED" }
+    return [PSCustomObject]@{
+        Name = $Name; Display = $meta.Display; Group = $meta.Group; Why = $meta.Why
+        Present = $true; Status = $st; StartType = $start; PreferStart = $meta.PreferStart
+        Hardened = $hardened; Label = $label
+    }
+}
+
+function Enable-BastionService {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [string]$StartupType = ""
+    )
+    $meta = Get-BastionServiceCatalogEntry -Name $Name
+    if ([string]::IsNullOrWhiteSpace($StartupType)) { $StartupType = [string]$meta.PreferStart }
+    if ($StartupType -notin @("Automatic","Manual","Disabled")) { $StartupType = "Manual" }
+    $svc = Get-ServiceState $Name
+    if (-not $svc) {
+        Write-Status ("{0} not installed on this PC" -f $Name) "Already"
+        return $false
+    }
+    try {
+        Set-Service -Name $Name -StartupType $StartupType -ErrorAction Stop
+        if ($StartupType -ne "Disabled") {
+            try {
+                Start-Service -Name $Name -ErrorAction Stop
+                Write-Status ("{0}: {1}, running ({2})" -f $Name, $StartupType, $meta.Display) "Applied"
+            } catch {
+                Write-Status ("{0}: start type {1}; start failed: {2}. Next step: services.msc." -f $Name, $StartupType, $_.Exception.Message) "Warn"
+            }
+        } else {
+            Write-Status ("{0}: Disabled" -f $Name) "Applied"
+        }
+        Write-Log ("Enable-BastionService name={0} start={1}" -f $Name, $StartupType) -NoConsole
+        return $true
+    } catch {
+        Write-Status ("Failed to configure {0}: {1}. Next step: services.msc -> {0}." -f $Name, $_.Exception.Message) "Failed"
+        return $false
     }
 }
 
@@ -3155,12 +3246,7 @@ function Invoke-DryRun {
 
     if (-not $script:Sections["ScheduledTasks"]) { Show-DryItem "ScheduledTasks" "Skipped" "Section disabled" }
     else {
-        $taskPaths = @(
-            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
-            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
-            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
-            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
-        )
+        $taskPaths = @($script:BastionScheduledTaskPaths)
         $need = @()
         foreach ($tp in $taskPaths) {
             try {
@@ -3314,6 +3400,7 @@ function Show-ExploitProtectionGameNotice {
         Write-Host "  then report the game + full .exe path on GitHub so we can add an exception." -ForegroundColor Cyan
         Write-Host "  Report: github.com/jjames06/bastion-hardening/issues/18" -ForegroundColor Cyan
         Write-Host "  or Discussions #23: Game compatibility reports" -ForegroundColor Cyan
+        Write-Host "  In Bastion: Recovery > 6 Security mitigations > StrictHandle (GUI)." -ForegroundColor Cyan
         Write-Host "  Quick whole-PC revert (elevated, then reboot):" -ForegroundColor White
         Write-Host "    Set-ProcessMitigation -System -Disable StrictHandle" -ForegroundColor DarkGray
     }
@@ -3334,7 +3421,7 @@ function Show-ApplyPreview {
                 else { (" -> {0} ({1})" -f $p.DisplayName, $p.Primary) }
             }
             "HighRiskServices" { " [includes Print Spooler]" }
-            "Firewall" { " [locks RDP/Assistance/WinRM groups; Recovery > 7 to re-open]" }
+            "Firewall" { " [locks remote/LAN groups; Recovery > 3 Network to re-open]" }
             "Programs" {
                 if ($script:SelectedApps.Count) { (" -> {0}" -f ($script:SelectedApps -join ", ")) } else { " -> none" }
             }
@@ -3629,12 +3716,7 @@ function Invoke-SelfTest {
     } catch { Add-Warn "Xbox services" "Query failed" }
 
     try {
-        $taskPaths = @(
-            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
-            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
-            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
-            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
-        )
+        $taskPaths = @($script:BastionScheduledTaskPaths)
         $need = @()
         foreach ($tp in $taskPaths) {
             $task = Get-ScheduledTask -TaskPath (Split-Path $tp -Parent) -TaskName (Split-Path $tp -Leaf) -ErrorAction SilentlyContinue
@@ -4763,7 +4845,7 @@ function Invoke-UndoHardening {
         }
     }
     Write-Host "  Undo finished (partial by design). Next step if issues remain: System Restore." -ForegroundColor Green
-    Write-Host "  Need only RDP / Assistance / WinRM? Recovery > 7 Remote access is more precise than full Undo." -ForegroundColor DarkGray
+    Write-Host "  Prefer Recovery hubs (Services, Network, Security mitigations) over full Undo when you know what broke." -ForegroundColor DarkGray
     Wait-ForKey
 }
 
@@ -5393,61 +5475,718 @@ function Show-RemoteAccessRecoveryMenu {
     }
 }
 
-function Show-RecoveryMenu {
+function Write-BastionServiceStatusBlock {
+    param([string]$GroupFilter = "")
+    $rows = @()
+    foreach ($e in $script:ServiceRecoveryCatalog) {
+        if ($GroupFilter -and $e.Group -ne $GroupFilter) { continue }
+        $rows += ,(Get-BastionServiceStatusRow -Name $e.Name)
+    }
+    foreach ($r in $rows) {
+        $color = switch ($r.Label) {
+            "DISABLED" { "Green" }
+            "RUNNING" { "Yellow" }
+            "STOPPED" { "White" }
+            default { "DarkGray" }
+        }
+        Write-Host ("    {0,-16} {1,-11} {2,-10}  {3}" -f $r.Name, $r.Label, $r.StartType, $r.Display) -ForegroundColor $color
+    }
+    return $rows
+}
+
+function Show-BastionServiceGroupMenu {
+    param(
+        [Parameter(Mandatory)][string]$Group,
+        [Parameter(Mandatory)][string]$Title,
+        [string]$Purpose = ""
+    )
     while ($true) {
         Clear-BastionScreen
-        Write-Header "RECOVERY / FIX"
-        Write-Host "  1 Undo last hardening (services / firewall groups from last Apply)"
-        Write-Host "  2 Re-enable Print Spooler"
-        Write-Host "  3 Browser policies (per browser; Default reverts Bastion policies)"
-        Write-Host "  4 Copilot / M365 tools"
-        Write-Host "  5 Restore Widgets / Suggestions defaults" -ForegroundColor Green
-        Write-Host "  6 Game Bar / ms-gamingoverlay prompt" -ForegroundColor Yellow
-        Write-Host "  7 Remote access (RDP / Assistance / WinRM)" -ForegroundColor Cyan
-        Write-Host "  0 Back"
+        Write-Header $Title
+        Write-Host "  Live status" -ForegroundColor Cyan
+        $rows = @(Write-BastionServiceStatusBlock -GroupFilter $Group)
         Write-Host ""
-        Write-Host "  Note: Appx bloat removal is not reinstallable here - use System Restore or Microsoft Store." -ForegroundColor DarkGray
-        Write-Host "  Tip:  Item 7 re-opens or re-locks remote paths Bastion Firewall Apply closes." -ForegroundColor DarkGray
-        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6","7")
+        if ($Purpose) {
+            Write-Host "  What this is" -ForegroundColor Cyan
+            foreach ($wl in @(Get-WrappedLines -Text $Purpose -Indent 4)) { Write-Host $wl -ForegroundColor White }
+            Write-Host ""
+        }
+        Write-Host "  Honest notes" -ForegroundColor Yellow
+        Write-Host "    DISABLED often means Bastion HighRiskServices / XboxGaming applied (or you disabled it)." -ForegroundColor DarkGray
+        Write-Host "    Re-enabling restores function but also restores attack surface for that service." -ForegroundColor DarkGray
+        Write-Host "    Remote Registry and ICS are higher risk; only enable if you know you need them." -ForegroundColor DarkGray
+        Write-Host ""
+        $present = @($rows | Where-Object { $_.Present })
+        if ($present.Count -eq 0) {
+            Write-Host "  No services from this group are installed on this PC." -ForegroundColor DarkGray
+            Write-Host "  0  Back" -ForegroundColor DarkGray
+            [void](Read-MenuChoice -Prompt "  Select" -Valid @("0"))
+            return
+        }
+        for ($i = 0; $i -lt $present.Count; $i++) {
+            $r = $present[$i]
+            Write-Host ("  {0}  Enable {1} ({2})  [{3}]" -f ($i + 1), $r.Name, $r.Display, $r.Label) -ForegroundColor White
+        }
+        $allN = $present.Count + 1
+        $disN = $present.Count + 2
+        Write-Host ("  {0}  Enable ALL present in this group" -f $allN) -ForegroundColor Yellow
+        Write-Host ("  {0}  Disable ALL present (Bastion-style)" -f $disN) -ForegroundColor Green
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        $valid = @("0") + @(1..$disN | ForEach-Object { "$_" })
+        $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
+        if ($c -eq "0") { return }
+        $n = [int]$c
+        if ($n -ge 1 -and $n -le $present.Count) {
+            $pick = $present[$n - 1]
+            Write-Host ""
+            Write-Host ("  {0}: {1}" -f $pick.Name, $pick.Why) -ForegroundColor Cyan
+            if ((Read-YesNo -Prompt ("  Enable {0} as {1} (Y/N)?" -f $pick.Name, $pick.PreferStart)) -eq "Y") {
+                [void](Enable-BastionService -Name $pick.Name -StartupType $pick.PreferStart)
+            }
+            Wait-ForKey ("Press any key to return to {0}..." -f $Title)
+        } elseif ($n -eq $allN) {
+            Write-Host ""
+            Write-Host "  Enables every present service in this group (function over maximum lockdown)." -ForegroundColor Yellow
+            if ((Read-YesNo -Prompt "  Enable all present services in this group (Y/N)?") -eq "Y") {
+                foreach ($r in $present) {
+                    [void](Enable-BastionService -Name $r.Name -StartupType $r.PreferStart)
+                }
+            }
+            Wait-ForKey ("Press any key to return to {0}..." -f $Title)
+        } elseif ($n -eq $disN) {
+            Write-Host ""
+            Write-Host "  Stops and disables these services the same way Apply does for this group." -ForegroundColor White
+            if ((Read-YesNo -Prompt "  Disable all present services in this group (Y/N)?") -eq "Y") {
+                foreach ($r in $present) {
+                    [void](Disable-BastionService -Name $r.Name)
+                }
+            }
+            Wait-ForKey ("Press any key to return to {0}..." -f $Title)
+        }
+    }
+}
+
+function Show-ServicesRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "SERVICES RECOVERY"
+        Write-Host "  Live status (Bastion-managed)" -ForegroundColor Cyan
+        Write-Host "  -- High-risk / discovery stack --" -ForegroundColor DarkCyan
+        [void](Write-BastionServiceStatusBlock -GroupFilter "HighRisk")
+        Write-Host "  -- Xbox --" -ForegroundColor DarkCyan
+        [void](Write-BastionServiceStatusBlock -GroupFilter "Xbox")
+        Write-Host ""
+        Write-Host "  What this is for" -ForegroundColor Cyan
+        Write-Host "    HighRiskServices and XboxGaming disable these on Apply. Use this hub to re-enable" -ForegroundColor White
+        Write-Host "    only what you need (printing, LAN share, Xbox) without full Undo." -ForegroundColor White
+        Write-Host ""
+        Write-Host "  1  Print Spooler (common fix when printing stopped)" -ForegroundColor Green
+        Write-Host "  2  High-risk services (file share, UPnP, Remote Registry, ...)" -ForegroundColor White
+        Write-Host "  3  Xbox services" -ForegroundColor White
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3")
         switch ($c) {
             "0" { return }
-            "1" { Invoke-UndoHardening }
-            "2" { Enable-PrintSpooler }
-            "3" { Show-BrowserPolicyMenu }
-            "4" { Invoke-CopilotM365Removal }
+            "1" {
+                Write-Host ""
+                $row = Get-BastionServiceStatusRow -Name "Spooler"
+                Write-Host ("  Spooler now: {0} / {1}" -f $row.Label, $row.StartType) -ForegroundColor White
+                if ((Read-YesNo -Prompt "  Re-enable Print Spooler as Automatic and start it (Y/N)?") -eq "Y") {
+                    [void](Enable-BastionService -Name "Spooler" -StartupType "Automatic")
+                }
+                Wait-ForKey "Press any key to return to Services recovery..."
+            }
+            "2" {
+                Show-BastionServiceGroupMenu -Group "HighRisk" -Title "HIGH-RISK SERVICES" `
+                    -Purpose "These are the services HighRiskServices can disable: file sharing host, discovery helpers, Remote Registry, ICS, Fax, and Print Spooler. Re-enable only what you use. Prefer Spooler alone if you only need printing."
+            }
+            "3" {
+                Show-BastionServiceGroupMenu -Group "Xbox" -Title "XBOX SERVICES" `
+                    -Purpose "XboxGaming disables these services on Apply. Re-enable if you use Xbox / Game Pass features. Game DVR silence is separate under Apps and UI > Game Bar."
+            }
+        }
+    }
+}
+
+function Show-LanDiscoveryRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "LAN / DISCOVERY FIREWALL"
+        Write-Host "  Live status" -ForegroundColor Cyan
+        foreach ($g in $script:LanDiscoveryFirewallGroups) {
+            $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
+            $color = switch ($st.Label) {
+                "OPEN" { "Yellow" }
+                "LOCKED" { "Green" }
+                default { "DarkGray" }
+            }
+            Write-Host ("    {0,-28} {1,-11}  {2} allow rule(s) on" -f $g, $st.Label, $st.EnabledAllowCount) -ForegroundColor $color
+        }
+        Write-Host ""
+        Write-Host "  What this is for" -ForegroundColor Cyan
+        Write-Host "    Firewall Apply locks File and Printer Sharing, Network Discovery, and mDNS inbound" -ForegroundColor White
+        Write-Host "    groups so this PC is quieter on the LAN. Open them only if you need shares, printers," -ForegroundColor White
+        Write-Host "    or device discovery. Remote Desktop / Assistance / WinRM live under Remote access." -ForegroundColor White
+        Write-Host ""
+        Write-Host "  Honest notes" -ForegroundColor Yellow
+        Write-Host "    OPEN increases LAN exposure (especially File and Printer Sharing)." -ForegroundColor DarkGray
+        Write-Host "    Profile-level Inbound=Block stays; this only toggles named groups." -ForegroundColor DarkGray
+        Write-Host "    You may still need services like LanmanServer (Services recovery) for hosting shares." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  File and Printer Sharing" -ForegroundColor White
+        Write-Host "  2  Network Discovery" -ForegroundColor White
+        Write-Host "  3  mDNS" -ForegroundColor White
+        Write-Host "  4  Enable all three LAN groups (requires YES)" -ForegroundColor Yellow
+        Write-Host "  5  Lock all three LAN groups (Bastion-style)" -ForegroundColor Green
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5")
+        switch ($c) {
+            "0" { return }
+            "1" {
+                Show-RemoteFirewallGroupMenu -DisplayGroup "File and Printer Sharing" -Title "FILE AND PRINTER SHARING" `
+                    -Purpose "Inbound rules for SMB/file and printer sharing. Needed to host or sometimes reach classic Windows shares on this PC. Pair with Server (LanmanServer) service if you host shares."
+            }
+            "2" {
+                Show-RemoteFirewallGroupMenu -DisplayGroup "Network Discovery" -Title "NETWORK DISCOVERY" `
+                    -Purpose "Lets this PC appear and discover other devices on the local network. Useful for home LAN browsing; not required for normal internet use."
+            }
+            "3" {
+                Show-RemoteFirewallGroupMenu -DisplayGroup "mDNS" -Title "MDNS" `
+                    -Purpose "Multicast DNS discovery used by some printers, media devices, and apps. Lock if you do not need local mDNS."
+            }
+            "4" {
+                Write-Host ""
+                Write-Host "  Opens inbound rules for File and Printer Sharing, Network Discovery, and mDNS." -ForegroundColor Yellow
+                if (-not (Read-ConfirmYes -Prompt "  Type YES to enable all three LAN discovery groups")) {
+                    Write-Host "  Cancelled." -ForegroundColor Yellow
+                    Wait-ForKey "Press any key to return to LAN / discovery..."
+                    continue
+                }
+                foreach ($g in $script:LanDiscoveryFirewallGroups) {
+                    [void](Enable-BastionFirewallGroupInbound -DisplayGroup $g)
+                }
+                Wait-ForKey "Press any key to return to LAN / discovery..."
+            }
             "5" {
+                Write-Host ""
+                if ((Read-YesNo -Prompt "  Lock all three LAN discovery groups (Y/N)?") -eq "Y") {
+                    foreach ($g in $script:LanDiscoveryFirewallGroups) {
+                        [void](Disable-BastionFirewallGroupInbound -DisplayGroup $g)
+                    }
+                }
+                Wait-ForKey "Press any key to return to LAN / discovery..."
+            }
+        }
+    }
+}
+
+function Reset-BastionDnsToAutomatic {
+    $adapters = @(Get-BastionDnsAdapters)
+    if ($adapters.Count -eq 0) {
+        Write-Status "No eligible adapters found for DNS reset" "Warn"
+        return $false
+    }
+    $n = 0
+    foreach ($a in $adapters) {
+        try {
+            Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ResetServerAddresses -ErrorAction Stop
+            Write-Status ("{0}: DNS reset to automatic (DHCP/system)" -f $a.Name) "Applied"
+            $n++
+        } catch {
+            Write-Status ("DNS reset failed on {0}: {1}" -f $a.Name, $_.Exception.Message) "Failed"
+        }
+    }
+    Write-Host "  Bastion DNS provider preference is unchanged (menu D). This only cleared static servers on adapters." -ForegroundColor DarkGray
+    Write-Host "  A VPN may still override DNS while connected." -ForegroundColor DarkGray
+    Write-Log ("Reset-BastionDnsToAutomatic adapters={0}" -f $n) -NoConsole
+    return ($n -gt 0)
+}
+
+function Show-NetworkRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "NETWORK RECOVERY"
+        Write-Host "  Live snapshot" -ForegroundColor Cyan
+        Write-Host "  -- Remote access groups --" -ForegroundColor DarkCyan
+        foreach ($g in $script:RemoteAccessFirewallGroups) {
+            $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
+            $color = if ($st.Label -eq "OPEN") { "Yellow" } elseif ($st.Label -eq "LOCKED") { "Green" } else { "DarkGray" }
+            Write-Host ("    {0,-28} {1}" -f $g, $st.Label) -ForegroundColor $color
+        }
+        Write-Host "  -- LAN / discovery groups --" -ForegroundColor DarkCyan
+        foreach ($g in $script:LanDiscoveryFirewallGroups) {
+            $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
+            $color = if ($st.Label -eq "OPEN") { "Yellow" } elseif ($st.Label -eq "LOCKED") { "Green" } else { "DarkGray" }
+            Write-Host ("    {0,-28} {1}" -f $g, $st.Label) -ForegroundColor $color
+        }
+        Write-Host "  -- DNS (eligible adapters) --" -ForegroundColor DarkCyan
+        $adapters = @(Get-BastionDnsAdapters)
+        if ($adapters.Count -eq 0) {
+            Write-Host "    (no eligible adapters)" -ForegroundColor DarkGray
+        } else {
+            foreach ($a in $adapters) {
+                $dns = @(Get-AdapterDnsServers -InterfaceIndex $a.ifIndex)
+                $first = if ($dns.Count) { $dns[0] } else { "(automatic/none listed)" }
+                Write-Host ("    {0,-28} {1}" -f $a.Name, $first) -ForegroundColor White
+            }
+        }
+        Write-Host ("  Bastion DNS intent: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  What this hub is for" -ForegroundColor Cyan
+        Write-Host "    Firewall Apply locks remote and LAN discovery groups. Menu D / DNS section sets resolvers." -ForegroundColor White
+        Write-Host "    Use the submenus below to open, lock, or reset without full Undo." -ForegroundColor White
+        Write-Host ""
+        Write-Host "  1  Remote access (RDP / Assistance / WinRM + optional system RDP)" -ForegroundColor Cyan
+        Write-Host "  2  LAN / discovery (File Sharing, Network Discovery, mDNS)" -ForegroundColor White
+        Write-Host "  3  Reset DNS on eligible adapters to automatic (DHCP)" -ForegroundColor Yellow
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3")
+        switch ($c) {
+            "0" { return }
+            "1" { Show-RemoteAccessRecoveryMenu }
+            "2" { Show-LanDiscoveryRecoveryMenu }
+            "3" {
+                Write-Host ""
+                Write-Host "  Clears static IPv4 DNS on Bastion-eligible adapters so Windows can use DHCP/automatic." -ForegroundColor Yellow
+                Write-Host "  Does not change your Bastion menu D preference; next Apply with DNS enabled may set public DNS again." -ForegroundColor DarkGray
+                Write-Host "  VPN clients may still override DNS while connected." -ForegroundColor DarkGray
+                if ((Read-YesNo -Prompt "  Reset adapter DNS to automatic now (Y/N)?") -eq "Y") {
+                    [void](Reset-BastionDnsToAutomatic)
+                }
+                Wait-ForKey "Press any key to return to Network recovery..."
+            }
+        }
+    }
+}
+
+function Show-GameBarRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "GAME BAR / MS-GAMINGOVERLAY"
+        Write-Host "  Games may open ms-gamingoverlay when Game DVR is on but Xbox Game Bar is missing." -ForegroundColor Cyan
+        Write-Host "  That shows: Get an app to open this 'ms-gamingoverlay' link." -ForegroundColor DarkGray
+        Write-Host ""
+        $silenced = Test-BastionGameDvrSilenced
+        Write-Host ("  Game DVR silence status: {0}" -f $(if ($silenced) { "ON (capture discouraged)" } else { "OFF (games may still prompt)" })) -ForegroundColor White
+        Write-Host ""
+        Write-Host "  1 Silence prompt (disable Game DVR / capture flags)  [recommended if you do not use Game Bar]"
+        Write-Host "  2 Re-enable Game DVR flags (then install Xbox Game Bar from Store if needed)"
+        Write-Host "  0 Back"
+        $g = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2")
+        switch ($g) {
+            "0" { return }
+            "1" {
+                [void](Disable-BastionGameDvrOverlay)
+                Write-Host "  Fully quit and relaunch games to confirm the dialog is gone." -ForegroundColor DarkGray
+                Wait-ForKey
+            }
+            "2" {
+                [void](Enable-BastionGameDvrOverlay)
+                Wait-ForKey
+            }
+        }
+    }
+}
+
+function Show-AppsUiRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "APPS AND UI RECOVERY"
+        Write-Host "  Targeted fixes for optional app/UI surfaces Bastion can change." -ForegroundColor White
+        Write-Host "  Appx bloat removal is not reinstallable here - use System Restore or Microsoft Store." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  Copilot / M365 tools" -ForegroundColor White
+        Write-Host "  2  Restore Widgets / Suggestions defaults" -ForegroundColor Green
+        Write-Host "  3  Game Bar / ms-gamingoverlay prompt" -ForegroundColor Yellow
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3")
+        switch ($c) {
+            "0" { return }
+            "1" { Invoke-CopilotM365Removal }
+            "2" {
                 Write-Host ""
                 if ((Read-YesNo -Prompt "  Restore Widgets/Suggestions registry defaults (Y/N)?") -eq "Y") {
                     Restore-SuggestionDefaults
                 }
-                Wait-ForKey
+                Wait-ForKey "Press any key to return to Apps and UI..."
             }
-            "6" {
-                Clear-BastionScreen
-                Write-Header "GAME BAR / MS-GAMINGOVERLAY"
-                Write-Host "  Games may open ms-gamingoverlay when Game DVR is on but Xbox Game Bar is missing." -ForegroundColor Cyan
-                Write-Host "  That shows: Get an app to open this 'ms-gamingoverlay' link." -ForegroundColor DarkGray
+            "3" { Show-GameBarRecoveryMenu }
+        }
+    }
+}
+
+function Get-BastionStrictHandleSystemStatus {
+    $strictOn = $null
+    $depOn = $null
+    try {
+        $mit = Get-ProcessMitigation -System -ErrorAction SilentlyContinue
+        try { $strictOn = ($mit.StrictHandle.Enable -eq "ON" -or "$($mit.StrictHandle.Enable)" -eq "ON") } catch { $strictOn = $null }
+        try { $depOn = ($mit.DEP.Enable -eq "ON" -or "$($mit.DEP.Enable)" -eq "ON") } catch { $depOn = $null }
+    } catch {}
+    $paths = @()
+    try { $paths = @(Get-BastionStrictHandleExceptionPaths) } catch { $paths = @() }
+    return [PSCustomObject]@{
+        StrictHandleOn = $strictOn
+        DepOn = $depOn
+        ExceptionCount = $paths.Count
+        ExceptionPaths = $paths
+        StrictLabel = if ($null -eq $strictOn) { "UNKNOWN" } elseif ($strictOn) { "ON" } else { "OFF" }
+    }
+}
+
+function Show-StrictHandleRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "STRICTHANDLE / EXPLOIT PROTECTION"
+        $st = Get-BastionStrictHandleSystemStatus
+        Write-Host "  Live status" -ForegroundColor Cyan
+        Write-Host ("    System StrictHandle: {0}" -f $st.StrictLabel) -ForegroundColor $(if ($st.StrictLabel -eq "ON") { "Yellow" } elseif ($st.StrictLabel -eq "OFF") { "Green" } else { "DarkGray" })
+        Write-Host ("    System DEP:          {0}" -f $(if ($null -eq $st.DepOn) { "UNKNOWN" } elseif ($st.DepOn) { "ON" } else { "OFF" })) -ForegroundColor DarkGray
+        Write-Host ("    Wow*/exception EXEs: {0} discovered now" -f $st.ExceptionCount) -ForegroundColor White
+        if ($st.ExceptionCount -gt 0) {
+            foreach ($p in ($st.ExceptionPaths | Select-Object -First 6)) {
+                Write-Host ("      - {0}" -f $p) -ForegroundColor DarkGray
+            }
+            if ($st.ExceptionCount -gt 6) {
+                Write-Host ("      ... and {0} more" -f ($st.ExceptionCount - 6)) -ForegroundColor DarkGray
+            }
+        }
+        Write-Host ""
+        Write-Host "  Honest notes" -ForegroundColor Yellow
+        Write-Host "    StrictHandle ON hardens most apps; some game loaders can crash (WoW did without exceptions)." -ForegroundColor DarkGray
+        Write-Host "    Option 1 turns StrictHandle OFF for the whole PC (security trade-off). Reboot after changes." -ForegroundColor DarkGray
+        Write-Host "    Option 2 refreshes per-app exceptions only (keeps system StrictHandle ON)." -ForegroundColor DarkGray
+        Write-Host "    Bastion Apply with ExploitProtection re-enables the mild system profile + exceptions." -ForegroundColor DarkGray
+        Write-Host "    Report other broken games: GitHub issue #18 or Discussions #23." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  Disable system StrictHandle (whole PC; reboot recommended)" -ForegroundColor Yellow
+        Write-Host "  2  Refresh Wow*/config exceptions only (StrictHandle stays ON system-wide)" -ForegroundColor Cyan
+        Write-Host "  3  Re-enable system StrictHandle + refresh exceptions (Bastion-style)" -ForegroundColor Green
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3")
+        switch ($c) {
+            "0" { return }
+            "1" {
                 Write-Host ""
-                $silenced = Test-BastionGameDvrSilenced
-                Write-Host ("  Game DVR silence status: {0}" -f $(if ($silenced) { "ON (capture discouraged)" } else { "OFF (games may still prompt)" })) -ForegroundColor White
-                Write-Host ""
-                Write-Host "  1 Silence prompt (disable Game DVR / capture flags)  [recommended if you do not use Game Bar]"
-                Write-Host "  2 Re-enable Game DVR flags (then install Xbox Game Bar from Store if needed)"
-                Write-Host "  0 Back"
-                $g = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2")
-                switch ($g) {
-                    "1" {
-                        [void](Disable-BastionGameDvrOverlay)
-                        Write-Host "  Fully quit and relaunch games to confirm the dialog is gone." -ForegroundColor DarkGray
-                        Wait-ForKey
-                    }
-                    "2" {
-                        [void](Enable-BastionGameDvrOverlay)
-                        Wait-ForKey
+                Write-Host "  Turns OFF system-wide StrictHandle. Other mitigations (DEP/SEHOP/ASLR) are left alone." -ForegroundColor Yellow
+                Write-Host "  Reboot after this before testing games." -ForegroundColor DarkGray
+                if ((Read-YesNo -Prompt "  Disable system StrictHandle now (Y/N)?") -eq "Y") {
+                    try {
+                        Set-ProcessMitigation -System -Disable StrictHandle -ErrorAction Stop
+                        Write-Status "System StrictHandle disabled (reboot recommended)" "Applied"
+                    } catch {
+                        Write-Status ("StrictHandle disable failed: {0}" -f $_.Exception.Message) "Failed"
                     }
                 }
+                Wait-ForKey "Press any key to return to StrictHandle recovery..."
             }
-            "7" { Show-RemoteAccessRecoveryMenu }
+            "2" {
+                Write-Host ""
+                Write-Host "  Discovers Wow*.exe (and config paths) and sets per-app StrictHandle OFF for those EXEs only." -ForegroundColor White
+                [void](Set-BastionStrictHandleExceptions)
+                Wait-ForKey "Press any key to return to StrictHandle recovery..."
+            }
+            "3" {
+                Write-Host ""
+                Write-Host "  Re-applies mild system mitigations including StrictHandle ON, then refreshes exceptions." -ForegroundColor Yellow
+                if ((Read-YesNo -Prompt "  Re-enable system StrictHandle profile now (Y/N)?") -eq "Y") {
+                    try {
+                        Set-ProcessMitigation -System -Enable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle -ErrorAction Stop
+                        Write-Status "System mitigations re-applied (StrictHandle ON)" "Applied"
+                        [void](Set-BastionStrictHandleExceptions)
+                        Write-Host "  Reboot recommended before heavy game testing." -ForegroundColor DarkGray
+                    } catch {
+                        Write-Status ("Re-enable failed: {0}" -f $_.Exception.Message) "Failed"
+                    }
+                }
+                Wait-ForKey "Press any key to return to StrictHandle recovery..."
+            }
+        }
+    }
+}
+
+function Show-DefenderRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "DEFENDER (NP / CFA)"
+        $np = $null; $cfa = $null
+        try {
+            $pref = Get-MpPreference -ErrorAction Stop
+            $np = ($pref.EnableNetworkProtection -eq 1 -or "$($pref.EnableNetworkProtection)" -eq "Enabled")
+            $cfa = ($pref.EnableControlledFolderAccess -eq 1 -or "$($pref.EnableControlledFolderAccess)" -eq "Enabled")
+        } catch {}
+        Write-Host "  Live status" -ForegroundColor Cyan
+        Write-Host ("    Network Protection:        {0}" -f $(if ($null -eq $np) { "UNKNOWN" } elseif ($np) { "ON" } else { "OFF" })) `
+            -ForegroundColor $(if ($np) { "Yellow" } elseif ($null -eq $np) { "DarkGray" } else { "Green" })
+        Write-Host ("    Controlled Folder Access:  {0}" -f $(if ($null -eq $cfa) { "UNKNOWN" } elseif ($cfa) { "ON" } else { "OFF" })) `
+            -ForegroundColor $(if ($cfa) { "Yellow" } elseif ($null -eq $cfa) { "DarkGray" } else { "Green" })
+        Write-Host ""
+        Write-Host "  Honest notes" -ForegroundColor Yellow
+        Write-Host "    Bastion Defender Apply turns these ON and refreshes CFA allow paths for catalog apps." -ForegroundColor DarkGray
+        Write-Host "    Softening reduces ransomware / network blocking strength. Prefer allow-list fixes first." -ForegroundColor DarkGray
+        Write-Host "    Third-party antivirus may ignore or block these settings." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  Soften: turn Network Protection OFF" -ForegroundColor Yellow
+        Write-Host "  2  Soften: turn Controlled Folder Access OFF" -ForegroundColor Yellow
+        Write-Host "  3  Soften both NP and CFA" -ForegroundColor Yellow
+        Write-Host "  4  Re-harden: turn NP + CFA ON and refresh CFA allow paths" -ForegroundColor Green
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4")
+        switch ($c) {
+            "0" { return }
+            "1" {
+                if ((Read-YesNo -Prompt "  Disable Network Protection (Y/N)?") -eq "Y") {
+                    try {
+                        Set-MpPreference -EnableNetworkProtection Disabled -ErrorAction Stop
+                        Write-Status "Network Protection disabled" "Applied"
+                    } catch { Write-Status ("NP disable failed: {0}" -f $_.Exception.Message) "Failed" }
+                }
+                Wait-ForKey "Press any key to return to Defender recovery..."
+            }
+            "2" {
+                if ((Read-YesNo -Prompt "  Disable Controlled Folder Access (Y/N)?") -eq "Y") {
+                    try {
+                        Set-MpPreference -EnableControlledFolderAccess Disabled -ErrorAction Stop
+                        Write-Status "Controlled Folder Access disabled" "Applied"
+                    } catch { Write-Status ("CFA disable failed: {0}" -f $_.Exception.Message) "Failed" }
+                }
+                Wait-ForKey "Press any key to return to Defender recovery..."
+            }
+            "3" {
+                if ((Read-YesNo -Prompt "  Disable both Network Protection and CFA (Y/N)?") -eq "Y") {
+                    try {
+                        Set-MpPreference -EnableNetworkProtection Disabled -ErrorAction SilentlyContinue
+                        Set-MpPreference -EnableControlledFolderAccess Disabled -ErrorAction SilentlyContinue
+                        Write-Status "Network Protection + CFA disabled (requested)" "Applied"
+                    } catch { Write-Status ("Defender soften failed: {0}" -f $_.Exception.Message) "Failed" }
+                }
+                Wait-ForKey "Press any key to return to Defender recovery..."
+            }
+            "4" {
+                if ((Read-YesNo -Prompt "  Re-enable NP + CFA and refresh allow paths (Y/N)?") -eq "Y") {
+                    try {
+                        Set-MpPreference -EnableNetworkProtection Enabled -ErrorAction SilentlyContinue
+                        Set-MpPreference -EnableControlledFolderAccess Enabled -ErrorAction SilentlyContinue
+                        Write-Status "Network Protection + CFA requested ON" "Applied"
+                        Add-CfaAllowPaths
+                    } catch { Write-Status ("Defender re-harden failed: {0}" -f $_.Exception.Message) "Failed" }
+                }
+                Wait-ForKey "Press any key to return to Defender recovery..."
+            }
+        }
+    }
+}
+
+function Show-PolicyTasksRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "POLICIES AND TASKS"
+        # Delivery Optimization
+        $doVal = $null
+        try {
+            $doVal = (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name DODownloadMode -ErrorAction SilentlyContinue).DODownloadMode
+        } catch {}
+        # PS auditing
+        $psLog = $null
+        try {
+            $psLog = (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name EnableScriptBlockLogging -ErrorAction SilentlyContinue).EnableScriptBlockLogging
+        } catch {}
+        # LSA
+        $lsa = $null
+        try {
+            $lsa = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name RunAsPPL -ErrorAction SilentlyContinue).RunAsPPL
+        } catch {}
+        Write-Host "  Live status" -ForegroundColor Cyan
+        Write-Host ("    Delivery Optimization DODownloadMode: {0}" -f $(if ($null -eq $doVal) { "(not set)" } else { $doVal })) -ForegroundColor White
+        Write-Host ("    PowerShell ScriptBlockLogging:       {0}" -f $(if ($null -eq $psLog) { "(not set)" } elseif ($psLog -eq 1) { "ON" } else { $psLog })) -ForegroundColor White
+        Write-Host ("    LSA RunAsPPL:                        {0}" -f $(if ($null -eq $lsa) { "(not set)" } elseif ($lsa -eq 1) { "ON (1)" } else { $lsa })) -ForegroundColor White
+        Write-Host "    Scheduled tasks (Bastion list):" -ForegroundColor White
+        foreach ($t in $script:BastionScheduledTaskPaths) {
+            $leaf = Split-Path $t -Leaf
+            try {
+                $task = Get-ScheduledTask -TaskPath (Split-Path $t -Parent) -TaskName $leaf -ErrorAction SilentlyContinue
+                if (-not $task) {
+                    Write-Host ("      {0,-40} ABSENT" -f $leaf) -ForegroundColor DarkGray
+                } else {
+                    $col = if ($task.State -eq "Disabled") { "Green" } else { "Yellow" }
+                    Write-Host ("      {0,-40} {1}" -f $leaf, $task.State) -ForegroundColor $col
+                }
+            } catch {
+                Write-Host ("      {0,-40} ?" -f $leaf) -ForegroundColor DarkGray
+            }
+        }
+        Write-Host ""
+        Write-Host "  Honest notes" -ForegroundColor Yellow
+        Write-Host "    Clearing policies undoes Bastion-applied settings for that area only." -ForegroundColor DarkGray
+        Write-Host "    LSA changes need a reboot to fully apply. Disabling RunAsPPL weakens credential protection." -ForegroundColor DarkGray
+        Write-Host "    Re-enabling CEIP/Appraiser tasks restores Microsoft compatibility telemetry collection." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  Clear Delivery Optimization policy (remove DODownloadMode)" -ForegroundColor Yellow
+        Write-Host "  2  Turn off PowerShell Script Block Logging policy" -ForegroundColor Yellow
+        Write-Host "  3  LSA RunAsPPL: turn OFF (reboot required)" -ForegroundColor Yellow
+        Write-Host "  4  LSA RunAsPPL: turn ON (reboot required)" -ForegroundColor Green
+        Write-Host "  5  Re-enable Bastion-listed scheduled tasks" -ForegroundColor Yellow
+        Write-Host "  6  Disable Bastion-listed scheduled tasks (Bastion-style)" -ForegroundColor Green
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6")
+        switch ($c) {
+            "0" { return }
+            "1" {
+                if ((Read-YesNo -Prompt "  Remove DODownloadMode policy value (Y/N)?") -eq "Y") {
+                    try {
+                        $key = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization"
+                        if (Test-Path $key) {
+                            Remove-ItemProperty -Path $key -Name DODownloadMode -Force -ErrorAction SilentlyContinue
+                        }
+                        Write-Status "DODownloadMode policy cleared (Windows default DO behavior returns)" "Applied"
+                    } catch {
+                        Write-Status ("DO clear failed: {0}" -f $_.Exception.Message) "Failed"
+                    }
+                }
+                Wait-ForKey "Press any key to return to Policies and tasks..."
+            }
+            "2" {
+                if ((Read-YesNo -Prompt "  Disable PowerShell Script Block Logging policy (Y/N)?") -eq "Y") {
+                    try {
+                        $path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging"
+                        if (-not (Test-Path $path)) { New-Item $path -Force | Out-Null }
+                        Set-ItemProperty $path -Name EnableScriptBlockLogging -Value 0 -ErrorAction Stop
+                        Set-ItemProperty $path -Name EnableScriptBlockInvocationLogging -Value 0 -ErrorAction SilentlyContinue
+                        Write-Status "Script Block Logging policy set to 0" "Applied"
+                    } catch {
+                        Write-Status ("PS auditing clear failed: {0}" -f $_.Exception.Message) "Failed"
+                    }
+                }
+                Wait-ForKey "Press any key to return to Policies and tasks..."
+            }
+            "3" {
+                Write-Host "  Disabling RunAsPPL makes some credential theft techniques easier." -ForegroundColor Yellow
+                if ((Read-YesNo -Prompt "  Set RunAsPPL=0 and plan a reboot (Y/N)?") -eq "Y") {
+                    try {
+                        New-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name RunAsPPL -Value 0 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+                        Write-Status "RunAsPPL=0 set. Reboot required for full effect." "Applied"
+                    } catch {
+                        Write-Status ("LSA off failed: {0}" -f $_.Exception.Message) "Failed"
+                    }
+                }
+                Wait-ForKey "Press any key to return to Policies and tasks..."
+            }
+            "4" {
+                if ((Read-YesNo -Prompt "  Set RunAsPPL=1 and plan a reboot (Y/N)?") -eq "Y") {
+                    try {
+                        New-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name RunAsPPL -Value 1 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+                        Write-Status "RunAsPPL=1 set. Reboot required to enforce." "Applied"
+                    } catch {
+                        Write-Status ("LSA on failed: {0}" -f $_.Exception.Message) "Failed"
+                    }
+                }
+                Wait-ForKey "Press any key to return to Policies and tasks..."
+            }
+            "5" {
+                if ((Read-YesNo -Prompt "  Re-enable Bastion-listed scheduled tasks (Y/N)?") -eq "Y") {
+                    foreach ($t in $script:BastionScheduledTaskPaths) {
+                        $leaf = Split-Path $t -Leaf
+                        try {
+                            $task = Get-ScheduledTask -TaskPath (Split-Path $t -Parent) -TaskName $leaf -ErrorAction SilentlyContinue
+                            if (-not $task) {
+                                Write-Status ("Absent {0}" -f $leaf) "Already"
+                                continue
+                            }
+                            Enable-ScheduledTask -InputObject $task -ErrorAction Stop | Out-Null
+                            Write-Status ("Enabled {0}" -f $leaf) "Applied"
+                        } catch {
+                            Write-Status ("Task {0}: {1}" -f $leaf, $_.Exception.Message) "Warn"
+                        }
+                    }
+                }
+                Wait-ForKey "Press any key to return to Policies and tasks..."
+            }
+            "6" {
+                if ((Read-YesNo -Prompt "  Disable Bastion-listed scheduled tasks (Y/N)?") -eq "Y") {
+                    foreach ($t in $script:BastionScheduledTaskPaths) {
+                        $leaf = Split-Path $t -Leaf
+                        try {
+                            $task = Get-ScheduledTask -TaskPath (Split-Path $t -Parent) -TaskName $leaf -ErrorAction SilentlyContinue
+                            if (-not $task) {
+                                Write-Status ("Absent {0}" -f $leaf) "Already"
+                                continue
+                            }
+                            if ($task.State -eq "Disabled") {
+                                Write-Status ("Already disabled {0}" -f $leaf) "Already"
+                            } else {
+                                Disable-ScheduledTask -InputObject $task -ErrorAction Stop | Out-Null
+                                Write-Status ("Disabled {0}" -f $leaf) "Applied"
+                            }
+                        } catch {
+                            Write-Status ("Task {0}: {1}" -f $leaf, $_.Exception.Message) "Warn"
+                        }
+                    }
+                }
+                Wait-ForKey "Press any key to return to Policies and tasks..."
+            }
+        }
+    }
+}
+
+function Show-SecurityMitigationsRecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "SECURITY MITIGATIONS RECOVERY"
+        $sh = Get-BastionStrictHandleSystemStatus
+        $lsa = $null
+        try { $lsa = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name RunAsPPL -ErrorAction SilentlyContinue).RunAsPPL } catch {}
+        Write-Host "  Snapshot" -ForegroundColor Cyan
+        Write-Host ("    StrictHandle (system): {0}" -f $sh.StrictLabel) -ForegroundColor White
+        Write-Host ("    LSA RunAsPPL:          {0}" -f $(if ($null -eq $lsa) { "(not set)" } elseif ($lsa -eq 1) { "ON" } else { $lsa })) -ForegroundColor White
+        Write-Host "    Open a submenu for live detail and safe reverse / re-harden actions." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  StrictHandle / Exploit protection (games-safe reverse)" -ForegroundColor Yellow
+        Write-Host "  2  Defender Network Protection and Controlled Folder Access" -ForegroundColor White
+        Write-Host "  3  Policies and tasks (DO, PowerShell logging, LSA, CEIP tasks)" -ForegroundColor White
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3")
+        switch ($c) {
+            "0" { return }
+            "1" { Show-StrictHandleRecoveryMenu }
+            "2" { Show-DefenderRecoveryMenu }
+            "3" { Show-PolicyTasksRecoveryMenu }
+        }
+    }
+}
+
+function Show-RecoveryMenu {
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "RECOVERY / FIX"
+        Write-Host "  Modular hubs (status + targeted reverse). Prefer these over full Undo when you know what broke." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  Undo last hardening (tracked services / firewall groups from last Apply only)"
+        Write-Host "  2  Services (Spooler, high-risk stack, Xbox)" -ForegroundColor White
+        Write-Host "  3  Network (remote access, LAN discovery, DNS reset)" -ForegroundColor Cyan
+        Write-Host "  4  Browser policies (per browser; Default reverts Bastion policies)"
+        Write-Host "  5  Apps and UI (Copilot, Widgets/Suggestions, Game Bar)" -ForegroundColor Green
+        Write-Host "  6  Security mitigations (StrictHandle, Defender, LSA, policies/tasks)" -ForegroundColor Yellow
+        Write-Host "  0  Back"
+        Write-Host ""
+        Write-Host "  Note: Appx bloat and OneDrive removal are not reinstallable here - System Restore or vendor installers." -ForegroundColor DarkGray
+        Write-Host "  Tip:  Hubs show live status first. Enabling remote/LAN paths or services increases attack surface." -ForegroundColor DarkGray
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6")
+        switch ($c) {
+            "0" { return }
+            "1" { Invoke-UndoHardening }
+            "2" { Show-ServicesRecoveryMenu }
+            "3" { Show-NetworkRecoveryMenu }
+            "4" { Show-BrowserPolicyMenu }
+            "5" { Show-AppsUiRecoveryMenu }
+            "6" { Show-SecurityMitigationsRecoveryMenu }
         }
     }
 }
@@ -5580,7 +6319,7 @@ function Show-Help {
         "Not an antivirus product, not enterprise MDM, not a guarantee against zero-days, and not an automated GPU or BIOS flasher.",
         "## Safety model",
         "System Restore is the real safety net. Use main menu 13 or R before major changes. Undo covers tracked services and firewall groups from the last Apply only.",
-        "Recovery also has targeted fixes (Spooler, browsers, Suggestions, Game Bar silence, Remote access) that do not require a full Undo.",
+        "Recovery hubs (Services, Network, Browsers, Apps/UI, Security mitigations) reverse most Bastion effects with live status - without bloating the main menu.",
         "Irreversible or hard-to-reverse items (BloatApps, OneDrive removal) stay off until you opt in and are called out explicitly."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
@@ -5598,10 +6337,10 @@ function Show-Help {
         "7. Option 7 Quick Harden or 8 Apply - confirm restore-point gate, then type YES.",
         "8. Reboot if LSA Protection or optional features require it, then Dry Run again.",
         "## Everyday flow",
-        "Change one area at a time, Dry Run, Apply, verify. Use Recovery for Spooler, per-browser Default (revert), Suggestions, remote access, or Undo.",
+        "Change one area at a time, Dry Run, Apply, verify. Use Recovery hubs for targeted reverse (Services, Network, Browsers, Apps/UI, Security mitigations) or Undo.",
         "If you delete the Bastion data folder, the next launch re-seeds defaults and re-detects the live system - it does not invent a prior Apply.",
         "## If something goes wrong",
-        "Recovery menu first. For browser breakage after Strict or Encrypted Client Hello (ECH): menu 6 > that browser > Default. Need RDP/Assistance/WinRM after Firewall Apply: Recovery > 7. For deep failure: Safe Mode then System Restore."
+        "Recovery menu first (status-first hubs). Browser breakage: menu 6 or Recovery > 4 > Default. Network/RDP/DNS: Recovery > 3. Games/StrictHandle: Recovery > 6. For deep failure: Safe Mode then System Restore."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -5619,7 +6358,7 @@ function Show-Help {
         "7 Quick Harden - safe preset, restore-point gate, then Apply.",
         "8 Apply - runs every enabled section with logging and undo tracking.",
         "## MAINTAIN AND SAFETY",
-        "9 Recovery - Undo, Spooler, browser policies, Copilot/M365, Suggestions, Game Bar silence, Remote access (RDP/Assistance/WinRM).",
+        "9 Recovery - modular hubs: Undo, Services, Network, Browser policies, Apps and UI, Security mitigations (no main-menu bloat).",
         "10 Uninstall - remove catalog apps via winget with confirmation.",
         "13 or R - create or name a System Restore Point anytime (recommended before Apply).",
         "11 Help and reports - this documentation, last Apply JSON, HTML export.",
@@ -5722,22 +6461,25 @@ function Show-Help {
     if ($r -eq "back" -or $r -eq "quit") { return }
 
     $r = Show-HelpPage -Title "HELP 11/13 - RECOVERY AND SAFE MODE" -Page 11 -Total $total -Lines @(
-        "## Recovery menu (option 9)",
-        "1 Undo last hardening - services and firewall groups tracked in Bastion-LastApply.json.",
-        "2 Re-enable Print Spooler - when HighRiskServices disabled printing.",
-        "3 Browser policies - only installed Firefox/Chrome/Brave. Default/Medium/Strict per browser; Encrypted Client Hello (ECH) only if you opt in. Default reverts that browser (best-effort; System Restore is bulletproof).",
-        "4 Copilot / M365 tools - optional removal helpers.",
-        "5 Restore Widgets/Suggestions defaults - reverses Suggestions registry work where possible.",
-        "6 Game Bar / ms-gamingoverlay - silence Game DVR so games stop opening a missing Xbox Game Bar link, or re-enable DVR flags if you restore Game Bar from the Store.",
-        "7 Remote access (RDP / Assistance / WinRM) - live status, per-group enable or lock, enable-all with YES confirm, lock-all Bastion-style. Optional system RDP: fDenyTSConnections and TermService (separate from firewall groups).",
-        "## Remote access honesty",
-        "Firewall Apply disables inbound groups for Remote Desktop, Remote Assistance, and Windows Remote Management. That blocks those network paths; it does not by itself rewrite fDenyTSConnections.",
-        "OPEN firewall + system ALLOWED + TermService running is usually required for full RDP host access. Windows Home may not host RDP like Pro/Enterprise.",
-        "Enabling remote paths increases attack surface. Prefer LOCKED when you do not need remote control. File Sharing, Network Discovery, and mDNS are not on this submenu (use Undo or wf.msc).",
+        "## Recovery design (option 9) - modular, not bloated",
+        "Main menu still has a single Recovery entry. Inside are six hubs with live status and targeted reverse. Prefer a hub over full Undo when you know what broke.",
+        "## Recovery hubs",
+        "1 Undo last hardening - services and firewall groups tracked in Bastion-LastApply.json only (partial by design).",
+        "2 Services - Print Spooler, HighRiskServices stack (file share, UPnP, Remote Registry, ...), Xbox services. Enable one, all present, or re-disable Bastion-style.",
+        "3 Network - Remote access (RDP/Assistance/WinRM + optional fDenyTSConnections/TermService), LAN/discovery (File Sharing, Network Discovery, mDNS), DNS reset to automatic on eligible adapters.",
+        "4 Browser policies - same as main menu 6 for installed Firefox/Chrome/Brave. Default reverts that browser (best-effort).",
+        "5 Apps and UI - Copilot/M365 tools, Widgets/Suggestions restore, Game Bar / ms-gamingoverlay silence or reverse.",
+        "6 Security mitigations - StrictHandle/exploit (disable system StrictHandle, refresh Wow exceptions, re-enable profile), Defender NP/CFA soften or re-harden, policies/tasks (Delivery Optimization, PowerShell logging, LSA RunAsPPL, CEIP tasks).",
+        "## Honesty rules shared by hubs",
+        "Status is live from Windows, not from a fake memory of Apply. Enabling services or OPEN firewall groups increases attack surface; LOCKED/DISABLED is the safer default after harden.",
+        "Firewall hubs do not flip overall profile Inbound=Block; they toggle named groups. DNS reset does not change menu D intent; next Apply with DNS on may set public DNS again. VPN may override DNS while connected.",
+        "Full host RDP usually needs OPEN Remote Desktop group + system ALLOWED + TermService. Windows Home may not host RDP like Pro.",
+        "StrictHandle OFF whole-PC is a security trade-off; reboot after mitigation changes. Softening Defender reduces blocking strength.",
+        "Appx bloat and OneDrive are not reinstallable in Recovery - System Restore or vendor installers.",
         "## System Restore",
         "Preferred full rollback. Create points from menu 13 or R. If Windows will not log on normally: hold Shift while selecting Restart, open Troubleshoot > Advanced > Startup Settings > Restart, then Safe Mode, then rstrui.exe.",
         "## Honest limits of Undo",
-        "Undo does not reinstall Appx bloat or OneDrive, and does not remove winget-installed programs (use Uninstall). Remote access Recovery can re-open or re-lock groups anytime without needing LastApply data."
+        "Undo does not reinstall Appx/OneDrive, does not restore prior DNS servers, and does not clear browser enterprise policies (use Recovery > 4 Default). Hubs work even when Bastion-LastApply.json is missing."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -5776,7 +6518,7 @@ function Show-Help {
         "Why WoW broke: StrictHandle ON with no per-app exception. World of Warcraft failed at Play / Wow.exe with Blizzard Eidolon; Crash.txt INVALID_HANDLE in Wow_loader.dll. Battle.net still worked.",
         "Technical framing (not an accusation): StrictHandle makes certain invalid/recycled handle uses fatal. Custom game loaders, Agent-to-game handoff, multi-process clients, integrity checks, and IPC often use handles in ways that are fine under default Windows policy but crash under system StrictHandle. WoW's early path is Wow_loader.dll - a common class of mitigation incompatibility across the industry.",
         "What Bastion does now: StrictHandle ON for the system; OFF only for discovered Wow*.exe. Counter-Strike 2 was tested and is not an issue. Other games unknown until reported.",
-        "If a game breaks after Apply: (1) Set-ProcessMitigation -System -Disable StrictHandle then reboot, or except that EXE; (2) confirm the game works; (3) report game name + full .exe path on GitHub issue #18 or Discussions #23.",
+        "If a game breaks after Apply: (1) Recovery > 6 > StrictHandle disable system StrictHandle then reboot, or refresh exceptions / except that EXE; (2) confirm the game works; (3) report game name + full .exe path on GitHub issue #18 or Discussions #23.",
         "Discovery: product.db/aggregate.json, uninstall registry, fixed-drive well-known folders, optional WowInstallRoots / StrictHandleExceptionPaths in Bastion-Config.json.",
         "## Deliberate non-goals",
         "No aggressive system-wide exploit mitigation sets that previously caused black-screen logons on some hardware.",
@@ -5903,7 +6645,7 @@ function Invoke-QuickHardening {
     foreach ($s in $script:QuickSections) { Write-Host ("  * {0}" -f $s) -ForegroundColor Green }
     Write-Host ""
     Write-Host "  Note: HighRiskServices can disable the Print Spooler (printing will stop)." -ForegroundColor Yellow
-    Write-Host "  Note: Firewall disables inbound RDP / Remote Assistance / WinRM groups (Recovery > 7 to re-open)." -ForegroundColor Yellow
+    Write-Host "  Note: Firewall locks remote and LAN discovery groups (Recovery > 3 Network to re-open)." -ForegroundColor Yellow
     Write-Host ""
     if ((Read-YesNo -Prompt "  Continue with this preset (Y/N)?") -ne "Y") { return }
     foreach ($k in @($script:Sections.Keys)) { $script:Sections[$k] = $false }
@@ -6114,12 +6856,7 @@ function Invoke-ApplyHardening {
 
     if ($script:Sections["ScheduledTasks"]) {
         Write-Host "  [ScheduledTasks]" -ForegroundColor Cyan
-        foreach ($t in @(
-            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
-            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
-            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
-            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
-        )) {
+        foreach ($t in $script:BastionScheduledTaskPaths) {
             try {
                 $task = Get-ScheduledTask -TaskPath (Split-Path $t -Parent) -TaskName (Split-Path $t -Leaf) -ErrorAction SilentlyContinue
                 if (-not $task) {

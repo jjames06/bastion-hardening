@@ -27,13 +27,14 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 **If a game fails after Apply**
 
-1. **Revert** (whole PC, elevated PowerShell, then **reboot**):
+1. **Revert (preferred):** Bastion Recovery → **6 Security mitigations** → **StrictHandle** → disable system StrictHandle, then **reboot**.  
+   Or keep system protection and only refresh Wow exceptions / add the game’s full `.exe` under `StrictHandleExceptionPaths` in `Bastion-Config.json` and re-Apply.
+
+   Manual whole-PC off (elevated PowerShell, then reboot):
 
    ```powershell
    Set-ProcessMitigation -System -Disable StrictHandle
    ```
-
-   Or add the game’s full `.exe` path under `StrictHandleExceptionPaths` in `Bastion-Config.json` and re-Apply (keeps system protection).
 
 2. Confirm the game launches again.
 
@@ -157,7 +158,7 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 
 (Admin Apply also sets `HKLM\...\Policies\Microsoft\Windows\GameDVR\AllowGameDVR = 0`.)
 
-**If you want Game Bar back:** Recovery → 6 → re-enable flags, then install **Xbox Game Bar** from Microsoft Store (`Microsoft.XboxGamingOverlay`).
+**If you want Game Bar back:** Recovery → **5 Apps and UI** → Game Bar → re-enable flags, then install **Xbox Game Bar** from Microsoft Store (`Microsoft.XboxGamingOverlay`).
 
 ### Related
 
@@ -165,32 +166,52 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 
 ---
 
-## Remote Desktop / Remote Assistance / WinRM blocked after Firewall Apply
+## Remote Desktop / Remote Assistance / WinRM / LAN discovery blocked after Firewall Apply
 
-**Symptom:** Cannot RDP into the PC, cannot use Remote Assistance, or WinRM / PowerShell remoting fails after Bastion Firewall Apply.
+**Symptom:** Cannot RDP, Remote Assistance, WinRM, host file shares, or discover devices after Bastion Firewall Apply.
 
-**Cause (by design):** Firewall Apply disables inbound rule groups for **Remote Desktop**, **Remote Assistance**, and **Windows Remote Management** (plus file sharing / discovery / mDNS). Profile defaults stay **Inbound=Block**. That is intentional exposure reduction for a single-user workstation.
+**Cause (by design):** Firewall Apply disables inbound rule groups for **Remote Desktop**, **Remote Assistance**, **Windows Remote Management**, **File and Printer Sharing**, **Network Discovery**, and **mDNS**. Profile defaults stay **Inbound=Block**.
 
-**What Bastion does *not* do on Firewall Apply:** It does not rewrite `fDenyTSConnections` or force-stop **TermService**. Those are optional system RDP controls under Recovery.
+**What Bastion does *not* do on Firewall Apply:** It does not rewrite `fDenyTSConnections` or force-stop **TermService** (optional under Network → Remote access).
 
-**Recovery (preferred):** Main menu **9 → 7 Remote access (RDP / Assistance / WinRM)**
+**Recovery (preferred):** Main menu **9 → 3 Network**
 
 | Need | Action |
 |------|--------|
-| Temporary help session | Open **Remote Assistance** only; lock again when done |
-| Host RDP again | Remote Desktop: enable firewall group **and** allow system RDP (`fDenyTSConnections=0` + start TermService). Full host RDP usually needs both. |
-| PowerShell remoting / WinRM | Open **Windows Remote Management** only if you truly need it |
-| Return to Bastion posture | **Lock all three** firewall groups (option 5). Optionally deny system RDP. |
+| RDP / Assistance / WinRM | Network → **Remote access** |
+| File shares / discovery / mDNS | Network → **LAN / discovery** |
+| DNS back to DHCP | Network → **Reset DNS to automatic** |
+| Print / SMB service stack | Recovery → **2 Services** (Spooler, LanmanServer, …) |
+| Return to Bastion posture | Lock groups again from the same hubs |
 
 **Honest limits**
 
-- Opening remote paths **increases attack surface**. Prefer locked when idle.  
+- Opening remote or LAN paths **increases attack surface**. Prefer locked when idle.  
 - Windows **Home** often cannot host full RDP the way Pro/Enterprise can.  
-- File and Printer Sharing / Network Discovery / mDNS are **not** on this submenu (use Undo or `wf.msc`).  
+- Hosting shares may need both **firewall OPEN** and **LanmanServer** enabled.  
 - System Restore remains the strongest full rollback.
 
 ### Related
 
-- Section docs: **Firewall**  
-- In-app Help page 11 (Recovery)  
+- Section docs: **Firewall**, **HighRiskServices**  
+- In-app Help page 11 (Recovery hubs)  
+
+---
+
+## StrictHandle / game launch failures
+
+**Recovery (preferred):** Main menu **9 → 6 Security mitigations → StrictHandle**
+
+- Disable system StrictHandle (reboot recommended), or  
+- Refresh Wow*/config exceptions only (keeps system ON), or  
+- Re-enable Bastion-style profile + exceptions  
+
+Also see the [games notice](#before-you-enable-exploitprotection-games-notice) above and GitHub issue #18.
+
+---
+
+## Controlled Folder Access / Network Protection false positives
+
+**Recovery:** **9 → 6 → Defender** — soften NP and/or CFA, or re-harden with CFA allow-path refresh. Prefer allowing a trusted app path before turning protections off permanently.
+
 
