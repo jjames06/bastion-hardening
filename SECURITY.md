@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.1    | Yes (current) |
+| 15.2    | Yes (current) |
+| 15.1    | Best-effort until you upgrade |
 | 15.0    | Best-effort until you upgrade |
 | < 15.0  | No        |
 

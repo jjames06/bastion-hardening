@@ -1,12 +1,12 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.1 FINAL
+    Bastion Hardening Framework v15.2 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     to avoid smart-quote / em-dash parse failures when pasting into editors.
 .NOTES
-    Version 15.1 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.2 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
 #>
 
 $ErrorActionPreference = "Continue"
@@ -14,7 +14,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.1"
+    ScriptVersion = "15.2"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
