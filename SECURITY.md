@@ -5,13 +5,12 @@
 | Version | Supported |
 |---------|-----------|
 | 15.7    | Yes (current) |
-| 15.6    | Best-effort until you upgrade |
-| 15.5    | Best-effort until you upgrade |
-| 15.4    | Best-effort until you upgrade |
-| 15.3    | Best-effort until you upgrade |
+| 15.3    | Best-effort until you upgrade (older MIT-era tag; prefer 15.7) |
 | 15.2    | Best-effort until you upgrade |
 | 15.1    | Best-effort until you upgrade |
 | 15.0    | Best-effort until you upgrade |
+| 15.6    | Unpublished (removed; use 15.7) |
+| 15.5 / 15.4 | Never published as release tags |
 | < 15.0  | No        |
 
 Prefer the **latest published release** of Bastion Hardening Framework for security fixes and product updates.
