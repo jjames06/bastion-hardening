@@ -395,6 +395,8 @@ Tracked on GitHub. Full write-up: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
 
 **Why it can break games:** Some loaders crash when StrictHandle is forced on. **World of Warcraft** was the confirmed case: Battle.net worked, but **Play** / `Wow.exe` failed with **Eidolon** and Crash.txt **`INVALID_HANDLE`** in **`Wow_loader.dll`**.
 
+**Why WoW specifically:** The game client/loader needs **deeper OS handle access at launch** than many titles (consistent with multi-process or admin/GM-style *view the user’s game window* style tooling). That is not “Bastion blocking games”; it is a **mitigation vs. game-architecture** conflict. Light launchers (and titles like **CS2**) often do not need the same exception.
+
 **What Bastion does now**
 
 - Turns **StrictHandle ON** for the system (security).  

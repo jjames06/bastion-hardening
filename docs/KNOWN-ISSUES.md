@@ -13,6 +13,10 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 **Why some games can break:** A few game loaders still touch invalid handles during startup. With system StrictHandle **ON** and **no** per-app exception, the process can die immediately.
 
+**Why World of Warcraft was hit hard:** WoW’s launch path is not a thin “double-click and go” process. The client/loader behaves like software that needs **deeper system access**—including multi-process patterns and admin/GM-style **application / game-window viewing** features that share or open handles early. Under normal Windows defaults that still works. Under **system-wide StrictHandle**, the same path can surface as **`INVALID_HANDLE`** in **`Wow_loader.dll`** and Blizzard’s **Eidolon** dialog. Battle.net (the storefront) stays fine because it is a lighter process.
+
+This is a **compatibility trade-off**, not anti-cheat “detection” of Bastion. The fix is a **per-app exception** for `Wow.exe` (and related `Wow*.exe`), not turning StrictHandle off for the whole PC.
+
 | Game / client | Status (maintainer-tested) |
 |---------------|----------------------------|
 | **World of Warcraft** (`Wow.exe`) | **Was broken** (Eidolon / `INVALID_HANDLE` in `Wow_loader.dll`) without an exception. Bastion now **auto-excepts** discovered `Wow*.exe`. |
@@ -65,6 +69,12 @@ Stack typically includes **`Wow_loader.dll`** and `ntdll.dll` very early.
 ### Cause
 
 System-wide **StrictHandle** from ExploitProtection, without a per-app exception for `Wow.exe`.
+
+### Why that setting collided with WoW
+
+StrictHandle treats certain invalid or recycled handle uses as fatal. WoW’s early loader (`Wow_loader.dll`) runs in a context that needs **broader handle / multi-process OS access** than many games—consistent with admin/GM-oriented **view the user’s game window** style tooling and related client services. That deeper access is legitimate for the game, but it is a poor match for a **blanket system StrictHandle** policy.
+
+Bastion’s response: keep StrictHandle for the machine; exempt only the game EXE(s) that need it.
 
 ### Path discovery (not only default C:\ folders)
 
