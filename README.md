@@ -388,19 +388,17 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 
 Tracked on GitHub; workarounds below. See also [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
-### World of Warcraft / Eidolon `INVALID_HANDLE` after ExploitProtection ([#18](https://github.com/jjames06/bastion-hardening/issues/18))
+### World of Warcraft / Eidolon `INVALID_HANDLE` vs StrictHandle ([#18](https://github.com/jjames06/bastion-hardening/issues/18))
 
-**Status:** Documented; product fix shipping (Bastion no longer enables system-wide **StrictHandle**, and re-Apply turns it off).
+**Status:** Handled in current Bastion — **system StrictHandle ON** for protection, with **automatic per-app StrictHandle OFF** for discovered `Wow*.exe` paths. Details: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
 
 | | |
 |--|--|
-| **Symptom** | Battle.net opens; **Play** on WoW (or direct `Wow.exe`) fails instantly with Blizzard **Eidolon**. Crash.txt summary: **`INVALID_HANDLE`** in **`Wow_loader.dll`**. |
-| **Cause** | Older Bastion **ExploitProtection** enabled system-wide `StrictHandle` (strict handle checks) via `Set-ProcessMitigation -System`. |
-| **Not the cause** | Missing Battle.net Agent folders alone, CFA, or firewall outbound block (launcher can still work). |
-| **Workaround (already applied)** | Elevated PowerShell, then **reboot**: `Set-ProcessMitigation -System -Disable StrictHandle` |
-| **Going forward** | Use a Bastion build that omits StrictHandle; or re-Apply **ExploitProtection** after updating so StrictHandle is disabled. |
-
-If you are hit: prefer the one-liner above before wiping Battle.net/Agent again.
+| **Symptom (older Applies)** | Battle.net works; **Play** / direct `Wow.exe` → Eidolon. Crash.txt: **`INVALID_HANDLE`** in **`Wow_loader.dll`**. |
+| **Cause** | System-wide `StrictHandle` without a WoW exception. |
+| **Current design** | ExploitProtection enables StrictHandle **system-wide**, then disables it **only** for found World of Warcraft `Wow*.exe` binaries. Other processes keep the protection. |
+| **If you install WoW later** | Re-Apply (ExploitProtection) so exceptions attach to new paths. |
+| **Emergency workaround** | `Set-ProcessMitigation -System -Disable StrictHandle` then reboot (turns it off for the whole PC). |
 
 ---
 
