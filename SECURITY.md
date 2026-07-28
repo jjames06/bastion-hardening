@@ -65,7 +65,7 @@ We will aim to acknowledge reports and prioritize fixes on a best-effort basis.
 - Site or network breakage after **Strict** browser mode or an optional **Encrypted Client Hello (ECH)** pack you explicitly enabled (documented compatibility trade-offs; revert with menu **6** → Default or System Restore)
 - Presence of Bastion log/config files under the documented data directory (expected; see [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md))
 - Missing `Bastion-LastApply.json` after first launch without Apply (expected; no Apply undo until Apply runs)
-- Game launch failures after older **ExploitProtection** that enabled system **StrictHandle** (e.g. WoW Eidolon `INVALID_HANDLE`) — documented known issue [#18](https://github.com/jjames06/bastion-hardening/issues/18) and [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md); not a remote code-execution vulnerability
+- Program/game launch failures after **ExploitProtection** / system **StrictHandle** (World of Warcraft was one documented example; others may break until reported) — known issue [#18](https://github.com/jjames06/bastion-hardening/issues/18), reverse via Recovery → 6 → StrictHandle, and [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md); not a remote code-execution vulnerability
 
 ## Safe usage checklist
 
