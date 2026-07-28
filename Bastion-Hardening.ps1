@@ -3227,11 +3227,15 @@ function Invoke-DryRun {
             } else {
                 Show-DryItem "ExploitProtection" "Would change" ("Enable DEP, SEHOP, BottomUp, HighEntropy, StrictHandle; {0}" -f $wowNote)
             }
-            Write-Host "      Note: StrictHandle can break some games (WoW did; auto-excepted when found). CS2 tested OK." -ForegroundColor DarkYellow
-            Write-Host "      If a game breaks: Disable StrictHandle (or except its EXE), then report game + path on GitHub #18." -ForegroundColor DarkYellow
+            Write-Host "      Games: StrictHandle can break some titles (WoW did; auto-excepted when found). CS2 tested OK." -ForegroundColor DarkYellow
+            Write-Host "      If a game breaks after Apply, reverse properly:" -ForegroundColor DarkYellow
+            Write-Host "        1) Main menu 9 Recovery > 6 Security mitigations > StrictHandle" -ForegroundColor DarkYellow
+            Write-Host "        2) Choose: disable system StrictHandle (whole PC)  OR  refresh Wow exceptions only" -ForegroundColor DarkYellow
+            Write-Host "        3) Reboot, confirm the game works, then report game name + full .exe path on GitHub #18" -ForegroundColor DarkYellow
+            Write-Host "      Prefer Recovery over raw PowerShell so status and options stay consistent with Bastion." -ForegroundColor DarkGray
         } catch {
             Show-DryItem "ExploitProtection" "Would change" "Apply mild mitigations + WoW StrictHandle exceptions (could not query ProcessMitigation)"
-            Write-Host "      Note: StrictHandle can break some games; see Help / docs/KNOWN-ISSUES.md / GitHub #18." -ForegroundColor DarkYellow
+            Write-Host "      If a game breaks: Recovery > 6 > StrictHandle (disable system StrictHandle, reboot), or Help / GitHub #18." -ForegroundColor DarkYellow
         }
     }
 
@@ -6947,7 +6951,7 @@ function Invoke-ApplyHardening {
     if ($script:Sections["ExploitProtection"]) {
         Write-Host "  [ExploitProtection]" -ForegroundColor Cyan
         Write-Host "    StrictHandle ON system-wide (security). WoW Wow*.exe get per-app OFF when found." -ForegroundColor DarkGray
-        Write-Host "    CS2 tested OK. Other games: if broken, revert StrictHandle and report on GitHub #18." -ForegroundColor DarkGray
+        Write-Host "    CS2 tested OK. If another game breaks: Recovery > 6 > StrictHandle (not a mystery toggle)." -ForegroundColor DarkGray
         try {
             $already = $false
             try {
@@ -6967,10 +6971,11 @@ function Invoke-ApplyHardening {
                 Write-Status "Mild system mitigations applied (DEP/SEHOP/ASLR + StrictHandle system-wide)" "Applied"
             }
             [void](Set-BastionStrictHandleExceptions)
-            Write-Host "    If you install WoW later, re-Apply so exceptions attach to new Wow*.exe paths." -ForegroundColor DarkGray
-            Write-Host "    If another game fails: Set-ProcessMitigation -System -Disable StrictHandle then reboot;" -ForegroundColor DarkGray
-            Write-Host "    report game name + full .exe path on github.com/jjames06/bastion-hardening/issues/18" -ForegroundColor DarkGray
-            Write-Host "    Reboot recommended after mitigation changes before testing games." -ForegroundColor DarkGray
+            Write-Host "    If you install WoW later, re-Apply (or Recovery > 6 > refresh exceptions) so new Wow*.exe paths are covered." -ForegroundColor DarkGray
+            Write-Host "    If another game fails:" -ForegroundColor DarkGray
+            Write-Host "      Recovery > 6 Security mitigations > StrictHandle > disable system StrictHandle, then reboot." -ForegroundColor DarkGray
+            Write-Host "      Or refresh exceptions / add full .exe path under StrictHandleExceptionPaths in Bastion-Config.json." -ForegroundColor DarkGray
+            Write-Host "      Confirm the game works, then report game + full path: github.com/jjames06/bastion-hardening/issues/18" -ForegroundColor DarkGray
         } catch {
             Write-Status ("Exploit Protection failed: {0}. Next step: Windows Security > App and browser control." -f $_.Exception.Message) "Failed"
         }
