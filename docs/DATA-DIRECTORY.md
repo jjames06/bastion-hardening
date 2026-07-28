@@ -51,7 +51,7 @@ Each candidate is **write-probed** (create folder if needed, write a short tempo
 | *(the directory itself)* | First elevated launch that can write | Root for all Bastion runtime files |
 | `BastionInstallers/` | First launch (path ensure) | Staging area for optional winget-related install work |
 | `browser-policy-backups/` | First launch (path ensure); files added when menu **6** changes policies | Snapshots of browser policy material before Bastion overwrites it |
-| `Bastion-Config.json` | **Seeded on first run** (or after a full wipe of the store) | Section toggles, selected catalog apps, install roots, per-browser **wanted** modes, ECH Yes/No flags, DNS provider |
+| `Bastion-Config.json` | **Seeded on first run** (or after a full wipe of the store) | Section toggles, selected catalog apps, install roots, per-browser **wanted** modes, ECH Yes/No flags, DNS provider; optional **`WowInstallRoots`** (folders) and **`StrictHandleExceptionPaths`** (full `.exe` paths) for custom game layouts / extra StrictHandle exceptions |
 | `Bastion-Session.json` | **Rewritten every launch** | Live browser posture vs wanted modes, whether prior config/Apply files existed, data directory path. Proves the store is real; **not** Apply history |
 | `Bastion-BrowserPolicies-State.json` | Created/updated when browser policy state is saved (every launch after init, and after menu **6** changes) | Wanted modes, live detection, last policy change summary |
 | `Bastion-Log-yyyyMMdd-HHmmss.txt` | Each session | Transcript lines for that run |

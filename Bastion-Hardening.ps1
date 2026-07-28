@@ -164,6 +164,9 @@ $script:ChromiumBastionValueNames = @(
 $script:ConfigLoaded        = $false
 $script:ApplyFailures       = [System.Collections.Generic.List[string]]::new()
 $script:BrowserPolicyLastChange = $null
+# Optional overrides (Bastion-Config.json): extra WoW roots and full EXE paths for StrictHandle exceptions.
+$script:WowInstallRoots = [System.Collections.Generic.List[string]]::new()
+$script:StrictHandleExceptionPaths = [System.Collections.Generic.List[string]]::new()
 
 # Curated public recursive DNS resolvers (IPv4). IDs are stable config keys.
 $script:DnsProviders = [ordered]@{
@@ -304,7 +307,7 @@ $script:SectionDocs = [ordered]@{
         Changes = "Set-ProcessMitigation -System enabling DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle. Then disables StrictHandle only for discovered Wow*.exe under common World of Warcraft install trees (per-app override; rest of system keeps StrictHandle)."
         Impact  = "System-wide handle strictness for most processes. WoW loaders that crash with Eidolon INVALID_HANDLE under system StrictHandle get a per-exe exception when Bastion finds them at Apply time."
         Revert  = "Windows Security > App and browser control > Exploit protection, or: Set-ProcessMitigation -System -Disable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle (elevated). System Restore for full rollback."
-        Notes   = "If you install WoW after Apply, re-run Apply (or ExploitProtection only via a full Apply) so Bastion can attach StrictHandle exceptions to new Wow*.exe paths. Manual: Set-ProcessMitigation -Name '<full path to Wow.exe>' -Disable StrictHandle. See GitHub issue #18 and docs/KNOWN-ISSUES.md."
+        Notes   = "Discovery: Battle.net Agent product.db/aggregate.json, uninstall registry, well-known folders on fixed drives, plus optional Bastion-Config.json WowInstallRoots and StrictHandleExceptionPaths for fully custom layouts. Re-Apply after installing WoW elsewhere. See GitHub issue #18 and docs/KNOWN-ISSUES.md."
     }
     "LSAProtection" = @{
         Intent  = "Protect the Local Security Authority process (credential material) with RunAsPPL."
@@ -1407,27 +1410,235 @@ function Add-CfaAllowPaths {
     }
 }
 
-function Get-BastionWowInstallRoots {
-    # Common WoW trees (Battle.net default + other fixed volumes Games\World of Warcraft).
+function ConvertTo-BastionNormalizedPath {
+    param([string]$Raw)
+    if ([string]::IsNullOrWhiteSpace($Raw)) { return $null }
+    $p = $Raw.Trim().Trim('"').Trim("'") -replace '/', '\'
+    $p = $p -replace "[\x00-\x1F]", ""
+    # Drop trailing junk sometimes glued by binary extractors
+    if ($p -match '^([A-Za-z]:\\[^:*?\"<>|]+)') { $p = $Matches[1] }
+    $p = $p.TrimEnd('\', ' ', "`t")
+    if ($p -notmatch '^[A-Za-z]:\\') { return $null }
+    try {
+        # Resolve . and .. when path exists
+        if (Test-Path -LiteralPath $p) {
+            return (Get-Item -LiteralPath $p).FullName
+        }
+    } catch {}
+    return $p
+}
+
+function Test-BastionLooksLikeWowRoot {
+    param([string]$Dir)
+    if ([string]::IsNullOrWhiteSpace($Dir) -or -not (Test-Path -LiteralPath $Dir -PathType Container)) { return $false }
+    # Do NOT treat a lone "data" folder as enough (Battle.net Agent also has data\).
+    $strong = @("_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_", "_ptr_", "_beta_", "_xptr_")
+    foreach ($m in $strong) {
+        if (Test-Path -LiteralPath (Join-Path $Dir $m)) { return $true }
+    }
+    if (Test-Path -LiteralPath (Join-Path $Dir "Wow.exe")) { return $true }
+    # .battle.net beside product dirs is a Blizzard game install marker when under a Warcraft-named folder
+    $leaf = Split-Path -Leaf $Dir
+    if ($leaf -match 'Warcraft|WoW' -and (Test-Path -LiteralPath (Join-Path $Dir ".battle.net"))) { return $true }
+    if ($leaf -match 'Warcraft|WoW' -and (Test-Path -LiteralPath (Join-Path $Dir "Data"))) { return $true }
+    return $false
+}
+
+function Resolve-BastionWowRootFromPath {
+    # Map a file or folder path from Battle.net metadata to a WoW install root folder.
+    param([string]$RawPath)
+    $p = ConvertTo-BastionNormalizedPath -Raw $RawPath
+    if (-not $p) { return $null }
+
+    $candidate = $p
+    if (Test-Path -LiteralPath $p -PathType Leaf) {
+        $candidate = Split-Path -Parent $p
+    }
+    if (-not $candidate) { return $null }
+
+    # Walk up a few levels from e.g. ...\World of Warcraft\_retail_ or ...\Launcher.exe
+    $cur = $candidate
+    for ($i = 0; $i -lt 6 -and $cur; $i++) {
+        $leaf = Split-Path -Leaf $cur
+        if ($leaf -match '^(World of Warcraft|_retail_|_classic_|_classic_era_|_classic_ptr_|_ptr_|_beta_|_xptr_|UTILS|Utils)$') {
+            if ($leaf -eq "World of Warcraft" -and (Test-BastionLooksLikeWowRoot -Dir $cur)) {
+                return $cur
+            }
+            if ($leaf -ne "World of Warcraft") {
+                $parent = Split-Path -Parent $cur
+                if ($parent -and (Test-BastionLooksLikeWowRoot -Dir $parent)) { return $parent }
+                if ($parent -and ((Split-Path -Leaf $parent) -eq "World of Warcraft")) { return $parent }
+            }
+        }
+        if ((Split-Path -Leaf $cur) -eq "World of Warcraft" -or (Test-BastionLooksLikeWowRoot -Dir $cur)) {
+            return $cur
+        }
+        $parent = Split-Path -Parent $cur
+        if (-not $parent -or $parent -eq $cur) { break }
+        $cur = $parent
+    }
+    if (Test-BastionLooksLikeWowRoot -Dir $candidate) { return $candidate }
+    return $null
+}
+
+function Get-BastionAsciiPathStringsFromFile {
+    # Pull Windows path-like ASCII runs from Battle.net binary/json metadata (product.db is protobuf-ish).
+    param([string]$FilePath, [int]$MaxBytes = 4MB)
+    $out = [System.Collections.Generic.List[string]]::new()
+    if (-not (Test-Path -LiteralPath $FilePath)) { return @() }
+    try {
+        $item = Get-Item -LiteralPath $FilePath -Force -ErrorAction Stop
+        if ($item.Length -le 0 -or $item.Length -gt $MaxBytes) { return @() }
+        $bytes = [System.IO.File]::ReadAllBytes($item.FullName)
+        $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+        # Forward-slash form (common in product.db): C:/Program Files (x86)/World of Warcraft
+        foreach ($m in [regex]::Matches($text, '[A-Za-z]:/(?:[^\\/:*?\"<>|\x00-\x1F]+/?)+')) {
+            $s = $m.Value.TrimEnd('/', '\', ' ', '"', "'")
+            if ($s.Length -ge 8 -and -not $out.Contains($s)) { [void]$out.Add($s) }
+        }
+        # Backslash form
+        foreach ($m in [regex]::Matches($text, '[A-Za-z]:\\(?:[^\\/:*?\"<>|\x00-\x1F]+\\)*[^\\/:*?\"<>|\x00-\x1F]*')) {
+            $s = $m.Value.TrimEnd('\', ' ', '"', "'")
+            if ($s.Length -ge 8 -and -not $out.Contains($s)) { [void]$out.Add($s) }
+        }
+    } catch {}
+    return @($out)
+}
+
+function Get-BastionWowRootsFromBattleNetMetadata {
+    # Battle.net Agent product.db / aggregate.json record real install locations (any drive / custom folder name nearby).
     $roots = [System.Collections.Generic.List[string]]::new()
+    $metaFiles = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in @(
+            (Join-Path $env:ProgramData "Battle.net\Agent\product.db"),
+            (Join-Path $env:ProgramData "Battle.net\Agent\.product.db"),
+            (Join-Path $env:ProgramData "Battle.net\Agent\aggregate.json")
+        )) {
+        if ((Test-Path -LiteralPath $f) -and -not $metaFiles.Contains($f)) { [void]$metaFiles.Add($f) }
+    }
+    # Any nested product.db under Agent (versioned layouts)
+    try {
+        $agentRoot = Join-Path $env:ProgramData "Battle.net\Agent"
+        if (Test-Path -LiteralPath $agentRoot) {
+            Get-ChildItem -LiteralPath $agentRoot -Filter "product.db" -Recurse -Force -ErrorAction SilentlyContinue |
+                Where-Object { $_.Length -gt 0 -and $_.Length -lt 4MB } |
+                ForEach-Object {
+                    if (-not $metaFiles.Contains($_.FullName)) { [void]$metaFiles.Add($_.FullName) }
+                }
+            Get-ChildItem -LiteralPath $agentRoot -Filter "aggregate.json" -Recurse -Force -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                    if (-not $metaFiles.Contains($_.FullName)) { [void]$metaFiles.Add($_.FullName) }
+                }
+        }
+    } catch {}
+
+    foreach ($mf in $metaFiles) {
+        try {
+            if ($mf -like "*.json") {
+                $raw = Get-Content -LiteralPath $mf -Raw -ErrorAction Stop
+                # Paths in JSON often use forward slashes
+                foreach ($m in [regex]::Matches($raw, '[A-Za-z]:(?:/|\\)(?:[^\"\\r\\n]+)+')) {
+                    $cand = $m.Value
+                    if ($cand -notmatch 'World of Warcraft|Warcraft|\\\\wow|_retail_|_classic_') { continue }
+                    $root = Resolve-BastionWowRootFromPath -RawPath $cand
+                    if ($root -and -not $roots.Contains($root)) { [void]$roots.Add($root) }
+                }
+            } else {
+                foreach ($s in @(Get-BastionAsciiPathStringsFromFile -FilePath $mf)) {
+                    if ($s -notmatch 'World of Warcraft') { continue }
+                    # Skip pure Battle.net client / Agent paths
+                    if ($s -match 'Battle\.net\\Agent|Battle\.net/Agent|ProgramData[/\\]Battle\.net') { continue }
+                    if ($s -match 'Battle\.net' -and $s -notmatch 'World of Warcraft') { continue }
+                    $root = Resolve-BastionWowRootFromPath -RawPath $s
+                    if ($root -and (Test-BastionLooksLikeWowRoot -Dir $root) -and -not $roots.Contains($root)) {
+                        [void]$roots.Add($root)
+                    }
+                }
+            }
+        } catch {
+            Write-Log ("Battle.net metadata scan failed ({0}): {1}" -f $mf, $_.Exception.Message) -Level Warning -NoConsole
+        }
+    }
+    return @($roots)
+}
+
+function Get-BastionWowRootsFromUninstallRegistry {
+    $roots = [System.Collections.Generic.List[string]]::new()
+    $hives = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    )
+    foreach ($hive in $hives) {
+        if (-not (Test-Path -LiteralPath $hive)) { continue }
+        try {
+            Get-ChildItem -LiteralPath $hive -ErrorAction SilentlyContinue | ForEach-Object {
+                try {
+                    $p = Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue
+                    $name = "$($p.DisplayName) $($p.Publisher)"
+                    if ($name -notmatch 'World of Warcraft|Blizzard') { return }
+                    if ($name -match 'Battle\.net' -and $name -notmatch 'Warcraft') { return }
+                    foreach ($field in @($p.InstallLocation, $p.DisplayIcon, $p.UninstallString)) {
+                        if (-not $field) { continue }
+                        $s = [string]$field
+                        # UninstallString may be quoted path + args
+                        if ($s -match '"([^"]+)"') { $s = $Matches[1] }
+                        elseif ($s -match '^([A-Za-z]:\\[^ ]+)') { $s = $Matches[1] }
+                        $root = Resolve-BastionWowRootFromPath -RawPath $s
+                        if ($root -and -not $roots.Contains($root)) { [void]$roots.Add($root) }
+                    }
+                } catch {}
+            }
+        } catch {}
+    }
+    return @($roots)
+}
+
+function Get-BastionWowInstallRoots {
+    # Merge: config overrides + Battle.net product.db/aggregate.json + uninstall registry + well-known paths on fixed drives.
+    $roots = [System.Collections.Generic.List[string]]::new()
+    function Add-Root([string]$r) {
+        $n = ConvertTo-BastionNormalizedPath -Raw $r
+        if (-not $n) { return }
+        if (-not (Test-Path -LiteralPath $n -PathType Container)) { return }
+        if (-not $roots.Contains($n)) { [void]$roots.Add($n) }
+    }
+
+    # 1) User/config overrides (any custom directory)
+    if ($script:WowInstallRoots) {
+        foreach ($r in @($script:WowInstallRoots)) { Add-Root $r }
+    }
+
+    # 2) Battle.net Agent metadata (handles non-default install folders Battle.net knows about)
+    foreach ($r in @(Get-BastionWowRootsFromBattleNetMetadata)) { Add-Root $r }
+
+    # 3) Windows uninstall keys
+    foreach ($r in @(Get-BastionWowRootsFromUninstallRegistry)) { Add-Root $r }
+
+    # 4) Well-known relative paths on every fixed volume
     foreach ($p in @(
             "${env:ProgramFiles(x86)}\World of Warcraft",
             "$env:ProgramFiles\World of Warcraft"
-        )) {
-        if ($p -and (Test-Path -LiteralPath $p) -and -not $roots.Contains($p)) { [void]$roots.Add($p) }
-    }
+        )) { Add-Root $p }
     try {
         $vols = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object {
             $_.DriveLetter -and $_.DriveType -eq 'Fixed'
         })
         foreach ($v in $vols) {
             $letter = "$($v.DriveLetter):"
-            foreach ($rel in @("World of Warcraft", "Games\World of Warcraft", "Program Files (x86)\World of Warcraft", "Program Files\World of Warcraft")) {
-                $c = Join-Path $letter $rel
-                if ((Test-Path -LiteralPath $c) -and -not $roots.Contains($c)) { [void]$roots.Add($c) }
+            foreach ($rel in @(
+                    "World of Warcraft",
+                    "Games\World of Warcraft",
+                    "Games\Blizzard\World of Warcraft",
+                    "Blizzard\World of Warcraft",
+                    "Program Files (x86)\World of Warcraft",
+                    "Program Files\World of Warcraft"
+                )) {
+                Add-Root (Join-Path $letter $rel)
             }
         }
     } catch {}
+
     return @($roots)
 }
 
@@ -1436,6 +1647,19 @@ function Get-BastionStrictHandleExceptionPaths {
     # Wow_loader.dll is loaded by Wow*.exe — exception on the EXE covers the loader crash (issue #18).
     # Only scan known product subfolders (not Data\) so Apply stays fast on large installs.
     $paths = [System.Collections.Generic.List[string]]::new()
+    function Add-Exe([string]$e) {
+        $n = ConvertTo-BastionNormalizedPath -Raw $e
+        if (-not $n) { return }
+        if (-not (Test-Path -LiteralPath $n -PathType Leaf)) { return }
+        if ($n -notmatch '\.exe$') { return }
+        if (-not $paths.Contains($n)) { [void]$paths.Add($n) }
+    }
+
+    # Explicit full EXE paths from config (any game or custom Wow path)
+    if ($script:StrictHandleExceptionPaths) {
+        foreach ($e in @($script:StrictHandleExceptionPaths)) { Add-Exe $e }
+    }
+
     $productDirs = @(
         "_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_",
         "_ptr_", "_beta_", "_xptr_", "UTILS", "Utils"
@@ -1446,23 +1670,15 @@ function Get-BastionStrictHandleExceptionPaths {
                 $dir = Join-Path $root $rel
                 if (-not (Test-Path -LiteralPath $dir)) { continue }
                 Get-ChildItem -LiteralPath $dir -Filter "Wow*.exe" -File -ErrorAction SilentlyContinue |
-                    ForEach-Object {
-                        if (-not $paths.Contains($_.FullName)) { [void]$paths.Add($_.FullName) }
-                    }
-                # One level deeper (e.g. rare layout)
+                    ForEach-Object { Add-Exe $_.FullName }
                 Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue |
                     ForEach-Object {
                         Get-ChildItem -LiteralPath $_.FullName -Filter "Wow*.exe" -File -ErrorAction SilentlyContinue |
-                            ForEach-Object {
-                                if (-not $paths.Contains($_.FullName)) { [void]$paths.Add($_.FullName) }
-                            }
+                            ForEach-Object { Add-Exe $_.FullName }
                     }
             }
-            # Root-level Wow*.exe if any
             Get-ChildItem -LiteralPath $root -Filter "Wow*.exe" -File -ErrorAction SilentlyContinue |
-                ForEach-Object {
-                    if (-not $paths.Contains($_.FullName)) { [void]$paths.Add($_.FullName) }
-                }
+                ForEach-Object { Add-Exe $_.FullName }
         } catch {}
     }
     return @($paths)
@@ -1472,10 +1688,11 @@ function Set-BastionStrictHandleExceptions {
     # Disable StrictHandle only for discovered game EXEs (full path required; bare names collide).
     $paths = @(Get-BastionStrictHandleExceptionPaths)
     if ($paths.Count -eq 0) {
-        Write-Status "StrictHandle system ON; no Wow*.exe found for exception (re-Apply after installing WoW)" "Info"
+        Write-Status "StrictHandle system ON; no Wow*.exe found for exception (install WoW, fix path, or set WowInstallRoots / StrictHandleExceptionPaths in Bastion-Config.json, then re-Apply)" "Info"
         return 0
     }
     $ok = 0
+    Write-Host ("    StrictHandle exceptions: {0} target EXE(s)" -f $paths.Count) -ForegroundColor DarkGray
     foreach ($full in $paths) {
         try {
             Set-ProcessMitigation -Name $full -Disable StrictHandle -ErrorAction Stop
@@ -2329,6 +2546,8 @@ function Save-BastionConfig {
             BrowserPolicyModes = [ordered]@{}
             BrowserEchLocks = [ordered]@{}
             DnsProviderId = $script:DnsProviderId
+            WowInstallRoots = @($script:WowInstallRoots)
+            StrictHandleExceptionPaths = @($script:StrictHandleExceptionPaths)
         }
         foreach ($k in $script:Sections.Keys) { $data.Sections[$k] = [bool]$script:Sections[$k] }
         foreach ($k in $script:ProgramInstallRoots.Keys) { $data.ProgramInstallRoots[$k] = $script:ProgramInstallRoots[$k] }
@@ -2410,6 +2629,25 @@ function Load-BastionConfig {
         if ($data.GlobalInstallRoot) {
             $check = Test-SafeInstallRoot -Path ([string]$data.GlobalInstallRoot) -AllowedVolumes $vols
             $script:GlobalInstallRoot = $(if ($check.Ok) { $check.Path } else { $null })
+        }
+        # Optional StrictHandle / WoW discovery overrides (any path the user trusts).
+        $script:WowInstallRoots = [System.Collections.Generic.List[string]]::new()
+        if ($data.WowInstallRoots) {
+            foreach ($r in @($data.WowInstallRoots)) {
+                $n = ConvertTo-BastionNormalizedPath -Raw ([string]$r)
+                if ($n -and (Test-Path -LiteralPath $n -PathType Container) -and -not $script:WowInstallRoots.Contains($n)) {
+                    [void]$script:WowInstallRoots.Add($n)
+                }
+            }
+        }
+        $script:StrictHandleExceptionPaths = [System.Collections.Generic.List[string]]::new()
+        if ($data.StrictHandleExceptionPaths) {
+            foreach ($e in @($data.StrictHandleExceptionPaths)) {
+                $n = ConvertTo-BastionNormalizedPath -Raw ([string]$e)
+                if ($n -and (Test-Path -LiteralPath $n -PathType Leaf) -and $n -match '\.exe$' -and -not $script:StrictHandleExceptionPaths.Contains($n)) {
+                    [void]$script:StrictHandleExceptionPaths.Add($n)
+                }
+            }
         }
         $script:ConfigLoaded = $true
     } catch {
@@ -4915,7 +5153,7 @@ function Show-Help {
         "Created automatically on first elevated launch. Prefer durable paths over wipeable temp.",
         "Resolve order for existing state: C:\Temp\Bastion, legacy C:\Temp, %ProgramData%\Bastion, %LOCALAPPDATA%\Bastion, then %TEMP%\Bastion (last).",
         "New installs prefer C:\Temp\Bastion, then ProgramData, then LocalAppData, then legacy flat C:\Temp. %TEMP%\Bastion is last-resort only.",
-        "Bastion-Config.json - section toggles, selected apps, install roots, per-browser wanted modes and ECH Yes/No flags, DNS provider (seeded on first run; ECH defaults off).",
+        "Bastion-Config.json - section toggles, selected apps, install roots, per-browser wanted modes and ECH Yes/No flags, DNS provider, optional WowInstallRoots and StrictHandleExceptionPaths for custom game paths (seeded on first run; ECH defaults off).",
         "Bastion-Session.json - rewritten every launch: live browser posture vs wanted modes; proves the store is real. Not Apply history.",
         "Bastion-BrowserPolicies-State.json - wanted + live browser modes, ECH live/wanted, last policy change summary.",
         "browser-policy-backups/ - snapshots taken before Bastion overwrites browser policies (menu 6).",
@@ -4941,8 +5179,9 @@ function Show-Help {
         "Optional HKLM policy values for News/Interests may be denied by Windows even when elevated; that is a Soft skip, not a hard failure.",
         "Some installers ignore custom --location after path validation succeeds.",
         "## Games / ExploitProtection (StrictHandle)",
-        "Bastion enables system-wide StrictHandle for protection, then sets per-app StrictHandle OFF for discovered Wow*.exe (World of Warcraft). Other processes keep StrictHandle.",
-        "Older Builds without exceptions could crash WoW at Play with Eidolon INVALID_HANDLE in Wow_loader.dll (GitHub issue #18). If you install WoW after Apply, re-Apply so exceptions attach.",
+        "Bastion enables system-wide StrictHandle for protection, then sets per-app StrictHandle OFF for discovered Wow*.exe. Other processes keep StrictHandle.",
+        "Discovery uses Battle.net Agent product.db/aggregate.json, uninstall registry, well-known folders on fixed drives, and optional Bastion-Config.json WowInstallRoots / StrictHandleExceptionPaths for custom layouts.",
+        "Older builds without exceptions could crash WoW at Play with Eidolon INVALID_HANDLE (issue #18). Install WoW after Apply? Re-Apply. Fully custom path? Add WowInstallRoots or StrictHandleExceptionPaths to config.",
         "Emergency only: Set-ProcessMitigation -System -Disable StrictHandle then reboot (disables for entire PC).",
         "## Deliberate non-goals",
         "No aggressive system-wide exploit mitigation sets that previously caused black-screen logons on some hardware.",
