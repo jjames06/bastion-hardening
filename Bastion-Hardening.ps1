@@ -7,6 +7,7 @@
     to avoid smart-quote / em-dash parse failures when pasting into editors.
 .NOTES
     Version 15.6 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Licensed under GNU GPLv3 - see LICENSE in the project root.
 #>
 
 $ErrorActionPreference = "Continue"

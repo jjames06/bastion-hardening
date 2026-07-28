@@ -4,7 +4,7 @@
 
 Version **15.6**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)](#how-to-install-properly)
 
@@ -431,7 +431,7 @@ Dry Run, Apply, and Recovery use the same guidance. Full detail: [docs/KNOWN-ISS
 | `Bastion-Hardening.ps1` | Main script (hardening, menus, data store, help) |
 | `Bastion-Hardening.bat` | Elevated launcher |
 | `Bastion-Banner.utf8.txt` | Optional Unicode banner |
-| `LICENSE` | MIT License + additional notice |
+| `LICENSE` | GNU GPLv3 + Bastion system-change disclaimer |
 | `SECURITY.md` | Vulnerability reporting and safe-usage notes |
 | `README.md` | This documentation |
 | `docs/DATA-DIRECTORY.md` | Runtime files and folders Bastion creates |
@@ -464,6 +464,12 @@ When reporting a bug, include Windows version (**Settings -> System -> About** o
 
 ## License
 
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for the full text and the additional disclaimer about system changes and risk.
+This project is licensed under the **GNU General Public License v3.0** (GPLv3).
+
+- You may use, study, modify, and redistribute Bastion, including commercially, under the terms of GPLv3.
+- If you **distribute** a modified version, you must also license it under GPLv3 and provide the **complete corresponding source code**. That is intentional: it keeps the project free software and blocks closed proprietary forks of Bastion itself.
+- See [LICENSE](LICENSE) for the full GPLv3 text, the project copyright notice, and the **additional disclaimer** about system changes and risk.
+
+**Earlier published releases** that shipped with an MIT `LICENSE` file remain available under the license terms included in those release artifacts. Current `main` and future releases based on it use GPLv3.
 
 **Use at your own risk.**
