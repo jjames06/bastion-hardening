@@ -6,49 +6,62 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 ## World of Warcraft / Eidolon `INVALID_HANDLE` vs StrictHandle — [#18](https://github.com/jjames06/bastion-hardening/issues/18)
 
-**Status:** Understood and **handled in current Bastion**.
+**Status:** Handled in current Bastion with **broad path discovery**.
 
-| Mode | Behavior |
-|------|----------|
-| **Current Bastion** | Enables system-wide **StrictHandle** for protection, then sets **per-app StrictHandle OFF** for discovered **`Wow*.exe`** under common World of Warcraft install paths. Rest of the system keeps StrictHandle. |
-| **Older Bastion** | Enabled system StrictHandle with **no** game exceptions → WoW Play / `Wow.exe` could crash instantly. |
+| Layer | Behavior |
+|-------|----------|
+| **System** | StrictHandle **ON** (protect most processes) |
+| **Exceptions** | StrictHandle **OFF** for discovered `Wow*.exe` under resolved WoW install roots |
 
-### Symptoms (when unmitigated)
+### How Bastion finds WoW on different PCs
 
-- Battle.net works; **Play** on WoW (or direct `Wow.exe`) fails with **Eidolon**.
-- `_retail_\errors\…\Crash.txt` summary: **`INVALID_HANDLE`**, stack through **`Wow_loader.dll`**.
+Discovery is a **union** of:
 
-### Why a system kill-switch is not required anymore
+1. **Battle.net Agent metadata** — `%ProgramData%\Battle.net\Agent\product.db`, `.product.db`, `aggregate.json` (and nested copies). These store real install paths Battle.net knows about, including custom drives/folders.  
+2. **Windows uninstall registry** — InstallLocation / DisplayIcon for Blizzard / World of Warcraft entries.  
+3. **Well-known folders** on every **fixed** drive letter, e.g. `X:\World of Warcraft`, `X:\Games\World of Warcraft`, Program Files variants.  
+4. **Optional config overrides** in `Bastion-Config.json` (under the Bastion data directory):
+   - `WowInstallRoots`: array of install **folders**  
+   - `StrictHandleExceptionPaths`: array of full **`.exe` paths** (any game you want excepted)
 
-Windows process mitigations support:
+Under each root, Bastion scans product subfolders only (`_retail_`, classic/PTR variants, `UTILS`, etc.) — not the huge `Data\` tree.
 
-1. **System** policy: StrictHandle **ON** (protects most processes).  
-2. **Image / full path** policy: StrictHandle **OFF** for that EXE only (WoW exception).
+### Custom layout example (`Bastion-Config.json` fragment)
 
-`Wow_loader.dll` is loaded by `Wow.exe`, so the exception on the game EXE is the correct scope.
-
-### If WoW still fails after a new Apply
-
-1. Confirm exception paths were found (Apply log should list `StrictHandle exception (OFF for this app): …\Wow.exe`).  
-2. If you installed WoW **after** Apply, **re-Apply** ExploitProtection so Bastion can discover new `Wow*.exe` paths.  
-3. Manual one-off:
-
-```powershell
-Set-ProcessMitigation -Name "C:\Program Files (x86)\World of Warcraft\_retail_\Wow.exe" -Disable StrictHandle
+```json
+{
+  "WowInstallRoots": [
+    "D:\\Blizzard\\MyWoW"
+  ],
+  "StrictHandleExceptionPaths": [
+    "D:\\Blizzard\\MyWoW\\_retail_\\Wow.exe",
+    "E:\\Games\\SomeOtherTitle\\game.exe"
+  ]
+}
 ```
 
-(Use your real full path; reboot if needed.)
+Re-run Bastion (load config) and **Apply** with ExploitProtection enabled. Paths must exist on disk when loaded.
 
-4. Emergency only (turns StrictHandle off for **everyone**):
+### If you install WoW after Apply
+
+Re-Apply so discovery runs again (metadata + folders).
+
+### Symptoms when unmitigated (older Applies / missed path)
+
+- Battle.net works; **Play** / direct `Wow.exe` → **Eidolon**.  
+- Crash.txt: **`INVALID_HANDLE`**, stack through **`Wow_loader.dll`**.
+
+### Emergency (disables StrictHandle for the whole PC)
 
 ```powershell
 Set-ProcessMitigation -System -Disable StrictHandle
 ```
 
-### What usually does *not* fix INVALID_HANDLE
+Then reboot.
 
-- Wiping Battle.net / Agent alone while Crash.txt still says `INVALID_HANDLE`  
-- CFA / firewall-only changes when the launcher already works  
+### Reporting other games
+
+Comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) with game name, fail mode, and full EXE path so we can extend the same exception pattern.
 
 ### Related
 

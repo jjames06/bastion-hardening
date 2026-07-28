@@ -390,15 +390,17 @@ Tracked on GitHub; workarounds below. See also [Issues](https://github.com/jjame
 
 ### World of Warcraft / Eidolon `INVALID_HANDLE` vs StrictHandle ([#18](https://github.com/jjames06/bastion-hardening/issues/18))
 
-**Status:** Handled in current Bastion — **system StrictHandle ON** for protection, with **automatic per-app StrictHandle OFF** for discovered `Wow*.exe` paths. Details: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
+**Status:** Handled in current Bastion — **system StrictHandle ON**, with **automatic per-app StrictHandle OFF** for discovered `Wow*.exe`. Details: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
 
 | | |
 |--|--|
 | **Symptom (older Applies)** | Battle.net works; **Play** / direct `Wow.exe` → Eidolon. Crash.txt: **`INVALID_HANDLE`** in **`Wow_loader.dll`**. |
 | **Cause** | System-wide `StrictHandle` without a WoW exception. |
-| **Current design** | ExploitProtection enables StrictHandle **system-wide**, then disables it **only** for found World of Warcraft `Wow*.exe` binaries. Other processes keep the protection. |
-| **If you install WoW later** | Re-Apply (ExploitProtection) so exceptions attach to new paths. |
-| **Emergency workaround** | `Set-ProcessMitigation -System -Disable StrictHandle` then reboot (turns it off for the whole PC). |
+| **Current design** | System StrictHandle stays on for the PC; exceptions only for discovered game EXEs. |
+| **Path discovery** | Battle.net `product.db` / `aggregate.json`, uninstall registry, well-known folders on **all fixed drives**, plus optional `WowInstallRoots` / `StrictHandleExceptionPaths` in `Bastion-Config.json` for fully custom directories. |
+| **If you install WoW later** | Re-Apply so discovery runs again. |
+| **Other games break?** | Comment on [#18](https://github.com/jjames06/bastion-hardening/issues/18) with the full `.exe` path so we can extend the same pattern. |
+| **Emergency workaround** | `Set-ProcessMitigation -System -Disable StrictHandle` then reboot (whole PC). |
 
 ---
 
