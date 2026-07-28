@@ -2,7 +2,7 @@
 
 **Selective · State-aware · Safety-first Windows hardening for a personal workstation**
 
-Version **15.2**
+Version **15.3**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -71,7 +71,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.2** | Dry Run, durable data store, StrictHandle + WoW exceptions, browser/ECH as of 2026-07-28 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.3** | Full product line through ms-gamingoverlay silence, WoW path discovery, StrictHandle docs as of 2026-07-28 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions → Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -156,8 +156,8 @@ Best for most people.
 
 1. Open the latest release:  
    **https://github.com/jjames06/bastion-hardening/releases/latest**  
-   (or [v15.1](https://github.com/jjames06/bastion-hardening/releases/tag/v15.1) if you want a pinned version; older [v15.0](https://github.com/jjames06/bastion-hardening/releases/tag/v15.0) remains available)
-2. Download **`bastion-hardening-v15.1.zip`** (or the current release asset with a similar name).
+   (or [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) if you want a pinned version; older v15.2 / v15.1 / v15.0 remain available)
+2. Download **`bastion-hardening-v15.3.zip`** (or the current release asset with a similar name).
 3. Right-click the zip → **Properties** → if you see **Unblock**, check it → **OK**  
    (reduces SmartScreen / “downloaded from the internet” friction on the extracted scripts)
 4. Extract the zip to a folder **you** control, for example:  
