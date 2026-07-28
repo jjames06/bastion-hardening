@@ -14,10 +14,12 @@ Version **15.6**
 
 <p align="center">
   <a href="#how-to-install-properly"><strong>Install guide</strong></a> ·
+  <a href="docs/wiki/Home.md"><strong>Handbook</strong></a> ·
   <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> ·
   <a href="#known-issues"><strong>Known issues</strong></a> ·
   <a href="#browser-policies"><strong>Browser / ECH</strong></a> ·
   <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> ·
+  <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a> ·
   <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> ·
   <a href="SECURITY.md"><strong>Security</strong></a>
 </p>
@@ -26,6 +28,8 @@ Version **15.6**
 
 | Document | Topic |
 |----------|--------|
+| [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** — Quick start, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
+| [GitHub Wiki](https://github.com/jjames06/bastion-hardening/wiki) | Same handbook on the Wiki tab (synced from `docs/wiki/`) |
 | [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) | What folders/files Bastion creates, where, and why |
 | [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) | Per-browser modes and Encrypted Client Hello (ECH) - never default |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting and safe usage |

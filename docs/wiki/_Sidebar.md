@@ -1,0 +1,7 @@
+﻿* [Home](Home)
+* [Quick start](Quick-start)
+* [Recovery cookbook](Recovery-cookbook)
+* [Games and StrictHandle](Games-and-StrictHandle)
+* [FAQ](FAQ)
+* [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest)
+* [Discussions](https://github.com/jjames06/bastion-hardening/discussions)
