@@ -2,7 +2,7 @@
 
 **Selective · State-aware · Safety-first Windows hardening for a personal workstation**
 
-Version **15.1**
+Version **15.2**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -71,7 +71,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.1** | Dry Run, menus, durable data store, DNS/firewall/browser+ECH posture as of 2026-07-27 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.2** | Dry Run, durable data store, StrictHandle + WoW exceptions, browser/ECH as of 2026-07-28 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions → Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
