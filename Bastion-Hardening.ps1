@@ -300,11 +300,11 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Pairs well with process creation auditing if you enable that separately outside Bastion."
     }
     "ExploitProtection" = @{
-        Intent  = "Apply a mild, compatibility-safe system exploit mitigation profile."
-        Changes = "Set-ProcessMitigation -System enabling DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle only."
-        Impact  = "Hardens memory protections for many processes without the aggressive system-wide options that previously caused black-screen login issues on some PCs."
-        Revert  = "Windows Security > App and browser control > Exploit protection, or System Restore."
-        Notes   = "Aggressive mitigations are intentionally omitted. Dry Run inspects DEP/SEHOP state when queryable."
+        Intent  = "Apply a mild system exploit mitigation profile that stays compatible with common games and launchers."
+        Changes = "Set-ProcessMitigation -System enabling DEP, SEHOP, BottomUp, and HighEntropy only. Does NOT enable StrictHandle (strict handle checks)."
+        Impact  = "Hardens memory protections for many processes without the aggressive options that caused black-screen logons or game loader crashes on some PCs."
+        Revert  = "Windows Security > App and browser control > Exploit protection, or: Set-ProcessMitigation -System -Disable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle (elevated). System Restore for full rollback."
+        Notes   = "StrictHandle is intentionally omitted: it can crash World of Warcraft at Play/Wow.exe with Eidolon INVALID_HANDLE in Wow_loader.dll (see GitHub issue #18). If an older Bastion Apply already enabled StrictHandle, disable it with Set-ProcessMitigation -System -Disable StrictHandle and reboot. Dry Run inspects DEP/SEHOP when queryable."
     }
     "LSAProtection" = @{
         Intent  = "Protect the Local Security Authority process (credential material) with RunAsPPL."
@@ -2673,9 +2673,9 @@ function Invoke-DryRun {
             $sehOn = $true
             try { $sehOn = ($mit.SEHOP.Enable -eq "ON" -or "$($mit.SEHOP.Enable)" -eq "ON" -or $mit.SEHOP.Enable -eq $true) } catch {}
             if ($depOn -and $sehOn) {
-                Show-DryItem "ExploitProtection" "Already OK" "DEP/SEHOP already ON (mild profile present)"
+                Show-DryItem "ExploitProtection" "Already OK" "DEP/SEHOP already ON (mild profile; StrictHandle not applied by Bastion)"
             } else {
-                Show-DryItem "ExploitProtection" "Would change" "Apply mild system mitigations (DEP, SEHOP, BottomUp, HighEntropy, StrictHandle)"
+                Show-DryItem "ExploitProtection" "Would change" "Apply mild system mitigations (DEP, SEHOP, BottomUp, HighEntropy; no StrictHandle)"
             }
         } catch {
             Show-DryItem "ExploitProtection" "Would change" "Apply mild mitigations (could not query ProcessMitigation)"
@@ -4847,8 +4847,12 @@ function Show-Help {
         "Browser Strict (HTTPS-Only) and an optional Encrypted Client Hello (ECH) pack can break some sites or networks; ECH is never applied unless you choose Yes. Use different modes per installed browser if needed.",
         "Optional HKLM policy values for News/Interests may be denied by Windows even when elevated; that is a Soft skip, not a hard failure.",
         "Some installers ignore custom --location after path validation succeeds.",
+        "## Known issue (games / ExploitProtection)",
+        "Older Bastion builds enabled system-wide StrictHandle (strict handle checks). That can crash World of Warcraft at Play or Wow.exe with Eidolon and Crash.txt summary INVALID_HANDLE in Wow_loader.dll.",
+        "Workaround: elevated Set-ProcessMitigation -System -Disable StrictHandle then reboot. Current Bastion does not enable StrictHandle and turns it off on ExploitProtection Apply. See GitHub issue #18.",
         "## Deliberate non-goals",
         "No aggressive system-wide exploit mitigation sets that previously caused black-screen logons on some hardware.",
+        "No system-wide StrictHandle (breaks some game loaders such as WoW).",
         "No automatic NVIDIA App or BIOS flashing from winget.",
         "No claim of complete malware prevention - Bastion reduces exposure and improves visibility.",
         "## Version",
@@ -5282,11 +5286,18 @@ function Invoke-ApplyHardening {
                 $depOn = ($mit.DEP.Enable -eq "ON" -or "$($mit.DEP.Enable)" -eq "ON")
                 if ($depOn) { $already = $true }
             } catch {}
-            Set-ProcessMitigation -System -Enable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle -ErrorAction Stop
+            # StrictHandle intentionally omitted: system-wide strict handle checks break some game
+            # loaders (e.g. WoW Wow_loader.dll -> INVALID_HANDLE / Eidolon). See GitHub issue #18.
+            Set-ProcessMitigation -System -Enable DEP,SEHOP,BottomUp,HighEntropy -ErrorAction Stop
+            # Best-effort: if a prior Bastion (or other tool) left StrictHandle on, turn it off so
+            # re-Apply heals affected gaming PCs without a manual one-liner.
+            try {
+                Set-ProcessMitigation -System -Disable StrictHandle -ErrorAction SilentlyContinue
+            } catch {}
             if ($already) {
-                Write-Status "Mild system mitigations already present (re-applied)" "Already"
+                Write-Status "Mild system mitigations already present (re-applied; StrictHandle not enabled)" "Already"
             } else {
-                Write-Status "Mild system mitigations applied" "Applied"
+                Write-Status "Mild system mitigations applied (DEP/SEHOP/ASLR; StrictHandle off)" "Applied"
             }
         } catch {
             Write-Status ("Exploit Protection failed: {0}. Next step: Windows Security > App and browser control." -f $_.Exception.Message) "Failed"
