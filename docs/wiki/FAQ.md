@@ -62,8 +62,21 @@ Firewall Apply locks remote groups on purpose. Recovery **→ 3 Network →** Re
 - Bugs: [Issues](https://github.com/jjames06/bastion-hardening/issues)  
 - Security: [SECURITY.md](https://github.com/jjames06/bastion-hardening/blob/main/SECURITY.md) (do not post full exploit details publicly for new vulns)
 
+## What license is Bastion under?
+
+**GNU GPLv3** (see [LICENSE](https://github.com/jjames06/bastion-hardening/blob/main/LICENSE) and [NOTICE](https://github.com/jjames06/bastion-hardening/blob/main/NOTICE)).
+
+| Allowed | Required if you distribute a modified Bastion |
+|---------|-----------------------------------------------|
+| Use, study, modify | Keep the distribution under **GPLv3** |
+| Share and even sell **GPL-compliant** copies that include source | Provide the **complete corresponding source code** for what you ship |
+
+**Honest limit:** GPLv3 does **not** ban selling software. It bans taking Bastion, making closed proprietary changes, and selling that **without** releasing source under GPLv3. Closed proprietary forks of Bastion are not allowed for distributed modified works.
+
+Older release zips that still contain an MIT `LICENSE` file remain under the terms in those artifacts. Current `main` and **v15.7+** use GPLv3.
+
 ## Can I contribute?
 
-Yes — clear bug reports, game exception reports (name + full `.exe` path), documentation fixes, and pull requests are welcome on a best-effort basis.
+Yes - clear bug reports, game exception reports (name + full `.exe` path), documentation fixes, and pull requests are welcome on a best-effort basis. Contributions are accepted under the same GPLv3 terms.
 
 Back to [Home](Home).

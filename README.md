@@ -1,8 +1,8 @@
-﻿# Bastion Hardening Framework
+# Bastion Hardening Framework
 
-**Selective Â· State-aware Â· Safety-first Windows hardening for a personal workstation**
+**Selective  -  State-aware  -  Safety-first Windows hardening for a personal workstation**
 
-Version **15.6**
+Version **15.7**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -13,14 +13,14 @@ Version **15.6**
 </p>
 
 <p align="center">
-  <a href="#how-to-install-properly"><strong>Install guide</strong></a> Â·
-  <a href="docs/wiki/Home.md"><strong>Handbook</strong></a> Â·
-  <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> Â·
-  <a href="#known-issues"><strong>Known issues</strong></a> Â·
-  <a href="#browser-policies"><strong>Browser / ECH</strong></a> Â·
-  <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> Â·
-  <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a> Â·
-  <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> Â·
+  <a href="#how-to-install-properly"><strong>Install guide</strong></a>  - 
+  <a href="docs/wiki/Home.md"><strong>Handbook</strong></a>  - 
+  <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a>  - 
+  <a href="#known-issues"><strong>Known issues</strong></a>  - 
+  <a href="#browser-policies"><strong>Browser / ECH</strong></a>  - 
+  <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a>  - 
+  <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a>  - 
+  <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a>  - 
   <a href="SECURITY.md"><strong>Security</strong></a>
 </p>
 
@@ -28,7 +28,7 @@ Version **15.6**
 
 | Document | Topic |
 |----------|--------|
-| [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** â€” Quick start, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
+| [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** â€" Quick start, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
 | [GitHub Wiki](https://github.com/jjames06/bastion-hardening/wiki) | Same handbook on the Wiki tab (synced from `docs/wiki/`) |
 | [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) | What folders/files Bastion creates, where, and why |
 | [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) | Per-browser modes and Encrypted Client Hello (ECH) - never default |
@@ -75,7 +75,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.6** | Modular Recovery hubs, clear StrictHandle reverse/report guidance, as of 2026-07-28 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.7** | GPLv3; modular Recovery hubs; StrictHandle guidance; handbook/wiki; as of 2026-07-28 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions -> Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -152,7 +152,7 @@ Bastion is **not** an MSI installer. You download the files, keep them together,
 
 1. Use a **personal** PC you fully control (not work, school, domain-joined, or MDM-managed).
 2. Prefer the **official** release or this GitHub repository only - not random re-uploads.
-3. Skim [LICENSE](LICENSE) and the warnings at the top of this README.
+3. Skim [LICENSE](LICENSE), [NOTICE](NOTICE), and the warnings at the top of this README.
 4. Optionally read the script (`Bastion-Hardening.ps1`) before the first Apply.
 
 ### Method A - Release zip (recommended)
@@ -162,7 +162,7 @@ Best for most people.
 1. Open the latest release:  
    **https://github.com/jjames06/bastion-hardening/releases/latest**  
    (pinned older tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain available if you need them)
-2. Download **`bastion-hardening-v15.6.zip`** (or the current release asset with a similar name).
+2. Download **`bastion-hardening-v15.7.zip`** (or the current release asset with a similar name).
 3. Right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**  
    (reduces SmartScreen / "downloaded from the internet" friction on the extracted scripts)
 4. Extract the zip to a folder **you** control, for example:  
@@ -323,7 +323,7 @@ Bastion will **not** enable Encrypted Client Hello (ECH) because you installed B
 |--------|-----|
 | Revert one browser (and its ECH pack) | Menu **6** -> that browser -> **Default** |
 | Bulletproof rollback | System Restore (menu **13** / **R**) |
-| Verify after restart | Firefox `about:policies` Â· Chrome `chrome://policy` Â· Brave `brave://policy` |
+| Verify after restart | Firefox `about:policies`  -  Chrome `chrome://policy`  -  Brave `brave://policy` |
 | Dry Run / Security audit | Live vs saved mode and Encrypted Client Hello (ECH) for **installed** browsers only |
 
 ---
@@ -385,7 +385,7 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 - **OneDrive & BloatApps** - Hard to reverse. System Restore is the reliable recovery path.
 - **Browser policies / Encrypted Client Hello (ECH)** - BrowserPolicies section defaults off. ECH is **never** applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only and ECH can break some sites or networks. Details: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
 - **Undo** - Restores tracked services and firewall groups from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers. Prefer Recovery hubs when you know what broke.
-- **Recovery hubs (menu 9)** - One main-menu entry, six hubs with live status: **1** Undo Â· **2** Services (Spooler / high-risk / Xbox) Â· **3** Network (remote access, LAN discovery, DNS reset) Â· **4** Browser policies Â· **5** Apps and UI (Copilot, Widgets, Game Bar) Â· **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
+- **Recovery hubs (menu 9)** - One main-menu entry, six hubs with live status: **1** Undo  -  **2** Services (Spooler / high-risk / Xbox)  -  **3** Network (remote access, LAN discovery, DNS reset)  -  **4** Browser policies  -  **5** Apps and UI (Copilot, Widgets, Game Bar)  -  **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
 - **DNS** - Optional. Choose a provider or leave DNS unchanged; VPN software may still override while connected.
 - **Custom install paths** - Only allowed on fixed local volumes outside system directories.
 - **Logs and config** - Live under the **data directory** shown on the main menu (prefer `C:\Temp\Bastion`; durable fallbacks; `%TEMP%\Bastion` last). Full file list: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
@@ -467,7 +467,7 @@ When reporting a bug, include Windows version (**Settings -> System -> About** o
 
 This project is licensed under the **GNU General Public License v3.0** (GPLv3).
 
-- You may use, study, modify, and redistribute Bastion, including commercially, under the terms of GPLv3.
+- You may use, study, and modify Bastion under GPLv3. Redistribution (including commercial) is allowed only under GPLv3 with complete corresponding source for distributed modified works.
 - If you **distribute** a modified version, you must also license it under GPLv3 and provide the **complete corresponding source code**. That is intentional: it keeps the project free software and blocks closed proprietary forks of Bastion itself.
 - See [LICENSE](LICENSE) for the full GPLv3 text and [NOTICE](NOTICE) for the project copyright, additional system-change disclaimer, and prior-release note.
 

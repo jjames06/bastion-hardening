@@ -1,12 +1,12 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.6 FINAL
+    Bastion Hardening Framework v15.7 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     to avoid smart-quote / em-dash parse failures when pasting into editors.
 .NOTES
-    Version 15.6 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.7 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
 #>
 
@@ -15,7 +15,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.6"
+    ScriptVersion = "15.7"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
@@ -6349,7 +6349,8 @@ function Show-Help {
         "## Safety model",
         "System Restore is the real safety net. Use main menu 13 or R before major changes. Undo covers tracked services and firewall groups from the last Apply only.",
         "Recovery hubs (Services, Network, Browsers, Apps/UI, Security mitigations) reverse most Bastion effects with live status - without bloating the main menu.",
-        "Irreversible or hard-to-reverse items (BloatApps, OneDrive removal) stay off until you opt in and are called out explicitly."
+        "Irreversible or hard-to-reverse items (BloatApps, OneDrive removal) stay off until you opt in and are called out explicitly.",
+        "License: GNU GPLv3. Free to use and share; if you distribute a modified Bastion, you must keep it GPLv3 and provide source. See LICENSE and NOTICE beside the script."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -6547,6 +6548,11 @@ function Show-Help {
         "If something breaks: Recovery > 6 > StrictHandle > disable system StrictHandle, reboot, confirm it works. Or add the full .exe path under StrictHandleExceptionPaths in Bastion-Config.json and refresh exceptions.",
         "Then report name + full .exe path on GitHub issue #18 or Discussions #23. Wait for a Bastion update that includes the exception, then re-Apply or Recovery > 6 option 3 to restore system StrictHandle with exceptions.",
         "Details: docs/KNOWN-ISSUES.md. Prefer Recovery over guessing raw PowerShell.",
+        "## License (GPLv3)",
+        "Bastion is free software under the GNU General Public License v3.0. You may run and modify it.",
+        "If you distribute a modified version, you must license that distribution under GPLv3 and provide the complete corresponding source. That blocks closed proprietary forks of Bastion.",
+        "GPLv3 does not ban selling GPL-compliant copies that include source; it bans keeping distributed modifications secret and proprietary. See LICENSE and NOTICE.",
+        "Older published release zips that still contain an MIT LICENSE file remain under those artifact terms.",
         "## Deliberate non-goals",
         "No aggressive mitigation sets that caused black-screen logons on some hardware. No automatic GPU/BIOS flashing. Not a complete malware guarantee.",
         "## Version",

@@ -41,4 +41,9 @@ NOTE ON PRIOR RELEASES
 Published tags and release zips of Bastion Hardening Framework that shipped under
 the MIT License remain available under the license terms included in those
 artifacts. This repository's current LICENSE (GPLv3) applies to the project as of
-the commit that introduced GPLv3, and to future distributions based on that tree.
+the commit that introduced GPLv3, and to future distributions based on that tree
+(including release v15.7 and later).
+
+GPLv3 does not forbid selling software, but it does require that distributed
+modifications of Bastion remain under GPLv3 with complete corresponding source.
+That is intended to block closed proprietary commercial forks of Bastion itself.

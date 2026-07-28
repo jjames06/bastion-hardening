@@ -47,6 +47,7 @@ If you are not comfortable with restore points and Recovery, **stop here** and d
 - Bastion makes **real** system changes (firewall, services, registry, Defender, optional AppX, and more).  
 - Print Spooler, discovery, RDP/WinRM, Xbox, Widgets, OneDrive, and some games can be affected.  
 - **Not** for work, school, domain-joined, or MDM-managed devices.  
-- **Not** an antivirus.
+- **Not** an antivirus.  
+- **License:** GNU **GPLv3** (`LICENSE` + `NOTICE` in the zip). Free software; if you distribute a modified Bastion, it must stay GPLv3 with source. See [FAQ](FAQ).
 
 Next: [Recovery cookbook](Recovery-cookbook) · [Games and StrictHandle](Games-and-StrictHandle) · [FAQ](FAQ)

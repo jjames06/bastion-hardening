@@ -21,6 +21,7 @@ This wiki is a short **user handbook**. Deep technical detail ships **in the rel
 | [Issue #18](https://github.com/jjames06/bastion-hardening/issues/18) | StrictHandle / game exception tracking |
 | [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23) | Game compatibility reports |
 | [SECURITY.md](https://github.com/jjames06/bastion-hardening/blob/main/SECURITY.md) | Vulnerability reporting |
+| [LICENSE](https://github.com/jjames06/bastion-hardening/blob/main/LICENSE) / [NOTICE](https://github.com/jjames06/bastion-hardening/blob/main/NOTICE) | **GPLv3** free software terms + project disclaimer |
 
 ## What Bastion is (and is not)
 
@@ -47,6 +48,8 @@ This wiki is a short **user handbook**. Deep technical detail ships **in the rel
 - Prefer **Recovery hubs** (menu **9**) over full Undo when you know what broke.  
 - System Restore remains the strongest full rollback.
 
-*Handbook aims to match product behavior around **v15.6+**. Always prefer [Latest](https://github.com/jjames06/bastion-hardening/releases/latest).*
+*Handbook aims to match product behavior around **v15.7+**. Always prefer [Latest](https://github.com/jjames06/bastion-hardening/releases/latest).*
+
+**License:** GNU **GPLv3**. Free to use and modify; distributed modified versions must stay GPLv3 with source (see FAQ).
 
 **Source of truth:** this handbook lives in the release zip under `docs/wiki/` and is mirrored to the [GitHub Wiki](https://github.com/jjames06/bastion-hardening/wiki) when published.
