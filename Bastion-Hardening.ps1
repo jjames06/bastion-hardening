@@ -303,11 +303,11 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Pairs well with process creation auditing if you enable that separately outside Bastion."
     }
     "ExploitProtection" = @{
-        Intent  = "Apply a mild system exploit mitigation profile, including StrictHandle for general protection, with automatic exceptions for World of Warcraft when discovered."
-        Changes = "Set-ProcessMitigation -System enabling DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle. Then disables StrictHandle only for discovered Wow*.exe (per-app override; rest of system keeps StrictHandle)."
-        Impact  = "Most processes get stricter handle checks. Without an exception, some games can fail to start. World of Warcraft historically failed with Blizzard Eidolon and Crash.txt INVALID_HANDLE in Wow_loader.dll when StrictHandle was system-wide with no per-app exception. That is a process-mitigation compatibility issue with WoW early load (custom loader / multi-process handoff), not a claim about Blizzard product intent. Bastion auto-excepts discovered Wow*.exe. Counter-Strike 2 was tested and is not affected. Other titles are unknown until reported."
-        Revert  = "Recovery > 6 > StrictHandle: disable system StrictHandle (reboot), refresh Wow exceptions only, or re-enable Bastion-style profile. Or StrictHandleExceptionPaths in Bastion-Config.json. System Restore remains bulletproof."
-        Notes   = "READ BEFORE ENABLE: StrictHandle is the Windows mitigation that conflicted with WoW launch. Common, non-accusatory reasons include custom loaders (Wow_loader.dll), Agent-to-game process handoff, anti-cheat/integrity init, IPC, or normal multi-process clients. Bastion excepts discovered Wow*.exe; CS2 tested OK. If another game fails: Recovery > 6 reverse, confirm, then report game name + full EXE path on GitHub issue #18 or Discussions #23. Discovery: product.db/aggregate.json, uninstall registry, fixed-drive well-known folders, optional WowInstallRoots / StrictHandleExceptionPaths. See docs/KNOWN-ISSUES.md."
+        Intent  = "Apply a mild system exploit mitigation profile, including system-wide StrictHandle, with automatic per-app exceptions only for paths Bastion already knows (today: discovered Wow*.exe)."
+        Changes = "Enables DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle system-wide. Then turns StrictHandle OFF only for discovered exception EXEs (currently Wow*.exe discovery plus any StrictHandleExceptionPaths you list in Bastion-Config.json)."
+        Impact  = "Most processes get stricter handle checks. Programs without an exception may fail to start. World of Warcraft is a documented example that broke under system StrictHandle and is now auto-excepted when found. CS2 was tested OK. Other titles are unknown until reported - no exception means they may still break."
+        Revert  = "Recovery > 6 > StrictHandle: (1) disable system StrictHandle and reboot, or (2) add full .exe path under StrictHandleExceptionPaths and refresh exceptions. Report so we can ship an automatic exception. Then re-enable system StrictHandle when ready. System Restore remains bulletproof."
+        Notes   = "WoW is an example, not the only possible break. Prefer Recovery > 6 over guessing PowerShell. Report game name + full .exe path on GitHub issue #18 or Discussions #23; until we add that exception, keep system StrictHandle off or use a config path exception. See docs/KNOWN-ISSUES.md."
     }
     "LSAProtection" = @{
         Intent  = "Protect the Local Security Authority process (credential material) with RunAsPPL."
@@ -1897,7 +1897,7 @@ function Set-BastionStrictHandleExceptions {
     # Disable StrictHandle only for discovered game EXEs (full path required; bare names collide).
     $paths = @(Get-BastionStrictHandleExceptionPaths)
     if ($paths.Count -eq 0) {
-        Write-Status "StrictHandle system ON; no Wow*.exe found for exception (install WoW, fix path, or set WowInstallRoots / StrictHandleExceptionPaths in Bastion-Config.json, then re-Apply)" "Info"
+        Write-Status "StrictHandle system ON; no exception EXE paths found yet (WoW auto-discover when installed, or set WowInstallRoots / StrictHandleExceptionPaths in Bastion-Config.json, then re-Apply or Recovery > 6 > refresh)" "Info"
         return 0
     }
     $ok = 0
@@ -1912,6 +1912,63 @@ function Set-BastionStrictHandleExceptions {
         }
     }
     return $ok
+}
+
+function Write-BastionStrictHandleGuidance {
+    # Single source of truth: clear reverse path + WoW as example only + report so we can add exceptions.
+    param(
+        [ValidateSet("Inline", "Block", "Notice")]
+        [string]$Style = "Block",
+        [ConsoleColor]$Color = [ConsoleColor]::DarkYellow
+    )
+    if ($Style -eq "Inline") {
+        Write-Host "      Example: World of Warcraft broke under system StrictHandle; Bastion auto-excepts discovered Wow*.exe now. CS2 tested OK." -ForegroundColor $Color
+        Write-Host "      Other programs may break until we ship an exception for them. That is expected and not a silent failure." -ForegroundColor $Color
+        Write-Host "      If something breaks: Recovery > 6 > StrictHandle > disable system StrictHandle, reboot, confirm it works." -ForegroundColor $Color
+        Write-Host "      Then report game name + full .exe path on GitHub #18 or Discussions #23 so we can add an exception." -ForegroundColor $Color
+        Write-Host "      Until that ships, keep system StrictHandle off (or add the full .exe under StrictHandleExceptionPaths yourself)." -ForegroundColor DarkGray
+        return
+    }
+    if ($Style -eq "Notice") {
+        Write-Host ""
+        Write-Host "  ---------- Games / StrictHandle (read this) ----------" -ForegroundColor Yellow
+        Write-Host "  What: system-wide StrictHandle (stricter process handle checks)." -ForegroundColor White
+        Write-Host "  Why it can break software: some loaders and multi-process games use handles in ways that" -ForegroundColor DarkGray
+        Write-Host "  are fine under default Windows policy but fatal under StrictHandle." -ForegroundColor DarkGray
+        Write-Host "  Example (not the only case): World of Warcraft - Play/Wow.exe failed (Eidolon / INVALID_HANDLE" -ForegroundColor DarkGray
+        Write-Host "  in Wow_loader.dll) until a per-app exception. Bastion now auto-excepts discovered Wow*.exe." -ForegroundColor DarkGray
+        Write-Host "  CS2 was tested OK. Other titles: unknown. No exception means it may still break." -ForegroundColor DarkGray
+        $wowEx = @()
+        try { $wowEx = @(Get-BastionStrictHandleExceptionPaths) } catch { $wowEx = @() }
+        if ($wowEx.Count -gt 0) {
+            Write-Host ("  This PC: {0} exception path(s) will be applied/refreshed (mostly Wow*.exe / config)." -f $wowEx.Count) -ForegroundColor Green
+        } else {
+            Write-Host "  This PC: no exception EXE paths found yet (OK if WoW is not installed)." -ForegroundColor DarkGray
+        }
+        Write-Host "  If ANY program fails after Apply:" -ForegroundColor Cyan
+        Write-Host "    1. Recovery > 6 Security mitigations > StrictHandle" -ForegroundColor Cyan
+        Write-Host "    2. Disable system StrictHandle (whole PC), then reboot  -or-  add full .exe to" -ForegroundColor Cyan
+        Write-Host "       StrictHandleExceptionPaths in Bastion-Config.json and re-Apply / refresh exceptions" -ForegroundColor Cyan
+        Write-Host "    3. Confirm the program works" -ForegroundColor Cyan
+        Write-Host "    4. Report name + full .exe path: github.com/jjames06/bastion-hardening/issues/18" -ForegroundColor Cyan
+        Write-Host "       or Discussions #23 so we can ship an automatic exception" -ForegroundColor Cyan
+        Write-Host "    5. After an update includes your exception, re-Apply or Recovery > 6 option 3 to restore" -ForegroundColor Cyan
+        Write-Host "       system StrictHandle with exceptions" -ForegroundColor Cyan
+        Write-Host "  Prefer Recovery over guessing PowerShell so Bastion status stays honest." -ForegroundColor DarkGray
+        Write-Host "  -----------------------------------------------------------" -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+    # Block (default): recovery-menu honesty block
+    Write-Host "  Honest notes" -ForegroundColor Yellow
+    Write-Host "    System StrictHandle hardens most apps. Some programs (especially games) can fail to start." -ForegroundColor DarkGray
+    Write-Host "    World of Warcraft is a documented example (now auto-excepted when Wow*.exe is found)." -ForegroundColor DarkGray
+    Write-Host "    Other titles may break with NO exception until someone reports them and we add one." -ForegroundColor DarkGray
+    Write-Host "    Option 1: turn StrictHandle OFF for the whole PC (security trade-off). Reboot after." -ForegroundColor DarkGray
+    Write-Host "    Option 2: refresh known exception EXEs only (keeps system StrictHandle ON)." -ForegroundColor DarkGray
+    Write-Host "    Option 3: re-enable Bastion profile after you can run your software again." -ForegroundColor DarkGray
+    Write-Host "    Report broken programs: GitHub issue #18 or Discussions #23 (game + full .exe path)." -ForegroundColor DarkGray
+    Write-Host "    Until we ship your exception, use option 1 or a manual path in StrictHandleExceptionPaths." -ForegroundColor DarkGray
 }
 
 function Set-RegistryValueSafe {
@@ -3227,15 +3284,10 @@ function Invoke-DryRun {
             } else {
                 Show-DryItem "ExploitProtection" "Would change" ("Enable DEP, SEHOP, BottomUp, HighEntropy, StrictHandle; {0}" -f $wowNote)
             }
-            Write-Host "      Games: StrictHandle can break some titles (WoW did; auto-excepted when found). CS2 tested OK." -ForegroundColor DarkYellow
-            Write-Host "      If a game breaks after Apply, reverse properly:" -ForegroundColor DarkYellow
-            Write-Host "        1) Main menu 9 Recovery > 6 Security mitigations > StrictHandle" -ForegroundColor DarkYellow
-            Write-Host "        2) Choose: disable system StrictHandle (whole PC)  OR  refresh Wow exceptions only" -ForegroundColor DarkYellow
-            Write-Host "        3) Reboot, confirm the game works, then report game name + full .exe path on GitHub #18" -ForegroundColor DarkYellow
-            Write-Host "      Prefer Recovery over raw PowerShell so status and options stay consistent with Bastion." -ForegroundColor DarkGray
+            Write-BastionStrictHandleGuidance -Style Inline
         } catch {
-            Show-DryItem "ExploitProtection" "Would change" "Apply mild mitigations + WoW StrictHandle exceptions (could not query ProcessMitigation)"
-            Write-Host "      If a game breaks: Recovery > 6 > StrictHandle (disable system StrictHandle, reboot), or Help / GitHub #18." -ForegroundColor DarkYellow
+            Show-DryItem "ExploitProtection" "Would change" "Apply mild mitigations + known StrictHandle exceptions (could not query ProcessMitigation)"
+            Write-BastionStrictHandleGuidance -Style Inline
         }
     }
 
@@ -3378,38 +3430,13 @@ function Invoke-DryRun {
 }
 
 function Show-ExploitProtectionGameNotice {
-    # Pre-Apply / Dry Run honesty: StrictHandle can break some games; WoW is handled; others need reports.
+    # Pre-Apply honesty: shared guidance (WoW is an example; others may break until reported).
     param([switch]$Compact)
-    Write-Host ""
-    Write-Host "  ---------- Games / ExploitProtection (read this) ----------" -ForegroundColor Yellow
-    Write-Host "  Setting of interest: system-wide StrictHandle (strict handle checks)." -ForegroundColor White
-    Write-Host "  Why it matters: StrictHandle hardens most apps. Some game loaders still" -ForegroundColor DarkGray
-    Write-Host "  touch invalid or short-lived handles during startup (custom loaders," -ForegroundColor DarkGray
-    Write-Host "  multi-process handoff, integrity/anti-cheat init, IPC). World of Warcraft" -ForegroundColor DarkGray
-    Write-Host "  was affected: Battle.net worked, but Play / Wow.exe failed with Eidolon;" -ForegroundColor DarkGray
-    Write-Host "  Crash.txt said INVALID_HANDLE in Wow_loader.dll. That is a mitigation" -ForegroundColor DarkGray
-    Write-Host "  compatibility issue - not an accusation about Blizzard product intent." -ForegroundColor DarkGray
-    Write-Host "  Bastion keeps StrictHandle ON for the PC, then turns it OFF only for" -ForegroundColor DarkGray
-    Write-Host "  discovered Wow*.exe. Counter-Strike 2 was tested OK." -ForegroundColor DarkGray
-    if (-not $Compact) {
-        $wowEx = @()
-        try { $wowEx = @(Get-BastionStrictHandleExceptionPaths) } catch { $wowEx = @() }
-        if ($wowEx.Count -gt 0) {
-            Write-Host ("  This PC: {0} WoW-related EXE exception(s) will be applied/refreshed." -f $wowEx.Count) -ForegroundColor Green
-        } else {
-            Write-Host "  This PC: no Wow*.exe found yet (OK if WoW is not installed)." -ForegroundColor DarkGray
-            Write-Host "  After installing WoW, re-Apply so exceptions attach." -ForegroundColor DarkGray
-        }
-        Write-Host "  If ANY game fails after Apply: revert StrictHandle, confirm the game works," -ForegroundColor Cyan
-        Write-Host "  then report the game + full .exe path on GitHub so we can add an exception." -ForegroundColor Cyan
-        Write-Host "  Report: github.com/jjames06/bastion-hardening/issues/18" -ForegroundColor Cyan
-        Write-Host "  or Discussions #23: Game compatibility reports" -ForegroundColor Cyan
-        Write-Host "  In Bastion: Recovery > 6 Security mitigations > StrictHandle (GUI)." -ForegroundColor Cyan
-        Write-Host "  Quick whole-PC revert (elevated, then reboot):" -ForegroundColor White
-        Write-Host "    Set-ProcessMitigation -System -Disable StrictHandle" -ForegroundColor DarkGray
+    if ($Compact) {
+        Write-BastionStrictHandleGuidance -Style Inline
+    } else {
+        Write-BastionStrictHandleGuidance -Style Notice
     }
-    Write-Host "  -----------------------------------------------------------" -ForegroundColor Yellow
-    Write-Host ""
 }
 
 function Show-ApplyPreview {
@@ -5860,16 +5887,11 @@ function Show-StrictHandleRecoveryMenu {
             }
         }
         Write-Host ""
-        Write-Host "  Honest notes" -ForegroundColor Yellow
-        Write-Host "    StrictHandle ON hardens most apps; some game loaders can crash (WoW did without exceptions)." -ForegroundColor DarkGray
-        Write-Host "    Option 1 turns StrictHandle OFF for the whole PC (security trade-off). Reboot after changes." -ForegroundColor DarkGray
-        Write-Host "    Option 2 refreshes per-app exceptions only (keeps system StrictHandle ON)." -ForegroundColor DarkGray
-        Write-Host "    Bastion Apply with ExploitProtection re-enables the mild system profile + exceptions." -ForegroundColor DarkGray
-        Write-Host "    Report other broken games: GitHub issue #18 or Discussions #23." -ForegroundColor DarkGray
+        Write-BastionStrictHandleGuidance -Style Block
         Write-Host ""
         Write-Host "  1  Disable system StrictHandle (whole PC; reboot recommended)" -ForegroundColor Yellow
-        Write-Host "  2  Refresh Wow*/config exceptions only (StrictHandle stays ON system-wide)" -ForegroundColor Cyan
-        Write-Host "  3  Re-enable system StrictHandle + refresh exceptions (Bastion-style)" -ForegroundColor Green
+        Write-Host "  2  Refresh known exception EXEs only (Wow*.exe + config paths; system stays ON)" -ForegroundColor Cyan
+        Write-Host "  3  Re-enable system StrictHandle + refresh exceptions (after you can run your apps)" -ForegroundColor Green
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
         $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3")
@@ -5891,13 +5913,15 @@ function Show-StrictHandleRecoveryMenu {
             }
             "2" {
                 Write-Host ""
-                Write-Host "  Discovers Wow*.exe (and config paths) and sets per-app StrictHandle OFF for those EXEs only." -ForegroundColor White
+                Write-Host "  Discovers known exception EXEs (Wow*.exe + StrictHandleExceptionPaths) and sets StrictHandle OFF for those only." -ForegroundColor White
+                Write-Host "  Does not create exceptions for other games until you add paths or we ship them after a report." -ForegroundColor DarkGray
                 [void](Set-BastionStrictHandleExceptions)
                 Wait-ForKey "Press any key to return to StrictHandle recovery..."
             }
             "3" {
                 Write-Host ""
-                Write-Host "  Re-applies mild system mitigations including StrictHandle ON, then refreshes exceptions." -ForegroundColor Yellow
+                Write-Host "  Re-applies mild system mitigations including StrictHandle ON, then refreshes known exceptions." -ForegroundColor Yellow
+                Write-Host "  Only do this after broken programs work again (or their exceptions exist)." -ForegroundColor DarkGray
                 if ((Read-YesNo -Prompt "  Re-enable system StrictHandle profile now (Y/N)?") -eq "Y") {
                     try {
                         Set-ProcessMitigation -System -Enable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle -ErrorAction Stop
@@ -6344,7 +6368,7 @@ function Show-Help {
         "Change one area at a time, Dry Run, Apply, verify. Use Recovery hubs for targeted reverse (Services, Network, Browsers, Apps/UI, Security mitigations) or Undo.",
         "If you delete the Bastion data folder, the next launch re-seeds defaults and re-detects the live system - it does not invent a prior Apply.",
         "## If something goes wrong",
-        "Recovery menu first (status-first hubs). Browser breakage: menu 6 or Recovery > 4 > Default. Network/RDP/DNS: Recovery > 3. Games/StrictHandle: Recovery > 6. For deep failure: Safe Mode then System Restore."
+        "Recovery hubs first. Browsers: menu 6 or Recovery > 4 > Default. Network/RDP/DNS: Recovery > 3. Games/StrictHandle: Recovery > 6 (disable system StrictHandle, reboot, report path on GitHub #18; other titles may lack exceptions). Deep failure: Safe Mode then System Restore."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -6473,13 +6497,13 @@ function Show-Help {
         "3 Network - Remote access (RDP/Assistance/WinRM + optional fDenyTSConnections/TermService), LAN/discovery (File Sharing, Network Discovery, mDNS), DNS reset to automatic on eligible adapters.",
         "4 Browser policies - same as main menu 6 for installed Firefox/Chrome/Brave. Default reverts that browser (best-effort).",
         "5 Apps and UI - Copilot/M365 tools, Widgets/Suggestions restore, Game Bar / ms-gamingoverlay silence or reverse.",
-        "6 Security mitigations - StrictHandle/exploit (disable system StrictHandle, refresh Wow exceptions, re-enable profile), Defender NP/CFA soften or re-harden, policies/tasks (Delivery Optimization, PowerShell logging, LSA RunAsPPL, CEIP tasks).",
+        "6 Security mitigations - StrictHandle (disable / refresh exceptions / re-enable), Defender NP/CFA, policies/tasks (DO, PowerShell logging, LSA, CEIP tasks).",
         "## Honesty rules shared by hubs",
-        "Status is live from Windows, not from a fake memory of Apply. Enabling services or OPEN firewall groups increases attack surface; LOCKED/DISABLED is the safer default after harden.",
-        "Firewall hubs do not flip overall profile Inbound=Block; they toggle named groups. DNS reset does not change menu D intent; next Apply with DNS on may set public DNS again. VPN may override DNS while connected.",
-        "Full host RDP usually needs OPEN Remote Desktop group + system ALLOWED + TermService. Windows Home may not host RDP like Pro.",
-        "StrictHandle OFF whole-PC is a security trade-off; reboot after mitigation changes. Softening Defender reduces blocking strength.",
-        "Appx bloat and OneDrive are not reinstallable in Recovery - System Restore or vendor installers.",
+        "Status is live from Windows. Enabling services or OPEN firewall groups increases attack surface; LOCKED/DISABLED is the safer default after harden.",
+        "Firewall hubs only toggle named groups (not profile Inbound=Block). DNS reset clears adapter static DNS; menu D intent may re-apply on next DNS Apply. VPN may override DNS.",
+        "Full host RDP usually needs OPEN Remote Desktop + system ALLOWED + TermService. Windows Home may not host RDP like Pro.",
+        "StrictHandle: World of Warcraft is one documented example (now auto-excepted). Other programs may break with no exception until reported and we ship one. Disable system StrictHandle + reboot, report, wait for update, then re-enable.",
+        "Softening Defender reduces blocking strength. Appx bloat and OneDrive are not reinstallable here - System Restore or vendor installers.",
         "## System Restore",
         "Preferred full rollback. Create points from menu 13 or R. If Windows will not log on normally: hold Shift while selecting Restart, open Troubleshoot > Advanced > Startup Settings > Restart, then Safe Mode, then rstrui.exe.",
         "## Honest limits of Undo",
@@ -6512,24 +6536,20 @@ function Show-Help {
 
     $r = Show-HelpPage -Title "HELP 13/13 - LIMITS AND EXPECTATIONS" -Page 13 -Total $total -Lines @(
         "## Expected behaviors",
-        "VPN DNS while connected may differ from the chosen public resolver on the physical adapter. That is normal.",
-        "Menu D lets you pick Quad9, Cloudflare, Cloudflare security, Google Public DNS, Cisco OpenDNS, or leave DNS unchanged.",
-        "Browser Strict (HTTPS-Only) and an optional Encrypted Client Hello (ECH) pack can break some sites or networks; ECH is never applied unless you choose Yes. Use different modes per installed browser if needed.",
-        "Optional HKLM policy values for News/Interests may be denied by Windows even when elevated; that is a Soft skip, not a hard failure.",
-        "Some installers ignore custom --location after path validation succeeds.",
-        "## Games / ExploitProtection (StrictHandle) - read before Apply",
-        "Setting: system-wide StrictHandle (strict handle checks) via Windows process mitigations.",
-        "Why WoW broke: StrictHandle ON with no per-app exception. World of Warcraft failed at Play / Wow.exe with Blizzard Eidolon; Crash.txt INVALID_HANDLE in Wow_loader.dll. Battle.net still worked.",
-        "Technical framing (not an accusation): StrictHandle makes certain invalid/recycled handle uses fatal. Custom game loaders, Agent-to-game handoff, multi-process clients, integrity checks, and IPC often use handles in ways that are fine under default Windows policy but crash under system StrictHandle. WoW's early path is Wow_loader.dll - a common class of mitigation incompatibility across the industry.",
-        "What Bastion does now: StrictHandle ON for the system; OFF only for discovered Wow*.exe. Counter-Strike 2 was tested and is not an issue. Other games unknown until reported.",
-        "If a game breaks after Apply: (1) Recovery > 6 > StrictHandle disable system StrictHandle then reboot, or refresh exceptions / except that EXE; (2) confirm the game works; (3) report game name + full .exe path on GitHub issue #18 or Discussions #23.",
-        "Discovery: product.db/aggregate.json, uninstall registry, fixed-drive well-known folders, optional WowInstallRoots / StrictHandleExceptionPaths in Bastion-Config.json.",
+        "VPN DNS while connected may differ from the chosen public resolver. That is normal.",
+        "Browser Strict and optional Encrypted Client Hello (ECH) can break some sites; ECH is never applied unless you choose Yes.",
+        "Some HKLM suggestion policies may be denied even when elevated (Soft skip). Some installers ignore custom --location.",
+        "## Games / StrictHandle (honest summary)",
+        "ExploitProtection turns system StrictHandle ON. That hardens most apps. Some programs can fail to start until they have a per-app exception.",
+        "World of Warcraft is a documented example that broke under system StrictHandle; Bastion now auto-excepts discovered Wow*.exe. CS2 was tested OK.",
+        "Other games or programs may still break. No exception in Bastion means you may need to reverse until we add one after a report.",
+        "If something breaks: Recovery > 6 > StrictHandle > disable system StrictHandle, reboot, confirm it works. Or add the full .exe path under StrictHandleExceptionPaths in Bastion-Config.json and refresh exceptions.",
+        "Then report name + full .exe path on GitHub issue #18 or Discussions #23. Wait for a Bastion update that includes the exception, then re-Apply or Recovery > 6 option 3 to restore system StrictHandle with exceptions.",
+        "Details: docs/KNOWN-ISSUES.md. Prefer Recovery over guessing raw PowerShell.",
         "## Deliberate non-goals",
-        "No aggressive system-wide exploit mitigation sets that previously caused black-screen logons on some hardware.",
-        "No automatic NVIDIA App or BIOS flashing from winget.",
-        "No claim of complete malware prevention - Bastion reduces exposure and improves visibility.",
+        "No aggressive mitigation sets that caused black-screen logons on some hardware. No automatic GPU/BIOS flashing. Not a complete malware guarantee.",
         "## Version",
-        ("You are reading documentation for Bastion v{0}. Measure with Dry Run, protect with a restore point, then Apply." -f $script:Config.ScriptVersion)
+        ("Bastion v{0}. Measure with Dry Run, protect with a restore point, then Apply." -f $script:Config.ScriptVersion)
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -6950,8 +6970,7 @@ function Invoke-ApplyHardening {
 
     if ($script:Sections["ExploitProtection"]) {
         Write-Host "  [ExploitProtection]" -ForegroundColor Cyan
-        Write-Host "    StrictHandle ON system-wide (security). WoW Wow*.exe get per-app OFF when found." -ForegroundColor DarkGray
-        Write-Host "    CS2 tested OK. If another game breaks: Recovery > 6 > StrictHandle (not a mystery toggle)." -ForegroundColor DarkGray
+        Write-Host "    StrictHandle ON system-wide. Known exception EXEs (e.g. discovered Wow*.exe) get per-app OFF." -ForegroundColor DarkGray
         try {
             $already = $false
             try {
@@ -6963,7 +6982,7 @@ function Invoke-ApplyHardening {
                 } catch {}
                 if ($depOn -and $strictOn) { $already = $true }
             } catch {}
-            # System-wide StrictHandle; per-exe OFF for discovered Wow*.exe (issue #18).
+            # System-wide StrictHandle; per-exe OFF for discovered exception paths (issue #18).
             Set-ProcessMitigation -System -Enable DEP,SEHOP,BottomUp,HighEntropy,StrictHandle -ErrorAction Stop
             if ($already) {
                 Write-Status "Mild system mitigations already present (re-applied; StrictHandle ON system-wide)" "Already"
@@ -6971,13 +6990,9 @@ function Invoke-ApplyHardening {
                 Write-Status "Mild system mitigations applied (DEP/SEHOP/ASLR + StrictHandle system-wide)" "Applied"
             }
             [void](Set-BastionStrictHandleExceptions)
-            Write-Host "    If you install WoW later, re-Apply (or Recovery > 6 > refresh exceptions) so new Wow*.exe paths are covered." -ForegroundColor DarkGray
-            Write-Host "    If another game fails:" -ForegroundColor DarkGray
-            Write-Host "      Recovery > 6 Security mitigations > StrictHandle > disable system StrictHandle, then reboot." -ForegroundColor DarkGray
-            Write-Host "      Or refresh exceptions / add full .exe path under StrictHandleExceptionPaths in Bastion-Config.json." -ForegroundColor DarkGray
-            Write-Host "      Confirm the game works, then report game + full path: github.com/jjames06/bastion-hardening/issues/18" -ForegroundColor DarkGray
+            Write-BastionStrictHandleGuidance -Style Inline
         } catch {
-            Write-Status ("Exploit Protection failed: {0}. Next step: Windows Security > App and browser control." -f $_.Exception.Message) "Failed"
+            Write-Status ("Exploit Protection failed: {0}. Next step: Windows Security > App and browser control, or Recovery > 6." -f $_.Exception.Message) "Failed"
         }
     }
 

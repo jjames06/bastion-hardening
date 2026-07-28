@@ -1,34 +1,34 @@
 # Known issues
 
 Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/issues) ·  
-**Game reports:** [Issue #18](https://github.com/jjames06/bastion-hardening/issues/18) · [Discussions #23 — Game compatibility reports](https://github.com/jjames06/bastion-hardening/discussions/23)
+**Game reports:** [Issue #18](https://github.com/jjames06/bastion-hardening/issues/18) · [Discussions #23 - Game compatibility reports](https://github.com/jjames06/bastion-hardening/discussions/23)
 
 ---
 
-## Before you enable ExploitProtection (games notice)
+## Before you enable ExploitProtection (StrictHandle)
 
-**Setting:** Windows **StrictHandle** (strict handle checks), applied **system-wide** as part of Bastion’s **ExploitProtection** section (on by default / included in Quick Harden).
+**Setting:** Windows **StrictHandle** (strict handle checks), applied **system-wide** as part of Bastion **ExploitProtection** (on by default / included in Quick Harden).
 
 **What it does:** Makes Windows stricter about invalid process handles. That hardens many programs against a class of memory/handle abuse.
 
-**Why some games can break:** Under default Windows policy, using a closed or recycled handle is often ignored or handled softly. With **StrictHandle ON**, the same pattern can **terminate the process**. Custom game loaders, multi-process launch (store agent → game), integrity checks, and IPC frequently use handles during early startup. That is a normal **mitigation compatibility** problem across the industry—not evidence of wrongdoing by a publisher.
+**Why some programs can break:** Under default Windows policy, using a closed or recycled handle is often ignored or handled softly. With **StrictHandle ON**, the same pattern can **terminate the process**. Custom game loaders, multi-process launch (store agent to game), integrity checks, and IPC frequently use handles during early startup. That is a normal **mitigation compatibility** problem across the industry - not evidence of wrongdoing by a publisher.
 
-| Game / client | Status (maintainer-tested) |
+| Program / client | Status (maintainer-tested) |
 |---------------|----------------------------|
-| **World of Warcraft** (`Wow.exe`) | **Was broken** (Eidolon / `INVALID_HANDLE` in `Wow_loader.dll`) without an exception. Bastion now **auto-excepts** discovered `Wow*.exe`. |
-| **Counter-Strike 2** | **Tested — not an issue** under the same system StrictHandle profile. |
-| **Other titles** | **Unknown** until someone reports them. |
+| **World of Warcraft** (`Wow.exe`) | **Documented example** that **was broken** (Eidolon / `INVALID_HANDLE` in `Wow_loader.dll`) without an exception. Bastion now **auto-excepts** discovered `Wow*.exe`. |
+| **Counter-Strike 2** | **Tested - not an issue** under the same system StrictHandle profile. |
+| **Other titles** | **Unknown.** No Bastion exception means they **may still break** until reported and we ship one. |
 
-**What Bastion does for you now**
+**What Bastion does**
 
-1. Enables system-wide: DEP, SEHOP, BottomUp, HighEntropy, **StrictHandle**.  
-2. Turns **StrictHandle OFF only** for discovered World of Warcraft `Wow*.exe` paths (full path overrides).  
+1. Enables system-wide: DEP, SEHOP, BottomUp, HighEntropy, **StrictHandle**.
+2. Turns **StrictHandle OFF only** for **known exception EXEs** (discovered `Wow*.exe` plus any full paths in `StrictHandleExceptionPaths`).
 3. Leaves StrictHandle **ON** for everything else.
 
-**If a game fails after Apply**
+**If a program fails after Apply**
 
-1. **Revert (preferred):** Bastion Recovery → **6 Security mitigations** → **StrictHandle** → disable system StrictHandle, then **reboot**.  
-   Or keep system protection and only refresh Wow exceptions / add the game’s full `.exe` under `StrictHandleExceptionPaths` in `Bastion-Config.json` and re-Apply.
+1. **Revert (preferred):** Recovery -> **6 Security mitigations** -> **StrictHandle** -> **disable system StrictHandle**, then **reboot**.
+   Or keep system protection: add the full `.exe` under `StrictHandleExceptionPaths` in `Bastion-Config.json`, then refresh exceptions / re-Apply.
 
    Manual whole-PC off (elevated PowerShell, then reboot):
 
@@ -36,24 +36,26 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
    Set-ProcessMitigation -System -Disable StrictHandle
    ```
 
-2. Confirm the game launches again.
+2. Confirm the program launches again.
 
-3. **Report it** (so we can add an automatic exception like WoW):
-   - Comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18), or  
-   - Post in [Discussions #23 — Game compatibility reports](https://github.com/jjames06/bastion-hardening/discussions/23)  
+3. **Report it** so we can add an automatic exception (same pattern as WoW):
+   - [Issue #18](https://github.com/jjames06/bastion-hardening/issues/18), or
+   - [Discussions #23 - Game compatibility reports](https://github.com/jjames06/bastion-hardening/discussions/23)
 
-   Please include: **game name**, how it fails (instant exit / dialog text), **full path to the `.exe`**, and whether the launcher (Steam/Battle.net) still works.
+   Include: **name**, how it fails, **full path to the `.exe`**, and whether the launcher still works.
 
-Do **not** assume every crash is StrictHandle—but if Battle.net/Steam works and only the game dies at start, check `_retail_\errors\…\Crash.txt` (or similar) and StrictHandle first.
+4. **Until that exception ships in Bastion**, keep system StrictHandle off (or keep your manual path exception). After an update includes it, re-Apply or Recovery -> 6 -> re-enable system StrictHandle + exceptions.
+
+Do **not** assume every crash is StrictHandle - but if the launcher works and only the game dies at start, check crash logs and StrictHandle first. Prefer Recovery over guessing PowerShell so Bastion status stays honest.
 
 ---
 
-## World of Warcraft detail — [#18](https://github.com/jjames06/bastion-hardening/issues/18)
+## World of Warcraft detail - [#18](https://github.com/jjames06/bastion-hardening/issues/18)
 
 ### Symptoms (without exception)
 
 - Battle.net UI works.  
-- **Play** or direct `Wow.exe` → Blizzard **Eidolon**.  
+- **Play** or direct `Wow.exe` -> Blizzard **Eidolon**.  
 - Crash.txt:
 
 ```text
@@ -72,11 +74,11 @@ System-wide **StrictHandle** from ExploitProtection, without a per-app exception
 **Accurate technical framing:**
 
 - StrictHandle changes Windows behavior so certain invalid handle uses are fatal.  
-- WoW’s **early load path** (`Wow_loader.dll`) triggers that under a system-wide policy.  
+- WoW's **early load path** (`Wow_loader.dll`) triggers that under a system-wide policy.  
 - Battle.net is a separate, lighter process and was unaffected.  
 - **Plausible, ordinary explanations** (not mutually exclusive, not proven in reverse-engineering detail) include:
   - custom loader behavior  
-  - **Agent → game** process handoff and inherited/temporary handles  
+  - **Agent -> game** process handoff and inherited/temporary handles  
   - multi-process client architecture  
   - early integrity / anti-cheat / IPC handle use  
   - code that is fine under default Windows defaults  
@@ -127,7 +129,7 @@ Comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) 
 
 ---
 
-## `ms-gamingoverlay` / “Get an app to open this link” when launching games
+## `ms-gamingoverlay` / "Get an app to open this link" when launching games
 
 **Symptom:** A Windows dialog: *Get an app to open this `ms-gamingoverlay` link* (or similar) when starting Steam/Battle.net games.
 
@@ -140,13 +142,13 @@ Comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) 
 | **Xbox Gaming Overlay** package | Missing (removed via BloatApps or never installed) |
 | Xbox services | Often disabled if **XboxGaming** was applied |
 
-This is **not** a mysterious service “failing to start.” It is a **protocol open with no handler app**.
+This is **not** a mysterious service "failing to start." It is a **protocol open with no handler app**.
 
 **What Bastion does now**
 
 - **XboxGaming** Apply: disables Xbox services **and** silences Game DVR / Game Bar capture flags so games stop prompting.  
 - **BloatApps** when Xbox Gaming Overlay is removed (or already gone): same Game DVR silence.  
-- **Recovery → 6 Game Bar / ms-gamingoverlay prompt**: silence or re-enable Game DVR flags.
+- **Recovery -> 6 Game Bar / ms-gamingoverlay prompt**: silence or re-enable Game DVR flags.
 
 **Manual silence (current user):**
 
@@ -158,7 +160,7 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 
 (Admin Apply also sets `HKLM\...\Policies\Microsoft\Windows\GameDVR\AllowGameDVR = 0`.)
 
-**If you want Game Bar back:** Recovery → **5 Apps and UI** → Game Bar → re-enable flags, then install **Xbox Game Bar** from Microsoft Store (`Microsoft.XboxGamingOverlay`).
+**If you want Game Bar back:** Recovery -> **5 Apps and UI** -> Game Bar -> re-enable flags, then install **Xbox Game Bar** from Microsoft Store (`Microsoft.XboxGamingOverlay`).
 
 ### Related
 
@@ -172,16 +174,16 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 
 **Cause (by design):** Firewall Apply disables inbound rule groups for **Remote Desktop**, **Remote Assistance**, **Windows Remote Management**, **File and Printer Sharing**, **Network Discovery**, and **mDNS**. Profile defaults stay **Inbound=Block**.
 
-**What Bastion does *not* do on Firewall Apply:** It does not rewrite `fDenyTSConnections` or force-stop **TermService** (optional under Network → Remote access).
+**What Bastion does *not* do on Firewall Apply:** It does not rewrite `fDenyTSConnections` or force-stop **TermService** (optional under Network -> Remote access).
 
-**Recovery (preferred):** Main menu **9 → 3 Network**
+**Recovery (preferred):** Main menu **9 -> 3 Network**
 
 | Need | Action |
 |------|--------|
-| RDP / Assistance / WinRM | Network → **Remote access** |
-| File shares / discovery / mDNS | Network → **LAN / discovery** |
-| DNS back to DHCP | Network → **Reset DNS to automatic** |
-| Print / SMB service stack | Recovery → **2 Services** (Spooler, LanmanServer, …) |
+| RDP / Assistance / WinRM | Network -> **Remote access** |
+| File shares / discovery / mDNS | Network -> **LAN / discovery** |
+| DNS back to DHCP | Network -> **Reset DNS to automatic** |
+| Print / SMB service stack | Recovery -> **2 Services** (Spooler, LanmanServer, ...) |
 | Return to Bastion posture | Lock groups again from the same hubs |
 
 **Honest limits**
@@ -200,18 +202,19 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 
 ## StrictHandle / game launch failures
 
-**Recovery (preferred):** Main menu **9 → 6 Security mitigations → StrictHandle**
+**Recovery (preferred):** Main menu **9 > 6 Security mitigations > StrictHandle**
 
-- Disable system StrictHandle (reboot recommended), or  
-- Refresh Wow*/config exceptions only (keeps system ON), or  
-- Re-enable Bastion-style profile + exceptions  
+- **Disable system StrictHandle** (reboot recommended) when a program without an exception fails, or
+- **Refresh known exception EXEs** only (keeps system ON; helps after installing WoW or adding config paths), or
+- **Re-enable** Bastion-style profile + exceptions after you can run your software again
 
-Also see the [games notice](#before-you-enable-exploitprotection-games-notice) above and GitHub issue #18.
+**Honest scope:** World of Warcraft is a **documented example** with an automatic exception. **Other programs may break** until you report them and we ship an exception. Until then, leave system StrictHandle off or use a manual `StrictHandleExceptionPaths` entry.
+
+Also see the [notice above](#before-you-enable-exploitprotection-stricthandle) and GitHub issue #18.
 
 ---
 
 ## Controlled Folder Access / Network Protection false positives
 
-**Recovery:** **9 → 6 → Defender** — soften NP and/or CFA, or re-harden with CFA allow-path refresh. Prefer allowing a trusted app path before turning protections off permanently.
-
+**Recovery:** Main menu **9 > 6 > Defender** - soften NP and/or CFA, or re-harden with CFA allow-path refresh. Prefer allowing a trusted app path before turning protections off permanently.
 
