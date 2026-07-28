@@ -17,7 +17,7 @@ Prefer the **latest published release** of Bastion Hardening Framework for secur
 
 ## License (distribution)
 
-Current tree: **GNU GPLv3** (see [LICENSE](LICENSE)). Treat every distributed copy as privileged software **and** as free software under GPLv3 (source must travel with modified redistributions). Older release zips that still contain an MIT `LICENSE` file remain under the terms shipped in those artifacts.
+Current tree: **GNU GPLv3** (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). Treat every distributed copy as privileged software **and** as free software under GPLv3 (source must travel with modified redistributions). Older release zips that still contain an MIT `LICENSE` file remain under the terms shipped in those artifacts.
 
 ## What this project does
 
