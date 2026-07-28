@@ -157,7 +157,7 @@ Best for most people.
 
 1. Open the latest release:  
    **https://github.com/jjames06/bastion-hardening/releases/latest**  
-   (pinned older tags such as [v15.5](https://github.com/jjames06/bastion-hardening/releases/tag/v15.5) / v15.3 remain available if you need them)
+   (pinned older tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain available if you need them)
 2. Download **`bastion-hardening-v15.6.zip`** (or the current release asset with a similar name).
 3. Right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**  
    (reduces SmartScreen / "downloaded from the internet" friction on the extracted scripts)
