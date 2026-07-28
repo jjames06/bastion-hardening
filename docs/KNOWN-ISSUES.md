@@ -11,11 +11,7 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 **What it does:** Makes Windows stricter about invalid process handles. That hardens many programs against a class of memory/handle abuse.
 
-**Why some games can break:** A few game loaders still touch invalid handles during startup. With system StrictHandle **ON** and **no** per-app exception, the process can die immediately.
-
-**Why World of Warcraft was hit hard:** WoW’s launch path is not a thin “double-click and go” process. The client/loader behaves like software that needs **deeper system access**—including multi-process patterns and admin/GM-style **application / game-window viewing** features that share or open handles early. Under normal Windows defaults that still works. Under **system-wide StrictHandle**, the same path can surface as **`INVALID_HANDLE`** in **`Wow_loader.dll`** and Blizzard’s **Eidolon** dialog. Battle.net (the storefront) stays fine because it is a lighter process.
-
-This is a **compatibility trade-off**, not anti-cheat “detection” of Bastion. The fix is a **per-app exception** for `Wow.exe` (and related `Wow*.exe`), not turning StrictHandle off for the whole PC.
+**Why some games can break:** Under default Windows policy, using a closed or recycled handle is often ignored or handled softly. With **StrictHandle ON**, the same pattern can **terminate the process**. Custom game loaders, multi-process launch (store agent → game), integrity checks, and IPC frequently use handles during early startup. That is a normal **mitigation compatibility** problem across the industry—not evidence of wrongdoing by a publisher.
 
 | Game / client | Status (maintainer-tested) |
 |---------------|----------------------------|
@@ -66,15 +62,25 @@ INVALID_HANDLE
 
 Stack typically includes **`Wow_loader.dll`** and `ntdll.dll` very early.
 
-### Cause
+### Cause (what we know)
 
-System-wide **StrictHandle** from ExploitProtection, without a per-app exception for `Wow.exe`.
+System-wide **StrictHandle** from ExploitProtection, without a per-app exception for `Wow.exe`. Disabling StrictHandle for that EXE (or system-wide) restored launch. That is the verified causal chain.
 
-### Why that setting collided with WoW
+### How we describe it (and what we do *not* claim)
 
-StrictHandle treats certain invalid or recycled handle uses as fatal. WoW’s early loader (`Wow_loader.dll`) runs in a context that needs **broader handle / multi-process OS access** than many games—consistent with admin/GM-oriented **view the user’s game window** style tooling and related client services. That deeper access is legitimate for the game, but it is a poor match for a **blanket system StrictHandle** policy.
+**Accurate technical framing:**
 
-Bastion’s response: keep StrictHandle for the machine; exempt only the game EXE(s) that need it.
+- StrictHandle changes Windows behavior so certain invalid handle uses are fatal.  
+- WoW’s **early load path** (`Wow_loader.dll`) triggers that under a system-wide policy.  
+- Battle.net is a separate, lighter process and was unaffected.  
+- **Plausible, ordinary explanations** (not mutually exclusive, not proven in reverse-engineering detail) include:
+  - custom loader behavior  
+  - **Agent → game** process handoff and inherited/temporary handles  
+  - multi-process client architecture  
+  - early integrity / anti-cheat / IPC handle use  
+  - code that is fine under default Windows defaults  
+
+**We do not claim** that this proves internal GM tooling, misconduct, or any specific Blizzard product feature. Crash dumps and policy changes alone do not support that. Documentation should stay on **mitigation compatibility**, not accusations.
 
 ### Path discovery (not only default C:\ folders)
 
@@ -87,17 +93,33 @@ Bastion’s response: keep StrictHandle for the machine; exempt only the game EX
 
 ```json
 {
-  "WowInstallRoots": [ "D:\\Blizzard\\MyWoW" ],
+  "WowInstallRoots": [ "D:\\Games\\World of Warcraft" ],
   "StrictHandleExceptionPaths": [
-    "D:\\Blizzard\\MyWoW\\_retail_\\Wow.exe",
-    "E:\\Games\\SomeGame\\game.exe"
+    "D:\\Games\\World of Warcraft\\_retail_\\Wow.exe",
+    "E:\\Games\\SomeOtherTitle\\game.exe"
   ]
 }
 ```
 
----
+Re-run Bastion (load config) and **Apply** with ExploitProtection enabled. Paths must exist on disk when loaded.
 
-## Related
+### If you install WoW after Apply
 
+Re-Apply so discovery runs again (metadata + folders).
+
+### Emergency (disables StrictHandle for the whole PC)
+
+```powershell
+Set-ProcessMitigation -System -Disable StrictHandle
+```
+
+Then reboot.
+
+### Reporting other games
+
+Comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) or [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23) with game name, fail mode, and full EXE path so we can extend the same exception pattern.
+
+### Related
+
+- Section docs: **ExploitProtection**  
 - README: [Known issues](../README.md#known-issues)  
-- In-app: Dry Run / Apply preview notice when ExploitProtection is enabled; Help page 13  

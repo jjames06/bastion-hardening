@@ -393,9 +393,9 @@ Tracked on GitHub. Full write-up: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
 
 **Setting:** system-wide **StrictHandle** (strict handle checks) via Windows process mitigations.
 
-**Why it can break games:** Some loaders crash when StrictHandle is forced on. **World of Warcraft** was the confirmed case: Battle.net worked, but **Play** / `Wow.exe` failed with **Eidolon** and Crash.txt **`INVALID_HANDLE`** in **`Wow_loader.dll`**.
+**Why it can break games:** **StrictHandle** makes certain invalid or short-lived handle uses **fatal**. Many programs (including some game loaders) still do that during early startup and are fine under default Windows policy. With system StrictHandle **ON** and no per-app exception, the process can exit immediately.
 
-**Why WoW specifically:** The game client/loader needs **deeper OS handle access at launch** than many titles (consistent with multi-process or admin/GM-style *view the user’s game window* style tooling). That is not “Bastion blocking games”; it is a **mitigation vs. game-architecture** conflict. Light launchers (and titles like **CS2**) often do not need the same exception.
+**What we observed with World of Warcraft:** Battle.net worked; **Play** / `Wow.exe` failed with **Eidolon** and Crash.txt **`INVALID_HANDLE`** in **`Wow_loader.dll`**. That points to a **process-mitigation compatibility** issue in the early game load path (custom loader, multi-process handoff from the Agent, integrity/IPC-style handle use are common industry explanations)—**not** a claim about Blizzard product intent or internal tools.
 
 **What Bastion does now**
 
