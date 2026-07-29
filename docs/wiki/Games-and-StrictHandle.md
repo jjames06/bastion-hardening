@@ -24,7 +24,7 @@ WoW is **not** the only possible break. It is the case we fully documented and a
 4. **Until that exception ships in Bastion**, keep system StrictHandle **off** (or keep your manual path exception).  
 5. After a Bastion update includes your exception: **re-Apply** or Recovery **→ 6 →** re-enable system StrictHandle + refresh exceptions.
 
-Prefer Recovery over guessing PowerShell so Bastion status stays honest. Manual whole-PC off (elevated, then reboot):
+Prefer Bastion Recovery so status and reverse paths stay accurate. Manual whole-PC off (elevated, then reboot):
 
 ```powershell
 Set-ProcessMitigation -System -Disable StrictHandle

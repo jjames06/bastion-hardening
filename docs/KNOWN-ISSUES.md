@@ -46,7 +46,7 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 4. **Until that exception ships in Bastion**, keep system StrictHandle off (or keep your manual path exception). After an update includes it, re-Apply or Recovery -> 6 -> re-enable system StrictHandle + exceptions.
 
-Do **not** assume every crash is StrictHandle - but if the launcher works and only the game dies at start, check crash logs and StrictHandle first. Prefer Recovery over guessing PowerShell so Bastion status stays honest.
+Do **not** assume every crash is StrictHandle - but if the launcher works and only the game dies at start, check crash logs and StrictHandle first. Prefer Bastion Recovery so status and reverse paths stay accurate.
 
 ---
 
