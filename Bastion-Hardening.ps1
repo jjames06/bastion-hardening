@@ -308,7 +308,7 @@ $script:SectionDocs = [ordered]@{
         Changes = "Enables DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle system-wide. Then turns StrictHandle OFF only for discovered exception EXEs (currently Wow*.exe discovery plus any StrictHandleExceptionPaths you list in Bastion-Config.json)."
         Impact  = "Most processes get stricter handle checks. Programs without an exception may fail to start. World of Warcraft is a documented example that broke under system StrictHandle and is now auto-excepted when found. CS2 was tested OK. Other titles are unknown until reported - no exception means they may still break."
         Revert  = "Recovery > 6 > StrictHandle: (1) disable system StrictHandle and reboot, or (2) add full .exe path under StrictHandleExceptionPaths and refresh exceptions. Report so we can ship an automatic exception. Then re-enable system StrictHandle when ready. System Restore remains bulletproof."
-        Notes   = "WoW is an example, not the only possible break. Prefer Recovery > 6 over guessing PowerShell. Report game name + full .exe path on GitHub issue #18 or Discussions #23; until we add that exception, keep system StrictHandle off or use a config path exception. See docs/KNOWN-ISSUES.md."
+        Notes   = "WoW is an example, not the only possible break. Prefer Recovery > 6 so status stays accurate. Report game name + full .exe path on GitHub issue #18 or Discussions #23; until we add that exception, keep system StrictHandle off or use a config path exception. See docs/KNOWN-ISSUES.md."
     }
     "LSAProtection" = @{
         Intent  = "Protect the Local Security Authority process (credential material) with RunAsPPL."
@@ -1955,7 +1955,7 @@ function Write-BastionStrictHandleGuidance {
         Write-Host "       or Discussions #23 so we can ship an automatic exception" -ForegroundColor Cyan
         Write-Host "    5. After an update includes your exception, re-Apply or Recovery > 6 option 3 to restore" -ForegroundColor Cyan
         Write-Host "       system StrictHandle with exceptions" -ForegroundColor Cyan
-        Write-Host "  Prefer Recovery over guessing PowerShell so Bastion status stays honest." -ForegroundColor DarkGray
+        Write-Host "  Prefer Recovery so Bastion status and reverse paths stay accurate." -ForegroundColor DarkGray
         Write-Host "  -----------------------------------------------------------" -ForegroundColor Yellow
         Write-Host ""
         return
