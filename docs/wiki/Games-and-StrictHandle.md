@@ -1,6 +1,6 @@
 # Games and StrictHandle
 
-## Short version
+## Summary
 
 **ExploitProtection** turns **system-wide StrictHandle** ON (stricter process handle checks). That hardens most software. **Some programs can fail to start** until they have a per-app exception.
 
@@ -24,7 +24,7 @@ WoW is **not** the only possible break. It is the case we fully documented and a
 4. **Until that exception ships in Bastion**, keep system StrictHandle **off** (or keep your manual path exception).  
 5. After a Bastion update includes your exception: **re-Apply** or Recovery **→ 6 →** re-enable system StrictHandle + refresh exceptions.
 
-Prefer Bastion Recovery so status and reverse paths stay accurate. Manual whole-PC off (elevated, then reboot):
+Use Bastion Recovery when you can so status and reverse paths stay accurate. To turn StrictHandle off for the whole PC manually (elevated PowerShell, then reboot):
 
 ```powershell
 Set-ProcessMitigation -System -Disable StrictHandle
@@ -47,4 +47,4 @@ Set-ProcessMitigation -System -Disable StrictHandle
 
 StrictHandle can make certain invalid or short-lived handle uses **fatal**. Some game loaders and multi-process clients do that during early startup and are fine under default Windows policy. That is a **mitigation compatibility** class of issue across the industry - not an accusation about any publisher's product intent.
 
-Next: [Recovery cookbook](Recovery-cookbook) · [FAQ](FAQ) · [Home](Home)
+**Continue reading:** [Recovery cookbook](Recovery-cookbook) · [FAQ](FAQ) · [Home](Home)

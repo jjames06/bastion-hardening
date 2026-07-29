@@ -14,12 +14,12 @@
 
 ## Which file do I download?
 
-Prefer either official channel (same GitHub Latest zip under the hood):
+Use either official channel (both resolve the same GitHub Latest zip):
 
 - **Official site:** https://www.operationlockedin.com/bastion/download  
 - **GitHub Releases:** https://github.com/jjames06/bastion-hardening/releases/latest  
 
-See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17). Prefer those over random re-uploads.
+See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17). Avoid re-uploads from chat or third parties.
 
 ## Where is the product website?
 
@@ -34,7 +34,7 @@ Deleting that folder does **not** un-harden Windows or remove browser enterprise
 
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 
-**Never.** ECH is a separate Yes/No under browser **Strict** for installed Firefox/Chrome/Brave only. Detail: [docs/BROWSER-POLICIES-AND-ECH.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/BROWSER-POLICIES-AND-ECH.md).
+**Never.** ECH is a separate Yes/No choice under browser **Strict**, and only for installed Firefox, Chrome, or Brave. For full detail, see [docs/BROWSER-POLICIES-AND-ECH.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/BROWSER-POLICIES-AND-ECH.md).
 
 ## How do I undo changes?
 
@@ -52,11 +52,11 @@ Follow [Games and StrictHandle](Games-and-StrictHandle): reverse → reboot → 
 
 ## Printing stopped
 
-Recovery **→ 2 Services →** Print Spooler (or High-risk services). Spooler is disabled by design when HighRiskServices runs unless you opted to keep it in Quick Harden.
+Open Recovery **→ 2 Services →** Print Spooler (or High-risk services). The spooler is disabled by design when HighRiskServices runs, unless you chose to keep it during Quick Harden.
 
 ## Cannot RDP or use remote tools
 
-Firewall Apply locks remote groups on purpose. Recovery **→ 3 Network →** Remote access. Opening remote paths increases attack surface - lock again when idle.
+Firewall Apply locks remote groups on purpose. Open Recovery **→ 3 Network →** Remote access. Opening remote paths increases attack surface; lock them again when you are idle.
 
 ## Will Undo put everything back?
 
