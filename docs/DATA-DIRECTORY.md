@@ -16,7 +16,7 @@ This document explains **what** is created, **why**, and what is **not** invente
 | Apply undo | Track services / firewall groups from the **last real Apply** only |
 | Browser policy safety | Backups before Bastion overwrites browser enterprise policies |
 
-**State-aware Apply and Dry Run do not depend on these files to invent “already hardened.”** They read **live Windows state** (services, firewall, registry, features, browser policy files/keys). JSON files are memory for *your choices* and *Bastion’s own Apply undo* — not a fake claim that Windows was hardened if you never Applied. Bastion **does not invent** Apply history on first run.
+**State-aware Apply and Dry Run do not depend on these files to invent “already hardened.”** They read **live Windows state** (services, firewall, registry, features, browser policy files/keys). JSON files are memory for *your choices* and *Bastion’s own Apply undo* - not a fake claim that Windows was hardened if you never Applied. Bastion **does not invent** Apply history on first run.
 
 ---
 
@@ -100,7 +100,7 @@ Deleting Bastion’s data directory **does not** undo Windows hardening, browser
 
 ## Files Bastion may change *outside* the data directory
 
-These are intentional system changes when you choose the related feature — not secret sidecars.
+These are intentional system changes when you choose the related feature - not secret sidecars.
 
 | Area | Typical locations (examples) | When |
 |------|------------------------------|------|
@@ -124,7 +124,7 @@ Full section behavior is documented in the in-app Help (menu **11**) and the mai
 
 ## Related documentation
 
-- [README — How to install](../README.md#how-to-install-properly)
+- [README - How to install](../README.md#how-to-install-properly)
 - [Browser policies and Encrypted Client Hello (ECH)](BROWSER-POLICIES-AND-ECH.md)
 - [SECURITY.md](../SECURITY.md)
 - In-app **Help → page 12 (Files and logs)** shows the **live path for this session**

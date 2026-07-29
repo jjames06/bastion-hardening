@@ -1,21 +1,23 @@
-﻿# Bastion Hardening Framework wiki
+# Bastion Hardening Framework wiki
 
 **Selective, state-aware, safety-first Windows hardening for a personal PC you administer.**
 
-This wiki is a short **user handbook**. Deep technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Prefer the [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest) over random copies.
+This wiki is a short **user handbook**. Deep technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Prefer the [official site download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest) over random copies.
 
 ## Start here
 
-1. [Quick start](Quick-start) — install, restore point, Dry Run, Apply  
-2. [Recovery cookbook](Recovery-cookbook) — fix printing, network, games, Defender side effects  
-3. [Games and StrictHandle](Games-and-StrictHandle) — what breaks, how to reverse, how to report  
-4. [FAQ](FAQ) — common questions, honest limits  
+1. [Quick start](Quick-start) - install, restore point, Dry Run, Apply  
+2. [Recovery cookbook](Recovery-cookbook) - fix printing, network, games, Defender side effects  
+3. [Games and StrictHandle](Games-and-StrictHandle) - what breaks, how to reverse, how to report  
+4. [FAQ](FAQ) - common questions, honest limits  
 
 ## Official links
 
 | Link | Purpose |
 |------|---------|
-| [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest) | **Recommended download** (`bastion-hardening-v*.zip`) |
+| [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In) - Bastion pages, support, donate |
+| [Download Bastion](https://www.operationlockedin.com/bastion/download) | **Recommended download** - resolves the same GitHub Latest zip |
+| [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest) | GitHub release assets (`bastion-hardening-v*.zip`) |
 | [Repository README](https://github.com/jjames06/bastion-hardening#readme) | Install detail, screenshots, critical warnings |
 | [Discussions](https://github.com/jjames06/bastion-hardening/discussions) | Testing feedback, download guide, game reports |
 | [Issue #18](https://github.com/jjames06/bastion-hardening/issues/18) | StrictHandle / game exception tracking |
@@ -38,17 +40,18 @@ This wiki is a short **user handbook**. Deep technical detail ships **in the rel
 | Running Bastion right now | In-app **Help** (menu **11**) |
 | Handbook / FAQ / Recovery recipes | **This wiki** |
 | Data directory, ECH, known-issue detail | Release zip `docs/` ([DATA-DIRECTORY](https://github.com/jjames06/bastion-hardening/blob/main/docs/DATA-DIRECTORY.md), [BROWSER-POLICIES-AND-ECH](https://github.com/jjames06/bastion-hardening/blob/main/docs/BROWSER-POLICIES-AND-ECH.md), [KNOWN-ISSUES](https://github.com/jjames06/bastion-hardening/blob/main/docs/KNOWN-ISSUES.md)) |
+| Product site / download | [operationlockedin.com](https://www.operationlockedin.com) and [Bastion download](https://www.operationlockedin.com/bastion/download) |
 | What changed in a version | [Releases](https://github.com/jjames06/bastion-hardening/releases) |
 | Community talk | [Discussions](https://github.com/jjames06/bastion-hardening/discussions) |
 
 ## Safety first
 
-- Run only as **Administrator** from a release you trust.  
+- Run only as **Administrator** from an official source you trust (site download or GitHub release).  
 - Create a **System Restore Point** (main menu **13** / **R**) before Apply or Quick Harden.  
 - Prefer **Recovery hubs** (menu **9**) over full Undo when you know what broke.  
 - System Restore remains the strongest full rollback.
 
-*Handbook aims to match product behavior around **v15.7+**. Always prefer [Latest](https://github.com/jjames06/bastion-hardening/releases/latest).*
+*Handbook aims to match product behavior around **v15.7+**. Always prefer the [official download](https://www.operationlockedin.com/bastion/download) or [Latest](https://github.com/jjames06/bastion-hardening/releases/latest).*
 
 **License:** GNU **GPLv3**. Free to use and modify; distributed modified versions must stay GPLv3 with source (see FAQ).
 

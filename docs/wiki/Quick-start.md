@@ -1,11 +1,13 @@
-﻿# Quick start
+# Quick start
 
 Short path from download to a careful first Apply. Full install detail: [README](https://github.com/jjames06/bastion-hardening#how-to-install-properly).
 
 ## 1. Download the right build
 
-1. Open **https://github.com/jjames06/bastion-hardening/releases/latest**  
-2. Download **`bastion-hardening-v*.zip`** (current Latest is documented in [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17))  
+Prefer an **official** source only:
+
+1. **Recommended:** open **https://www.operationlockedin.com/bastion/download** (site resolves the same GitHub Latest zip), **or** open **https://github.com/jjames06/bastion-hardening/releases/latest**  
+2. Download **`bastion-hardening-v*.zip`** (current Latest is also documented in [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17))  
 3. Extract to a folder **you** control (for example `C:\Tools\Bastion`)  
 4. Confirm these files sit together: `Bastion-Hardening.bat`, `Bastion-Hardening.ps1` (optional: `Bastion-Banner.utf8.txt`, `docs\`)
 
@@ -29,7 +31,7 @@ If you are not comfortable with restore points and Recovery, **stop here** and d
 
 | Step | Menu | Why |
 |------|------|-----|
-| Dry Run | **1** | Would change vs Already OK — no system changes |
+| Dry Run | **1** | Would change vs Already OK - no system changes |
 | Security audit | **2** | Optional posture sample |
 | Sections | **4** | Enable only what you understand; leave risky options off until ready |
 | DNS (optional) | **D** | Public resolver or leave DNS unchanged |
@@ -40,7 +42,7 @@ If you are not comfortable with restore points and Recovery, **stop here** and d
 
 - Reboot if LSA Protection or optional features require it.  
 - Dry Run again to confirm calm **Already OK** lines.  
-- If something broke: [Recovery cookbook](Recovery-cookbook) — do **not** guess random PowerShell first.
+- If something broke: [Recovery cookbook](Recovery-cookbook) - do **not** guess random PowerShell first.
 
 ## Honest expectations
 

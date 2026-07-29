@@ -23,7 +23,7 @@ Current tree: **GNU GPLv3** (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). Treat
 
 Bastion makes deliberate system changes on Windows (services, firewall, registry, DNS, Defender settings, AppX packages, browser enterprise policies when you opt in, and related areas). Treat every copy of the script as **privileged software**:
 
-- Run only from this official repository or a release you verified yourself
+- Run only from the [official site](https://www.operationlockedin.com/bastion/download), this official GitHub repository, or a release you verified yourself
 - Review `Bastion-Hardening.ps1` before first use
 - Prefer a System Restore Point before Apply or Quick Harden
 
@@ -37,7 +37,7 @@ Full inventory: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 |-------------|---------|
 | First run | Seeds config defaults; rewrites session/browser-state snapshots from **live** detection |
 | Apply history file | `Bastion-LastApply.json` only after a **real** Apply |
-| Encrypted Client Hello (ECH) | Never written unless you opt in under Strict in menu **6** — see [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) |
+| Encrypted Client Hello (ECH) | Never written unless you opt in under Strict in menu **6** - see [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) |
 | Telemetry to Bastion authors | Bastion does not upload logs or config to a Bastion cloud service as part of normal operation |
 
 Browser policy files/keys (Firefox `policies.json`, Chrome/Brave policy registry) are written only when you use browser policy features. They live **outside** the data directory and are not removed merely by deleting Bastion’s JSON folder.
@@ -70,7 +70,7 @@ We will aim to acknowledge reports and prioritize fixes on a best-effort basis.
 - Site or network breakage after **Strict** browser mode or an optional **Encrypted Client Hello (ECH)** pack you explicitly enabled (documented compatibility trade-offs; revert with menu **6** → Default or System Restore)
 - Presence of Bastion log/config files under the documented data directory (expected; see [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md))
 - Missing `Bastion-LastApply.json` after first launch without Apply (expected; no Apply undo until Apply runs)
-- Program/game launch failures after **ExploitProtection** / system **StrictHandle** (World of Warcraft was one documented example; others may break until reported) — known issue [#18](https://github.com/jjames06/bastion-hardening/issues/18), reverse via Recovery → 6 → StrictHandle, and [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md); not a remote code-execution vulnerability
+- Program/game launch failures after **ExploitProtection** / system **StrictHandle** (World of Warcraft was one documented example; others may break until reported) - known issue [#18](https://github.com/jjames06/bastion-hardening/issues/18), reverse via Recovery → 6 → StrictHandle, and [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md); not a remote code-execution vulnerability
 
 ## Safe usage checklist
 
@@ -87,7 +87,8 @@ We will aim to acknowledge reports and prioritize fixes on a best-effort basis.
 - Program installs use **winget catalog IDs only** and never pass `--ignore-security-hash`
 - Custom package IDs typed by the user are not accepted
 - GPU/BIOS guidance is informational only; Bastion does not flash firmware or auto-install vendor driver suites
-- Prefer official GitHub releases or clones of this repository; do not run untrusted re-uploads
+- Prefer the [official product site](https://www.operationlockedin.com) download, official GitHub releases, or clones of this repository; do not run untrusted re-uploads
+- The site download (`/api/bastion/download`) resolves to the same GitHub Latest release zip; it is not a third-party mirror
 
 ## Scope
 

@@ -1,4 +1,4 @@
-﻿# Recovery cookbook
+# Recovery cookbook
 
 Main menu **9 Recovery / fix** is one entry with **modular hubs**. Prefer a hub over full **Undo** when you know what broke.
 
@@ -9,11 +9,11 @@ Main menu **9 Recovery / fix** is one entry with **modular hubs**. Prefer a hub 
 | **1** | Undo last hardening | You want best-effort restore of **tracked** services/firewall groups from the last Apply only |
 | **2** | Services | Printing stopped; need file share host, discovery helpers, or Xbox services again |
 | **3** | Network | RDP / Assistance / WinRM; LAN sharing/discovery/mDNS; DNS reset to automatic |
-| **4** | Browser policies | Sites broken after Strict/ECH — set that browser to **Default** |
+| **4** | Browser policies | Sites broken after Strict/ECH - set that browser to **Default** |
 | **5** | Apps and UI | Copilot/M365, Widgets/Suggestions, Game Bar / ms-gamingoverlay prompt |
 | **6** | Security mitigations | StrictHandle / games, Defender NP/CFA, Delivery Optimization, PowerShell logging, LSA, CEIP tasks |
 
-**Note:** Appx bloat and OneDrive removal are **not** reinstalled from Recovery — use System Restore or vendor/Store installers.
+**Note:** Appx bloat and OneDrive removal are **not** reinstalled from Recovery - use System Restore or vendor/Store installers.
 
 ## Symptom → action
 

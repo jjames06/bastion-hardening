@@ -14,6 +14,8 @@ User-facing handbook (Quick start, Recovery, StrictHandle, FAQ).
 
 **GitHub Wiki tab:** mirrored to https://github.com/jjames06/bastion-hardening/wiki when the wiki remote is initialized (see `tools/publish-wiki.ps1`).
 
+**Official product site:** https://www.operationlockedin.com (download, product pages, support). Source of truth for the toolkit remains this repository and GitHub Releases.
+
 Deep technical docs remain in sibling files (`DATA-DIRECTORY.md`, `BROWSER-POLICIES-AND-ECH.md`, `KNOWN-ISSUES.md`) and in-app Help (menu 11).
 
 **License:** Bastion is **GNU GPLv3** (`LICENSE` + `NOTICE` at the repository root). The handbook text is part of the project and is distributed under the same terms.
