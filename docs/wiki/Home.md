@@ -2,7 +2,7 @@
 
 **Selective, state-aware, safety-first Windows hardening for a personal PC you administer.**
 
-This wiki is a short **user handbook**. Deep technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Prefer the [official site download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest) over random copies.
+This wiki is a short **user handbook**. Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Download only from the [official site](https://www.operationlockedin.com/bastion/download) or the [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest); avoid re-uploads from chat or third parties.
 
 ## Start here
 
@@ -48,10 +48,10 @@ This wiki is a short **user handbook**. Deep technical detail ships **in the rel
 
 - Run only as **Administrator** from an official source you trust (site download or GitHub release).  
 - Create a **System Restore Point** (main menu **13** / **R**) before Apply or Quick Harden.  
-- Prefer **Recovery hubs** (menu **9**) over full Undo when you know what broke.  
+- When you know what broke, use **Recovery hubs** (menu **9**) before a full Undo.  
 - System Restore remains the strongest full rollback.
 
-*Handbook aims to match product behavior around **v15.7+**. Always prefer the [official download](https://www.operationlockedin.com/bastion/download) or [Latest](https://github.com/jjames06/bastion-hardening/releases/latest).*
+*This handbook aims to match product behavior around **v15.7+**. Always use the [official download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest).*
 
 **License:** GNU **GPLv3**. Free to use and modify; distributed modified versions must stay GPLv3 with source (see FAQ).
 

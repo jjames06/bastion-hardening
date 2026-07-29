@@ -46,7 +46,7 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 4. **Until that exception ships in Bastion**, keep system StrictHandle off (or keep your manual path exception). After an update includes it, re-Apply or Recovery -> 6 -> re-enable system StrictHandle + exceptions.
 
-Do **not** assume every crash is StrictHandle - but if the launcher works and only the game dies at start, check crash logs and StrictHandle first. Prefer Bastion Recovery so status and reverse paths stay accurate.
+Do **not** assume every crash is StrictHandle, but if the launcher works and only the game dies at start, check crash logs and StrictHandle first. Use Bastion Recovery when you can so status and reverse paths stay accurate.
 
 ---
 
@@ -188,7 +188,7 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 
 **Honest limits**
 
-- Opening remote or LAN paths **increases attack surface**. Prefer locked when idle.  
+- Opening remote or LAN paths **increases attack surface**. Keep them locked when idle.  
 - Windows **Home** often cannot host full RDP the way Pro/Enterprise can.  
 - Hosting shares may need both **firewall OPEN** and **LanmanServer** enabled.  
 - System Restore remains the strongest full rollback.
@@ -216,5 +216,5 @@ Also see the [notice above](#before-you-enable-exploitprotection-stricthandle) a
 
 ## Controlled Folder Access / Network Protection false positives
 
-**Recovery:** Main menu **9 > 6 > Defender** - soften NP and/or CFA, or re-harden with CFA allow-path refresh. Prefer allowing a trusted app path before turning protections off permanently.
+**Recovery:** Main menu **9 > 6 > Defender**: soften NP and/or CFA, or re-harden with CFA allow-path refresh. Allow a trusted app path before turning protections off permanently when you can.
 
