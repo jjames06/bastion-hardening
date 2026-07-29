@@ -6350,13 +6350,18 @@ function Show-Help {
         "System Restore is the real safety net. Use main menu 13 or R before major changes. Undo covers tracked services and firewall groups from the last Apply only.",
         "Recovery hubs (Services, Network, Browsers, Apps/UI, Security mitigations) reverse most Bastion effects with live status - without bloating the main menu.",
         "Irreversible or hard-to-reverse items (BloatApps, OneDrive removal) stay off until you opt in and are called out explicitly.",
-        "License: GNU GPLv3. Free to use and share; if you distribute a modified Bastion, you must keep it GPLv3 and provide source. See LICENSE and NOTICE beside the script."
+        "License: GNU GPLv3. Free to use and share; if you distribute a modified Bastion, you must keep it GPLv3 and provide source. See LICENSE and NOTICE beside the script.",
+        "## Official site and downloads",
+        "Product site (download, docs, support): https://www.operationlockedin.com",
+        "Recommended download: https://www.operationlockedin.com/bastion/download (same GitHub Latest zip).",
+        "Source and issues: https://github.com/jjames06/bastion-hardening"
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
     $r = Show-HelpPage -Title "HELP 2/13 - RECOMMENDED WORKFLOW" -Page 2 -Total $total -Lines @(
         "## First-time flow",
-        "0. First elevated launch (Bastion-Hardening.bat) creates a writable data directory and seeds Bastion-Config.json with defaults.",
+        "0. Prefer the official site download: https://www.operationlockedin.com/bastion/download (or GitHub Releases Latest).",
+        "   First elevated launch (Bastion-Hardening.bat) creates a writable data directory and seeds Bastion-Config.json with defaults.",
         "   No Bastion-LastApply.json is written until you actually Apply - Dry Run still reads live Windows state.",
         "1. Main menu 13 or R - create a named System Restore Point.",
         "2. Option 1 Dry Run - read Would change vs Already OK with your current toggles.",
