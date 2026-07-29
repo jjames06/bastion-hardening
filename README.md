@@ -1,6 +1,6 @@
 # Bastion Hardening Framework
 
-**Selective  -  State-aware  -  Safety-first Windows hardening for a personal workstation**
+**Selective - State-aware - Safety-first Windows hardening for a personal workstation**
 
 Version **15.7**
 
@@ -13,22 +13,15 @@ Version **15.7**
 </p>
 
 <p align="center">
-  <a href="#how-to-install-properly"><strong>Install guide</strong></a>  - 
-  <a href="docs/wiki/Home.md"><strong>Handbook</strong></a>  - 
-  <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a>  - 
-  <a href="#known-issues"><strong>Known issues</strong></a>  - 
-  <a href="#browser-policies"><strong>Browser / ECH</strong></a>  - 
-  <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a>  - 
-  <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a>  - 
-  <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a>  - 
-  <a href="SECURITY.md"><strong>Security</strong></a>
+  <a href="https://www.operationlockedin.com"><strong>Official site</strong></a> - <a href="https://www.operationlockedin.com/bastion/download"><strong>Download</strong></a> - <a href="#how-to-install-properly"><strong>Install guide</strong></a> - <a href="docs/wiki/Home.md"><strong>Handbook</strong></a> - <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> - <a href="#known-issues"><strong>Known issues</strong></a> - <a href="#browser-policies"><strong>Browser / ECH</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> - <a href="SECURITY.md"><strong>Security</strong></a>
 </p>
 
 **Further reading in this repo**
 
 | Document | Topic |
 |----------|--------|
-| [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** â€" Quick start, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
+| [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In studio); Bastion product pages and download |
+| [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** - Quick start, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
 | [GitHub Wiki](https://github.com/jjames06/bastion-hardening/wiki) | Same handbook on the Wiki tab (synced from `docs/wiki/`) |
 | [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) | What folders/files Bastion creates, where, and why |
 | [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) | Per-browser modes and Encrypted Client Hello (ECH) - never default |
@@ -151,24 +144,28 @@ Bastion is **not** an MSI installer. You download the files, keep them together,
 ### Before you start
 
 1. Use a **personal** PC you fully control (not work, school, domain-joined, or MDM-managed).
-2. Prefer the **official** release or this GitHub repository only - not random re-uploads.
+2. Prefer the **official site download**, a **GitHub release**, or this repository only - not random re-uploads.
 3. Skim [LICENSE](LICENSE), [NOTICE](NOTICE), and the warnings at the top of this README.
 4. Optionally read the script (`Bastion-Hardening.ps1`) before the first Apply.
 
-### Method A - Release zip (recommended)
+### Method A - Official site or GitHub release zip (recommended)
 
-Best for most people.
+Best for most people. Prefer one of these **official** sources only (not random re-uploads):
 
-1. Open the latest release:  
-   **https://github.com/jjames06/bastion-hardening/releases/latest**  
-   (pinned older tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain available if you need them)
-2. Download **`bastion-hardening-v15.7.zip`** (or the current release asset with a similar name).
-3. Right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**  
+| Source | URL |
+|--------|-----|
+| **Official site (recommended)** | [www.operationlockedin.com/bastion/download](https://www.operationlockedin.com/bastion/download) - uses `/api/bastion/download` to resolve the same GitHub Latest zip |
+| **GitHub Releases** | [github.com/jjames06/bastion-hardening/releases/latest](https://github.com/jjames06/bastion-hardening/releases/latest) |
+
+Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). Older pinned tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain on GitHub if you need them.
+
+1. Download **`bastion-hardening-v15.7.zip`** (or the current release asset with a similar name) from the official site or GitHub Latest.
+2. Right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**  
    (reduces SmartScreen / "downloaded from the internet" friction on the extracted scripts)
-4. Extract the zip to a folder **you** control, for example:  
+3. Extract the zip to a folder **you** control, for example:  
    `C:\Tools\Bastion`  
    Avoid system folders such as `C:\Windows` or Program Files.
-5. Confirm these files sit **in the same folder**:
+4. Confirm these files sit **in the same folder**:
 
    | File | Required? |
    |------|-----------|
@@ -177,11 +174,11 @@ Best for most people.
    | `Bastion-Banner.utf8.txt` | Optional (banner only) |
    | `LICENSE`, `NOTICE`, `README.md`, `SECURITY.md` | Optional at runtime |
 
-6. **Do not** double-click the `.ps1` file. Use the batch launcher:
+5. **Do not** double-click the `.ps1` file. Use the batch launcher:
    - Right-click **`Bastion-Hardening.bat`**
    - Choose **Run as administrator**
    - Accept the UAC prompt
-7. When the Bastion menu appears, go to **How to run Bastion the first time** below.
+6. When the Bastion menu appears, go to **How to run Bastion the first time** below.
 
 ### Method B - Git clone
 
@@ -221,7 +218,7 @@ If you delete that folder later, the next run re-seeds defaults and re-detects t
 
 After the elevated menu opens:
 
-1. Confirm the **Data directory** line on the main menu (and "First runâ€¦" or "No Bastion Apply recorded yet" when appropriate)
+1. Confirm the **Data directory** line on the main menu (and "First run..." or "No Bastion Apply recorded yet" when appropriate)
 2. **13** or **R** - create a named System Restore Point  
 3. **1** - Dry Run (preview only; no hardening applied; live OS detection)  
 4. **2** - Security Audit (optional posture sample, including installed browsers)  
@@ -239,7 +236,7 @@ After the elevated menu opens:
 |---------|-------------|
 | Nothing happens / window flashes | Run `Bastion-Hardening.bat` **as administrator**, not the `.ps1` alone |
 | "scripts is disabled" / execution policy | The launcher uses `-ExecutionPolicy Bypass` for this script only. Use the `.bat`, not a locked-down host policy that blocks even elevated Bypass |
-| SmartScreen / "Windows protected your PC" | Prefer Unblock on the zip (Method A step 3). More info -> Run anyway **only** if you trust this official source |
+| SmartScreen / "Windows protected your PC" | Prefer Unblock on the zip (Method A step 2). More info -> Run anyway **only** if you trust the official site or this GitHub release |
 | winget / Programs installs fail | Install **App Installer** from the Microsoft Store, open a new elevated window, retry |
 | Files "not found" after extract | Keep `.bat` and `.ps1` in the **same** directory; do not run a shortcut that points elsewhere |
 | Controlled Folder Access / AV blocks | Allow the script path temporarily, or run Dry Run first and apply in smaller steps |
@@ -256,7 +253,7 @@ After the elevated menu opens:
 
 ## Quick start (short)
 
-1. Download the [latest release](https://github.com/jjames06/bastion-hardening/releases/latest) zip and extract it  
+1. Download the latest zip from the [official site](https://www.operationlockedin.com/bastion/download) or [GitHub Releases](https://github.com/jjames06/bastion-hardening/releases/latest) and extract it  
 2. Right-click `Bastion-Hardening.bat` -> **Run as administrator**  
 3. Create a System Restore Point (**13** / **R**)  
 4. **Dry Run** first, then Apply or Quick Harden  
@@ -295,7 +292,7 @@ Quick Harden uses a safer subset and asks explicitly whether to keep the Print S
 
 ## Browser policies
 
-Main menu **6** (or Recovery **3**). Full detail: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
+Main menu **6** (or Recovery **4** Browser policies). Full detail: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
 
 Only **installed** supported browsers appear: **Firefox**, **Chrome**, **Brave**. Missing engines are never listed.
 
@@ -323,7 +320,7 @@ Bastion will **not** enable Encrypted Client Hello (ECH) because you installed B
 |--------|-----|
 | Revert one browser (and its ECH pack) | Menu **6** -> that browser -> **Default** |
 | Bulletproof rollback | System Restore (menu **13** / **R**) |
-| Verify after restart | Firefox `about:policies`  -  Chrome `chrome://policy`  -  Brave `brave://policy` |
+| Verify after restart | Firefox `about:policies` - Chrome `chrome://policy` - Brave `brave://policy` |
 | Dry Run / Security audit | Live vs saved mode and Encrypted Client Hello (ECH) for **installed** browsers only |
 
 ---
@@ -385,7 +382,7 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 - **OneDrive & BloatApps** - Hard to reverse. System Restore is the reliable recovery path.
 - **Browser policies / Encrypted Client Hello (ECH)** - BrowserPolicies section defaults off. ECH is **never** applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only and ECH can break some sites or networks. Details: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
 - **Undo** - Restores tracked services and firewall groups from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers. Prefer Recovery hubs when you know what broke.
-- **Recovery hubs (menu 9)** - One main-menu entry, six hubs with live status: **1** Undo  -  **2** Services (Spooler / high-risk / Xbox)  -  **3** Network (remote access, LAN discovery, DNS reset)  -  **4** Browser policies  -  **5** Apps and UI (Copilot, Widgets, Game Bar)  -  **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
+- **Recovery hubs (menu 9)** - One main-menu entry, six hubs with live status: **1** Undo - **2** Services (Spooler / high-risk / Xbox) - **3** Network (remote access, LAN discovery, DNS reset) - **4** Browser policies - **5** Apps and UI (Copilot, Widgets, Game Bar) - **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
 - **DNS** - Optional. Choose a provider or leave DNS unchanged; VPN software may still override while connected.
 - **Custom install paths** - Only allowed on fixed local volumes outside system directories.
 - **Logs and config** - Live under the **data directory** shown on the main menu (prefer `C:\Temp\Bastion`; durable fallbacks; `%TEMP%\Bastion` last). Full file list: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
@@ -457,7 +454,7 @@ When reporting a bug, include Windows version (**Settings -> System -> About** o
 ## Security
 
 - Review the script before running it. Trust is earned by reading the code.
-- Prefer official releases or clones of this repository only.
+- Prefer the [official site](https://www.operationlockedin.com/bastion/download), official GitHub releases, or clones of this repository only.
 - Do not run untrusted copies of Bastion from random downloads or chat attachments.
 - Vulnerability reporting and supported versions: see [SECURITY.md](SECURITY.md).
 

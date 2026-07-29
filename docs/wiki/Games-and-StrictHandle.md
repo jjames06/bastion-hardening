@@ -1,4 +1,4 @@
-﻿# Games and StrictHandle
+# Games and StrictHandle
 
 ## Short version
 
@@ -7,7 +7,7 @@
 | Program | Status |
 |---------|--------|
 | **World of Warcraft** | Documented **example** that broke under system StrictHandle. Bastion **auto-excepts** discovered `Wow*.exe` when found. |
-| **Counter-Strike 2** | Maintainer-tested — **not** an issue under the same profile. |
+| **Counter-Strike 2** | Maintainer-tested - **not** an issue under the same profile. |
 | **Other titles** | **Unknown.** No Bastion exception means they **may still break** until reported and we ship one. |
 
 WoW is **not** the only possible break. It is the case we fully documented and automated.
@@ -19,7 +19,7 @@ WoW is **not** the only possible break. It is the case we fully documented and a
 2. **Confirm** the program works again.  
 3. **Report** so we can add an automatic exception:  
    - [Issue #18](https://github.com/jjames06/bastion-hardening/issues/18)  
-   - [Discussions #23 — Game compatibility reports](https://github.com/jjames06/bastion-hardening/discussions/23)  
+   - [Discussions #23 - Game compatibility reports](https://github.com/jjames06/bastion-hardening/discussions/23)  
    Include: **name**, how it fails, **full path to the `.exe`**, whether the launcher still works.  
 4. **Until that exception ships in Bastion**, keep system StrictHandle **off** (or keep your manual path exception).  
 5. After a Bastion update includes your exception: **re-Apply** or Recovery **→ 6 →** re-enable system StrictHandle + refresh exceptions.
@@ -45,6 +45,6 @@ Set-ProcessMitigation -System -Disable StrictHandle
 
 ## Technical framing (honest)
 
-StrictHandle can make certain invalid or short-lived handle uses **fatal**. Some game loaders and multi-process clients do that during early startup and are fine under default Windows policy. That is a **mitigation compatibility** class of issue across the industry — not an accusation about any publisher’s product intent.
+StrictHandle can make certain invalid or short-lived handle uses **fatal**. Some game loaders and multi-process clients do that during early startup and are fine under default Windows policy. That is a **mitigation compatibility** class of issue across the industry - not an accusation about any publisher’s product intent.
 
 Next: [Recovery cookbook](Recovery-cookbook) · [FAQ](FAQ) · [Home](Home)

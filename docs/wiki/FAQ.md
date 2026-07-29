@@ -1,4 +1,4 @@
-﻿# FAQ
+# FAQ
 
 ## Is Bastion antivirus?
 
@@ -10,12 +10,20 @@
 
 ## What Windows versions are supported?
 
-**Windows 10/11**, 64-bit, run as Administrator. Maintainer-tested on a personal Windows 11 Pro daily driver; other builds may work — report results in [Discussions](https://github.com/jjames06/bastion-hardening/discussions).
+**Windows 10/11**, 64-bit, run as Administrator. Maintainer-tested on a personal Windows 11 Pro daily driver; other builds may work - report results in [Discussions](https://github.com/jjames06/bastion-hardening/discussions).
 
 ## Which file do I download?
 
-Always: **https://github.com/jjames06/bastion-hardening/releases/latest**  
-See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17). Prefer the release zip over random re-uploads.
+Prefer either official channel (same GitHub Latest zip under the hood):
+
+- **Official site:** https://www.operationlockedin.com/bastion/download  
+- **GitHub Releases:** https://github.com/jjames06/bastion-hardening/releases/latest  
+
+See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17). Prefer those over random re-uploads.
+
+## Where is the product website?
+
+**https://www.operationlockedin.com** - Operation Locked In studio site (Bastion product pages, download, support, donate). Bastion source and releases remain on this GitHub repository.
 
 ## Where does Bastion store files?
 
@@ -32,7 +40,7 @@ Deleting that folder does **not** un-harden Windows or remove browser enterprise
 
 | Goal | Path |
 |------|------|
-| Targeted fix | Main menu **9** Recovery hubs — [Recovery cookbook](Recovery-cookbook) |
+| Targeted fix | Main menu **9** Recovery hubs - [Recovery cookbook](Recovery-cookbook) |
 | Last Apply tracked services/firewall | Recovery **→ 1** Undo (partial by design) |
 | Browser policies | Menu **6** or Recovery **→ 4** → that browser → **Default** |
 | Full rollback | System Restore (menu **13** / **R**, or Safe Mode) |
@@ -48,7 +56,7 @@ Recovery **→ 2 Services →** Print Spooler (or High-risk services). Spooler i
 
 ## Cannot RDP or use remote tools
 
-Firewall Apply locks remote groups on purpose. Recovery **→ 3 Network →** Remote access. Opening remote paths increases attack surface — lock again when idle.
+Firewall Apply locks remote groups on purpose. Recovery **→ 3 Network →** Remote access. Opening remote paths increases attack surface - lock again when idle.
 
 ## Will Undo put everything back?
 
@@ -58,6 +66,7 @@ Firewall Apply locks remote groups on purpose. Recovery **→ 3 Network →** Re
 
 - In-app Help: menu **11**  
 - This wiki  
+- Product site support: [operationlockedin.com/support](https://www.operationlockedin.com/support)  
 - [Discussions](https://github.com/jjames06/bastion-hardening/discussions)  
 - Bugs: [Issues](https://github.com/jjames06/bastion-hardening/issues)  
 - Security: [SECURITY.md](https://github.com/jjames06/bastion-hardening/blob/main/SECURITY.md) (do not post full exploit details publicly for new vulns)

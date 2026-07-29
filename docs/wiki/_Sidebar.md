@@ -3,5 +3,7 @@
 * [Recovery cookbook](Recovery-cookbook)
 * [Games and StrictHandle](Games-and-StrictHandle)
 * [FAQ](FAQ)
+* [Official site](https://www.operationlockedin.com)
+* [Download](https://www.operationlockedin.com/bastion/download)
 * [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest)
 * [Discussions](https://github.com/jjames06/bastion-hardening/discussions)

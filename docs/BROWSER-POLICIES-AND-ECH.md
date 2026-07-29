@@ -1,6 +1,6 @@
 # Browser policies and Encrypted Client Hello (ECH)
 
-This page documents Bastion’s **browser privacy policies** and the optional **Encrypted Client Hello (ECH)** pack. It matches the behavior enforced in `Bastion-Hardening.ps1` (menu **6**, Recovery **3**, Dry Run, and Security audit).
+This page documents Bastion's **browser privacy policies** and the optional **Encrypted Client Hello (ECH)** pack. It matches the behavior enforced in `Bastion-Hardening.ps1` (menu **6**, Recovery **4** Browser policies, Dry Run, and Security audit).
 
 ---
 
@@ -138,5 +138,5 @@ Deleting Bastion’s data directory does **not** by itself remove browser enterp
 ## Related documentation
 
 - [Data directory](DATA-DIRECTORY.md)
-- [README — Browser policies](../README.md#browser-policies)
+- [README - Browser policies](../README.md#browser-policies)
 - In-app **Help → page 7 (Browsers, Strict mode, and ECH)**
