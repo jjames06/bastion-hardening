@@ -45,6 +45,6 @@ Set-ProcessMitigation -System -Disable StrictHandle
 
 ## Technical framing (honest)
 
-StrictHandle can make certain invalid or short-lived handle uses **fatal**. Some game loaders and multi-process clients do that during early startup and are fine under default Windows policy. That is a **mitigation compatibility** class of issue across the industry - not an accusation about any publisher’s product intent.
+StrictHandle can make certain invalid or short-lived handle uses **fatal**. Some game loaders and multi-process clients do that during early startup and are fine under default Windows policy. That is a **mitigation compatibility** class of issue across the industry - not an accusation about any publisher's product intent.
 
 Next: [Recovery cookbook](Recovery-cookbook) · [FAQ](FAQ) · [Home](Home)

@@ -24,7 +24,7 @@ Main menu **9 Recovery / fix** is one entry with **modular hubs**. Prefer a hub 
 | Cannot RDP / Remote Assistance / WinRM | **9 → 3 →** Remote access | Enable the firewall group you need; for full RDP host also allow system RDP + TermService. Prefer lock when idle |
 | Name resolution wrong after Bastion DNS | **9 → 3 →** Reset DNS | Resets eligible adapters to automatic (DHCP). Menu **D** intent is unchanged; next DNS Apply may set public DNS again. VPN may override while connected |
 | Browser sites broken after policies | **9 → 4** or main **6** | That browser → **Default** (best-effort). System Restore is bulletproof |
-| ms-gamingoverlay “get an app” dialog | **9 → 5 →** Game Bar | Silence Game DVR (or re-enable flags and install Xbox Game Bar from Store) |
+| ms-gamingoverlay "get an app" dialog | **9 → 5 →** Game Bar | Silence Game DVR (or re-enable flags and install Xbox Game Bar from Store) |
 | Game / program fails after Apply (instant exit) | **9 → 6 →** StrictHandle | See [Games and StrictHandle](Games-and-StrictHandle) |
 | Controlled Folder Access blocks a trusted app | **9 → 6 →** Defender | Prefer allow-list/re-harden carefully; soften only if needed |
 | Need Widgets / suggestions back | **9 → 5** | Restore Widgets/Suggestions defaults |
