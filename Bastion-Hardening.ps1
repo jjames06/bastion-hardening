@@ -4,7 +4,7 @@
     Bastion Hardening Framework v15.7 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
-    to avoid smart-quote / em-dash parse failures when pasting into editors.
+    for reliable paste into editors and terminals.
 .NOTES
     Version 15.7 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
