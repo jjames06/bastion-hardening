@@ -40,7 +40,7 @@ Full inventory: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 | Encrypted Client Hello (ECH) | Never written unless you opt in under Strict in menu **6** - see [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) |
 | Telemetry to Bastion authors | Bastion does not upload logs or config to a Bastion cloud service as part of normal operation |
 
-Browser policy files/keys (Firefox `policies.json`, Chrome/Brave policy registry) are written only when you use browser policy features. They live **outside** the data directory and are not removed merely by deleting Bastion’s JSON folder.
+Browser policy files/keys (Firefox `policies.json`, Chrome/Brave policy registry) are written only when you use browser policy features. They live **outside** the data directory and are not removed merely by deleting Bastion's JSON folder.
 
 ## Reporting a vulnerability
 
@@ -75,7 +75,7 @@ We will aim to acknowledge reports and prioritize fixes on a best-effort basis.
 ## Safe usage checklist
 
 1. Create a System Restore Point  
-2. Run **Dry Run** and review “Would change” items  
+2. Run **Dry Run** and review "Would change" items  
 3. Leave high-impact sections (BloatApps, OneDrive) off until you understand them  
 4. Treat browser **Strict** and Encrypted Client Hello (ECH) as optional; ECH is never default  
 5. Choose DNS under menu **D**, or leave DNS unchanged  
@@ -92,4 +92,4 @@ We will aim to acknowledge reports and prioritize fixes on a best-effort basis.
 
 ## Scope
 
-This policy covers the Bastion scripts and packaging in this repository. It does not cover third-party resolvers (Quad9, Cloudflare, Google, OpenDNS), Microsoft Windows, browser vendors’ ECH implementations, or winget package publishers.
+This policy covers the Bastion scripts and packaging in this repository. It does not cover third-party resolvers (Quad9, Cloudflare, Google, OpenDNS), Microsoft Windows, browser vendors' ECH implementations, or winget package publishers.

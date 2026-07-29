@@ -45,7 +45,7 @@ During a normal TLS handshake, the **Client Hello** can expose the destination h
 
 **Encrypted Client Hello (ECH)** is a TLS privacy feature: when client, server, and path support it, that material can be encrypted so passive observers learn less about which site you open.
 
-Bastion’s “ECH pack” is a **best-effort policy lock** so the browser is encouraged or required to use ECH-related settings Bastion can set. It is **not** a guarantee that every site or network will complete handshakes with ECH, and it is **not** identical across browsers.
+Bastion's "ECH pack" is a **best-effort policy lock** so the browser is encouraged or required to use ECH-related settings Bastion can set. It is **not** a guarantee that every site or network will complete handshakes with ECH, and it is **not** identical across browsers.
 
 ---
 
@@ -59,9 +59,9 @@ Bastion’s “ECH pack” is a **best-effort policy lock** so the browser is en
 
 ### Chrome or Brave + Strict + ECH Yes
 
-- Enterprise policy keys under the browser’s policy hive (HKLM policies)  
+- Enterprise policy keys under the browser's policy hive (HKLM policies)  
 - Bastion sets an **intent marker** (`BastionEchLock`) and the strongest **transport** policies it can via enterprise policy (HTTPS-Only, DNS-over-HTTPS style settings as implemented in the script)  
-- This is **not** the same preference model as Firefox’s `policies.json`  
+- This is **not** the same preference model as Firefox's `policies.json`  
 
 ### Strict without ECH (you answered No)
 
@@ -71,7 +71,7 @@ Bastion’s “ECH pack” is a **best-effort policy lock** so the browser is en
 ### Default (revert)
 
 - Removes Bastion-managed policy material for **that browser only** (best-effort)  
-- Clears Bastion’s saved ECH Yes for that browser  
+- Clears Bastion's saved ECH Yes for that browser  
 - Does **not** claim to reverse unrelated third-party or MDM policies  
 
 ---
@@ -122,7 +122,7 @@ After policy changes, **fully quit** the browser (all windows) so policies reloa
 | Firefox install tree | `distribution\policies.json` when Bastion manages Firefox |
 | Chrome / Brave policy registry | Bastion-managed values when Bastion manages those browsers |
 
-Deleting Bastion’s data directory does **not** by itself remove browser enterprise policies already written. Use menu **6** → **Default** per browser, or System Restore.
+Deleting Bastion's data directory does **not** by itself remove browser enterprise policies already written. Use menu **6** → **Default** per browser, or System Restore.
 
 ---
 
@@ -130,7 +130,7 @@ Deleting Bastion’s data directory does **not** by itself remove browser enterp
 
 - Bastion does not configure Edge, Opera, Vivaldi, or other engines in this version  
 - Bastion does not claim ECH works on every network  
-- Bastion does not enable ECH “to be thorough” without an explicit Yes  
+- Bastion does not enable ECH "to be thorough" without an explicit Yes  
 - Bastion is not a full enterprise MDM replacement for browser fleets  
 
 ---

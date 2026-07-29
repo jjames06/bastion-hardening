@@ -16,7 +16,7 @@ This document explains **what** is created, **why**, and what is **not** invente
 | Apply undo | Track services / firewall groups from the **last real Apply** only |
 | Browser policy safety | Backups before Bastion overwrites browser enterprise policies |
 
-**State-aware Apply and Dry Run do not depend on these files to invent “already hardened.”** They read **live Windows state** (services, firewall, registry, features, browser policy files/keys). JSON files are memory for *your choices* and *Bastion’s own Apply undo* - not a fake claim that Windows was hardened if you never Applied. Bastion **does not invent** Apply history on first run.
+**State-aware Apply and Dry Run do not depend on these files to invent "already hardened."** They read **live Windows state** (services, firewall, registry, features, browser policy files/keys). JSON files are memory for *your choices* and *Bastion's own Apply undo* - not a fake claim that Windows was hardened if you never Applied. Bastion **does not invent** Apply history on first run.
 
 ---
 
@@ -62,7 +62,7 @@ Each candidate is **write-probed** (create folder if needed, write a short tempo
 
 | Item | Why |
 |------|-----|
-| `Bastion-LastApply.json` | There is no Bastion Apply undo until you Apply. Missing file = no Bastion Apply history, **not** “Windows is stock” |
+| `Bastion-LastApply.json` | There is no Bastion Apply undo until you Apply. Missing file = no Bastion Apply history, **not** "Windows is stock" |
 | System-wide product registration | Bastion is not an MSI; it does not add itself to Programs and Features |
 | Encrypted Client Hello (ECH) policy | ECH is never written unless you opt in under Strict in menu **6** (see [BROWSER-POLICIES-AND-ECH.md](BROWSER-POLICIES-AND-ECH.md)) |
 
@@ -94,7 +94,7 @@ Each candidate is **write-probed** (create folder if needed, write a short tempo
 | `Bastion-LastApply.json` only | Menu shows no Bastion Apply recorded; Undo has nothing from Bastion; Dry Run still uses live OS |
 | `Bastion-Session.json` only | Rewritten automatically on next launch |
 
-Deleting Bastion’s data directory **does not** undo Windows hardening, browser enterprise policies, or winget installs. Use Recovery, per-browser **Default**, Uninstall, or **System Restore** for those.
+Deleting Bastion's data directory **does not** undo Windows hardening, browser enterprise policies, or winget installs. Use Recovery, per-browser **Default**, Uninstall, or **System Restore** for those.
 
 ---
 
