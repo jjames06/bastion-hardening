@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.9.3 FINAL
+    Bastion Hardening Framework v15.9.4 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
@@ -10,7 +10,7 @@
     lives in plain-text src\*.ps1 modules (NEVER encrypted - GPLv3 + auditability).
     Modules are dot-sourced into this runspace so $script: scope is shared.
 .NOTES
-    Version 15.9.3 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.9.4 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
@@ -19,11 +19,19 @@
     v15.8.4: Match Settings Edit DNS DoH path (per-interface QWord DohFlags=17 + template) so Encrypted shows without manual click.
     v15.9.0: Modular plain-text src\ layout, MANIFEST integrity, ACL on Bastion-Config.json.
     v15.9.1/15.9.0-fixed: Script-scope module load (function-scope . made menus vanish after import).
-    v15.9.3: Banner path via BastionRoot/parent of src; MANIFEST integrity. Inherits v15.9.2: Post-load command probe; all startup in try/catch + pause; friendly admin check; self-elevating bat.
+    v15.9.2: Post-load command probe; startup try/catch + pause; friendly admin check; self-elevating bat.
+    v15.9.3: Banner path via BastionRoot/parent of src.
+    v15.9.4: Launcher Unblock-File (Mark-of-the-Web) + Process Bypass; do not run .ps1 alone under Restricted policy.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
 )
+
+# Prefer Bastion-Hardening.bat. Double-clicking this .ps1 uses the system ExecutionPolicy
+# (often Restricted) and fails with UnauthorizedAccess before any Bastion code runs.
+try {
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue
+} catch {}
 
 $ErrorActionPreference = "Continue"
 $ProgressPreference    = "SilentlyContinue"
@@ -231,7 +239,7 @@ function Test-BastionCommandsPresent {
         }
     }
     if ($missing.Count -gt 0) {
-        throw ("Bastion module load incomplete - missing commands: {0}`nThis usually means modules were not dot-sourced at script scope. Re-download the official v15.9.3+ zip." -f ($missing -join ", "))
+        throw ("Bastion module load incomplete - missing commands: {0}`nThis usually means modules were not dot-sourced at script scope. Re-download the official v15.9.4+ zip." -f ($missing -join ", "))
     }
     return $true
 }

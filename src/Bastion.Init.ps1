@@ -1,9 +1,9 @@
-# Bastion.Init.ps1 - script-scoped state, catalogs, and section docs (v15.9.3)
+# Bastion.Init.ps1 - script-scoped state, catalogs, and section docs (v15.9.4)
 # Dot-sourced by Bastion-Hardening.ps1. Do not run standalone.
 # Plain text GPLv3 source - never encrypt.
 
 $script:Config = @{
-    ScriptVersion = "15.9.3"
+    ScriptVersion = "15.9.4"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"

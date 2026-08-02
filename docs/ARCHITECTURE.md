@@ -1,17 +1,17 @@
-# Bastion architecture (v15.9.3)
+# Bastion architecture (v15.9.4)
 
 ## Purpose
 
 Bastion Hardening Framework is a **menu-driven**, **state-aware** Windows workstation hardener. It runs elevated, records preferences and optional Apply undo data under a local data directory, and never invents Apply history on first launch.
 
-This document maps the **code layout** after the v15.9.x modular restructure (including script-scope module load, post-load command probe, and self-elevating bat so menus survive after import). Product behavior is unchanged from the prior monolith unless noted in release notes.
+This document maps the **code layout** after the v15.9.x modular restructure (including script-scope module load, post-load command probe, self-elevating bat, and v15.9.4 Mark-of-the-Web / ExecutionPolicy launch hardening). Product behavior is unchanged from the prior monolith unless noted in release notes.
 
 ## Design principles
 
 | Principle | Practice |
 |-----------|----------|
 | Auditability | All product PowerShell is **plain text** under `src\`. Source is **never encrypted** (GPLv3 + peer review). |
-| Single entry | Users launch `Bastion-Hardening.bat` (UAC) which starts elevated `Bastion-Hardening.ps1`. |
+| Single entry | Users **always** launch `Bastion-Hardening.bat` (UAC). Never double-click `Bastion-Hardening.ps1` alone under Restricted ExecutionPolicy. |
 | Shared state | Modules are **dot-sourced** into the bootstrap runspace so `$script:` variables and functions are shared. |
 | Fail closed | Startup **hard-fails** if `src\` modules or `src\MANIFEST.sha256` are missing or hashes mismatch. |
 | Encrypt data, not code | DNS undo snapshots and RDP host prior use **DPAPI** (CurrentUser + fixed entropy). Preferences JSON is not secret but gets a tight ACL. |
@@ -19,9 +19,9 @@ This document maps the **code layout** after the v15.9.x modular restructure (in
 ## Runtime layout
 
 ```
-bastion-hardening-v15.9.3\
-  Bastion-Hardening.bat      # UAC launcher; -Wait elevated process; checks .ps1 + src\ + MANIFEST
-  Bastion-Hardening.ps1      # Thin bootstrap: integrity, script-scope ., entry try
+bastion-hardening-v15.9.4\
+  Bastion-Hardening.bat      # UAC launcher; Unblock-File tree + Process Bypass; invoke & bootstrap
+  Bastion-Hardening.ps1      # Thin bootstrap: early Process Bypass; integrity; script-scope .
   Bastion-Banner.utf8.txt
   LICENSE, NOTICE, README.md, SECURITY.md
   src\
@@ -44,10 +44,13 @@ bastion-hardening-v15.9.3\
 
 ## Load order
 
+**Launcher (`Bastion-Hardening.bat`)** (preferred entry): elevates via UAC, then in the elevated console sets Process-scope ExecutionPolicy Bypass, recursively `Unblock-File`s the product tree (Mark-of-the-Web from zip downloads), and invokes `Bastion-Hardening.ps1` with the call operator (`&`) so policy and zone blocks do not stop startup.
+
 Bootstrap (`Bastion-Hardening.ps1`) always:
 
-1. Sets `$script:BastionRoot = $PSScriptRoot`
-2. `Test-BastionSourcesReady` then **dot-sources modules at script scope** (not inside a function):
+1. Sets Process-scope ExecutionPolicy Bypass early (helps when someone still starts the `.ps1` with Bypass flags; double-click alone still fails under Restricted before code runs)
+2. Sets `$script:BastionRoot = $PSScriptRoot`
+3. `Test-BastionSourcesReady` then **dot-sources modules at script scope** (not inside a function):
    - Requires `src\` and every listed module file
    - `Test-BastionSourceIntegrity` against `src\MANIFEST.sha256` (**hard-fail** on missing/mismatch)
    - Dot-sources modules in order (must be `.` at script scope so functions survive after load; required for menus after import):
@@ -66,8 +69,8 @@ Bootstrap (`Bastion-Hardening.ps1`) always:
 | 10 | `Bastion.Recovery.ps1` | Recovery menus and targeted undo helpers |
 | 11 | `Bastion.Menus.ps1` | Interactive menus including `Show-MainMenu` |
 
-3. Optional smoke: `-BastionSmokeLoadOnly` prints version and exits 0 after a successful import (still requires elevation because of `#Requires -RunAsAdministrator`).
-4. Resolves/binds the data directory, `Ensure-BastionPaths`, `Initialize-BastionDataStore`, then `Show-MainMenu`.
+4. Optional smoke: `-BastionSmokeLoadOnly` prints version and exits 0 after a successful import (requires elevation; friendly admin gate if not elevated).
+5. Resolves/binds the data directory, `Ensure-BastionPaths`, `Initialize-BastionDataStore`, then `Show-MainMenu`.
 
 ## Integrity
 
@@ -103,11 +106,11 @@ Elevated:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Bastion-Hardening.ps1 -BastionSmokeLoadOnly
 ```
 
-Expected: `Bastion smoke load OK v15.9.3 (commands verified)` and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
+Expected: `Bastion smoke load OK v15.9.4 (commands verified)` and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
 
 ## Version
 
-Product-facing version is **15.9.3** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.3** over any 15.9.0/15.9.1 zip if elevated launch flash-closed after UAC.
+Product-facing version is **15.9.4** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.4** if zip extracts fail with *running scripts is disabled* (Mark-of-the-Web / Restricted); always start with the `.bat`, never the `.ps1` alone.
 
 ## Related docs
 
