@@ -1,23 +1,25 @@
-#Requires -RunAsAdministrator
+#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.9.0 FINAL
+    Bastion Hardening Framework v15.9.2 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
 
-    v15.9.0 modular layout: this file is a thin elevated bootstrap. Implementation
+    v15.9.x modular layout: this file is a thin elevated bootstrap. Implementation
     lives in plain-text src\*.ps1 modules (NEVER encrypted - GPLv3 + auditability).
     Modules are dot-sourced into this runspace so $script: scope is shared.
 .NOTES
-    Version 15.9.0 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.9.2 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
     v15.8.2: DNS menu shows live vs preferred, DoH labels, and Apply DNS now (A); preference alone does not change Windows.
     v15.8.3: Preserve DNS/RDP undo blobs across Applies; Network option 4 previews snapshot targets; clearer restore UX.
     v15.8.4: Match Settings Edit DNS DoH path (per-interface QWord DohFlags=17 + template) so Encrypted shows without manual click.
-    v15.9.0: Modular plain-text src\ layout, MANIFEST integrity, ACL on Bastion-Config.json; script-scope module load (required for menus after import).
+    v15.9.0: Modular plain-text src\ layout, MANIFEST integrity, ACL on Bastion-Config.json.
+    v15.9.1/15.9.0-fixed: Script-scope module load (function-scope . made menus vanish after import).
+    v15.9.2: Post-load command probe; all startup in try/catch + pause; friendly admin check; self-elevating bat.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
@@ -29,7 +31,11 @@ $ConfirmPreference     = "None"
 
 $script:BastionRoot = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($script:BastionRoot)) {
-    $script:BastionRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+    try {
+        $script:BastionRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+    } catch {
+        $script:BastionRoot = (Get-Location).Path
+    }
 }
 
 # Load order: Init (state/catalogs) then domain modules. Dot-source only - same runspace for $script:.
@@ -47,6 +53,21 @@ $script:BastionSourceModules = @(
     "Bastion.Menus.ps1"
 )
 
+# Commands that MUST exist after import. $script:Config alone is NOT enough:
+# function-scoped dot-source keeps $script: assignments but drops function definitions
+# (smoke could print OK then flash-exit on Resolve-BastionLogDirectory / Show-MainMenu).
+$script:BastionRequiredCommands = @(
+    "Resolve-BastionLogDirectory",
+    "Bind-BastionDataPaths",
+    "Ensure-BastionPaths",
+    "Initialize-BastionDataStore",
+    "Maximize-BastionConsole",
+    "Write-Log",
+    "Write-Banner",
+    "Show-MainMenu",
+    "Wait-ForKey"
+)
+
 function Wait-BastionBootstrapKey {
     <#
     .SYNOPSIS
@@ -57,13 +78,38 @@ function Wait-BastionBootstrapKey {
     Write-Host ""
     Write-Host ("  {0}" -f $Message) -ForegroundColor Gray
     try {
-        [void][System.Console]::ReadKey($true)
+        if ($Host.Name -eq "ConsoleHost") {
+            [void][System.Console]::ReadKey($true)
+        } else {
+            [void](Read-Host "  Press Enter to exit")
+        }
     } catch {
         try {
             [void](Read-Host "  Press Enter to exit")
         } catch {
-            Start-Sleep -Seconds 8
+            Start-Sleep -Seconds 12
         }
+    }
+}
+
+function Exit-BastionBootstrap {
+    param(
+        [int]$Code = 1,
+        [string]$Message = "Press any key to exit..."
+    )
+    if (-not $BastionSmokeLoadOnly) {
+        Wait-BastionBootstrapKey $Message
+    }
+    exit $Code
+}
+
+function Test-BastionIsAdministrator {
+    try {
+        $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $p = New-Object Security.Principal.WindowsPrincipal($id)
+        return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $false
     }
 }
 
@@ -148,6 +194,10 @@ function Test-BastionSourcesReady {
     .OUTPUTS
       Source directory path on success; throws on failure.
     #>
+    if ([string]::IsNullOrWhiteSpace($script:BastionRoot)) {
+        throw "BastionRoot is empty; cannot locate src\ modules."
+    }
+
     $srcDir = Join-Path $script:BastionRoot "src"
     if (-not (Test-Path -LiteralPath $srcDir -PathType Container)) {
         throw "Bastion source directory missing: $srcDir`nKeep Bastion-Hardening.ps1 next to the src\ folder (official release layout)."
@@ -169,6 +219,54 @@ function Test-BastionSourcesReady {
     return $srcDir
 }
 
+function Test-BastionCommandsPresent {
+    <#
+    .SYNOPSIS
+      Hard-fail if critical commands are missing after module load (detects scope bugs).
+    #>
+    $missing = New-Object System.Collections.Generic.List[string]
+    foreach ($name in $script:BastionRequiredCommands) {
+        if (-not (Get-Command -Name $name -ErrorAction SilentlyContinue)) {
+            [void]$missing.Add($name)
+        }
+    }
+    if ($missing.Count -gt 0) {
+        throw ("Bastion module load incomplete - missing commands: {0}`nThis usually means modules were not dot-sourced at script scope. Re-download the official v15.9.2+ zip." -f ($missing -join ", "))
+    }
+    return $true
+}
+
+# Friendly admin gate (replaces silent #Requires -RunAsAdministrator flash-close).
+# Bastion-Hardening.bat self-elevates first; this catches direct .ps1 launches.
+if (-not (Test-BastionIsAdministrator)) {
+    Write-Host ""
+    Write-Host "  FATAL: Bastion must run as Administrator." -ForegroundColor Red
+    Write-Host "  Right-click Bastion-Hardening.bat and choose Run as administrator," -ForegroundColor Yellow
+    Write-Host "  or approve UAC when the batch file requests elevation." -ForegroundColor Yellow
+    Write-Host ("  Root: {0}" -f $script:BastionRoot) -ForegroundColor DarkGray
+    Write-Host ""
+    Exit-BastionBootstrap -Code 1 -Message "Press any key to exit..."
+}
+
+# Global last-chance trap so unexpected terminating errors still pause.
+trap {
+    try {
+        Write-Host ""
+        Write-Host ("  FATAL (trap): {0}" -f $_.Exception.Message) -ForegroundColor Red
+        if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
+            Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkGray
+        }
+    } catch {}
+    try {
+        if (-not $BastionSmokeLoadOnly) {
+            Wait-BastionBootstrapKey "Press any key to exit..."
+        }
+    } catch {
+        Start-Sleep -Seconds 12
+    }
+    exit 1
+}
+
 # CRITICAL: Dot-source modules at SCRIPT scope, not inside a function.
 # PowerShell function-scope . (dot-source) defines functions only for that function;
 # after return, Resolve-BastionLogDirectory / Show-MainMenu / etc. vanish while
@@ -177,40 +275,43 @@ try {
     $bastionSrcDir = Test-BastionSourcesReady
     foreach ($name in $script:BastionSourceModules) {
         $path = Join-Path $bastionSrcDir $name
+        # Script-scope dot-source (this foreach is at script scope, not inside a function).
         . $path
     }
+    Test-BastionCommandsPresent | Out-Null
 } catch {
     Write-Host ""
     Write-Host "  FATAL: Cannot load Bastion modules." -ForegroundColor Red
     Write-Host ("  {0}" -f $_.Exception.Message) -ForegroundColor Yellow
     Write-Host "  Expected layout: Bastion-Hardening.ps1 + src\Bastion.*.ps1 + src\MANIFEST.sha256" -ForegroundColor DarkGray
+    Write-Host ("  BastionRoot: {0}" -f $script:BastionRoot) -ForegroundColor DarkGray
     Write-Host ""
-    if (-not $BastionSmokeLoadOnly) {
-        Wait-BastionBootstrapKey "Press any key to exit..."
-    }
-    exit 1
+    Exit-BastionBootstrap -Code 1 -Message "Press any key to exit..."
 }
 
 if ($BastionSmokeLoadOnly) {
-    Write-Host ("Bastion smoke load OK v{0}" -f $script:Config.ScriptVersion)
+    $ver = if ($script:Config -and $script:Config.ScriptVersion) { $script:Config.ScriptVersion } else { "?" }
+    Write-Host ("Bastion smoke load OK v{0} (commands verified)" -f $ver)
     exit 0
 }
 
-# Path bind was deferred until after Config module load (functions available).
-$resolvedLog = Resolve-BastionLogDirectory
-if ($resolvedLog) {
-    Bind-BastionDataPaths -LogDirectory $resolvedLog
-} else {
-    Write-Host "  WARNING: Could not create a writable Bastion data directory." -ForegroundColor Red
-    Write-Host "  Tried C:\Temp\Bastion, C:\Temp, %ProgramData%\Bastion, %LOCALAPPDATA%\Bastion, %TEMP%\Bastion." -ForegroundColor Yellow
-    Bind-BastionDataPaths -LogDirectory "C:\Temp\Bastion"
-}
-
+# Entire post-load startup is inside try/catch so missing commands / path failures pause.
 try {
+    Test-BastionCommandsPresent | Out-Null
+
+    # Path bind was deferred until after Config module load (functions available).
+    $resolvedLog = Resolve-BastionLogDirectory
+    if ($resolvedLog) {
+        Bind-BastionDataPaths -LogDirectory $resolvedLog
+    } else {
+        Write-Host "  WARNING: Could not create a writable Bastion data directory." -ForegroundColor Red
+        Write-Host "  Tried C:\Temp\Bastion, C:\Temp, %ProgramData%\Bastion, %LOCALAPPDATA%\Bastion, %TEMP%\Bastion." -ForegroundColor Yellow
+        Bind-BastionDataPaths -LogDirectory "C:\Temp\Bastion"
+    }
+
     if (-not (Ensure-BastionPaths)) {
         Write-Host ("Cannot initialize {0}. Exiting." -f $script:Config.LogDirectory) -ForegroundColor Red
-        Wait-BastionBootstrapKey "Press any key to exit..."
-        exit 1
+        Exit-BastionBootstrap -Code 1 -Message "Press any key to exit..."
     }
     try {
         if (-not [System.Diagnostics.EventLog]::SourceExists($script:Config.EventSource)) {
@@ -222,13 +323,16 @@ try {
     # Create/load durable store, seed defaults only when missing, rewrite live session snapshot.
     if (-not (Initialize-BastionDataStore)) {
         Write-Host ("Cannot prepare Bastion data store under {0}. Exiting." -f $script:Config.LogDirectory) -ForegroundColor Red
-        Wait-BastionBootstrapKey "Press any key to exit..."
-        exit 1
+        Exit-BastionBootstrap -Code 1 -Message "Press any key to exit..."
     }
     Write-Log ("Bastion v{0} FINAL started | data={1}" -f $script:Config.ScriptVersion, $script:Config.LogDirectory)
     Show-MainMenu
 } catch {
+    Write-Host ""
     Write-Host ("FATAL: {0}" -f $_.Exception.Message) -ForegroundColor Red
+    if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
+        Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkGray
+    }
     try {
         Write-Log ("FATAL: {0}" -f $_.Exception.Message) -Level Error
     } catch {}

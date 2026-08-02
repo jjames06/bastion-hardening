@@ -4,8 +4,9 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.9.0  | Yes (current) - modular plain-text `src\` + MANIFEST integrity + script-scope module load (fixed release asset; earlier 15.9.0 zip was broken) |
-| 15.9.1  | Retracted (tag/release removed; same fix republished as 15.9.0) |
+| 15.9.2  | Yes (current) - post-load command probe, full startup try/catch + pause, self-elevating bat, friendly admin gate |
+| 15.9.0  | Superseded - modular plain-text `src\` + MANIFEST + script-scope load (some installs still flash-closed after UAC; use 15.9.2) |
+| 15.9.1  | Retracted (tag/release removed; fix folded into 15.9.0 then 15.9.2) |
 | 15.8.4  | Best-effort until you upgrade |
 | 15.8.3  | Best-effort until you upgrade |
 | 15.8.2  | Best-effort until you upgrade |

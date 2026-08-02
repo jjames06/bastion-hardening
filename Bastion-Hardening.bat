@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 title Bastion Hardening Framework
 cd /d "%~dp0"
 
@@ -31,9 +31,38 @@ if not exist "%~dp0src\MANIFEST.sha256" (
     exit /b 1
 )
 
+rem ---------------------------------------------------------------------------
+rem Self-elevate THIS batch file so Bastion runs in the elevated console.
+rem (A separate Start-Process powershell child was easy to miss if it flash-closed.)
+rem ---------------------------------------------------------------------------
+net session >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo  Bastion Hardening Framework
+    echo  Administrator rights required. Requesting UAC elevation...
+    echo.
+    echo  If a UAC prompt appears, click Yes.
+    echo  The elevated window keeps errors visible (pause on failure).
+    echo.
+    rem Relaunch this .bat elevated and wait. Parent stays open only to report UAC decline.
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $p = Start-Process -FilePath \"%~f0\" -Verb RunAs -Wait -PassThru; if ($null -eq $p) { exit 1 }; exit $p.ExitCode } catch { Write-Host $_.Exception.Message; exit 1 }"
+    set "ERR=%ERRORLEVEL%"
+    if not "%ERR%"=="0" (
+        echo.
+        echo  Elevation failed or Bastion exited with code %ERR%.
+        echo  - If you clicked No on UAC: right-click Bastion-Hardening.bat - Run as administrator.
+        echo  - If UAC was approved: read the error in the elevated window (it should have paused).
+        echo  - Expected layout: Bastion-Hardening.ps1 next to src\Bastion.*.ps1 and src\MANIFEST.sha256
+        echo.
+        pause
+        exit /b %ERR%
+    )
+    exit /b 0
+)
+
 echo.
 echo  Bastion Hardening Framework
-echo  Launching elevated PowerShell (UAC)...
+echo  Elevated console ready. Starting PowerShell...
 echo.
 echo  Transparency (also in README and docs\):
 echo  - First run creates a writable data directory and seeds menu defaults.
@@ -44,25 +73,20 @@ echo  - Dry Run / Apply detect live Windows state; they do not fake prior harden
 echo  - Source is plain-text under src\ (GPLv3); startup verifies SHA256 MANIFEST.
 echo  - License: GNU GPLv3 (LICENSE + NOTICE). Free software; modified distributions must stay GPLv3 with source.
 echo.
-echo  Waiting for the elevated Bastion window to finish...
-echo  (If UAC appears, approve it. Errors stay visible in that window.)
-echo.
 
-rem -Wait so this parent bat does not flash-close after UAC accept.
-rem ArgumentList as an array keeps paths with spaces intact.
-rem Bootstrap Wait-BastionBootstrapKey also pauses on fatals inside the elevated process.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $p = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','%~dp0Bastion-Hardening.ps1'); if ($null -eq $p) { exit 1 }; exit $p.ExitCode } catch { Write-Host $_.Exception.Message; exit 1 }"
+rem Run in THIS elevated window so menus/errors never vanish into a child process.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Bastion-Hardening.ps1"
 set "ERR=%ERRORLEVEL%"
 
 if not "%ERR%"=="0" (
     echo.
-    echo  Bastion elevated process failed or UAC was declined (exit %ERR%).
-    echo  - If you clicked No on UAC: right-click Bastion-Hardening.bat - Run as administrator.
-    echo  - If UAC was approved: read the error in the elevated window (it should have paused).
+    echo  Bastion exited with code %ERR%.
     echo  - Expected layout: Bastion-Hardening.ps1 next to src\Bastion.*.ps1 and src\MANIFEST.sha256
+    echo  - Re-download the official release zip if modules or MANIFEST are missing/corrupt.
     echo.
     pause
     exit /b %ERR%
 )
 
 endlocal
+exit /b 0
