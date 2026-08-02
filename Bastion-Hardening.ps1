@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.9.1 FINAL
+    Bastion Hardening Framework v15.9.0 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
@@ -10,15 +10,14 @@
     lives in plain-text src\*.ps1 modules (NEVER encrypted - GPLv3 + auditability).
     Modules are dot-sourced into this runspace so $script: scope is shared.
 .NOTES
-    Version 15.9.1 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.9.0 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
     v15.8.2: DNS menu shows live vs preferred, DoH labels, and Apply DNS now (A); preference alone does not change Windows.
     v15.8.3: Preserve DNS/RDP undo blobs across Applies; Network option 4 previews snapshot targets; clearer restore UX.
     v15.8.4: Match Settings Edit DNS DoH path (per-interface QWord DohFlags=17 + template) so Encrypted shows without manual click.
-    v15.9.0: Modular plain-text src\ layout, MANIFEST.sha256 integrity at startup, ACL on Bastion-Config.json.
-    v15.9.1: Fix module load scope so functions remain after import (UAC flash-exit).
+    v15.9.0: Modular plain-text src\ layout, MANIFEST integrity, ACL on Bastion-Config.json; script-scope module load (required for menus after import).
 #>
 param(
     [switch]$BastionSmokeLoadOnly

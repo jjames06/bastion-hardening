@@ -4,8 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.9.1  | Yes (current) - modular load-scope hotfix + plain-text `src\` + MANIFEST integrity |
-| 15.9.0  | Upgrade to 15.9.1 (UAC flash-exit after module import scope bug) |
+| 15.9.0  | Yes (current) - modular plain-text `src\` + MANIFEST integrity + script-scope module load (fixed release asset; earlier 15.9.0 zip was broken) |
+| 15.9.1  | Retracted (tag/release removed; same fix republished as 15.9.0) |
 | 15.8.4  | Best-effort until you upgrade |
 | 15.8.3  | Best-effort until you upgrade |
 | 15.8.2  | Best-effort until you upgrade |
