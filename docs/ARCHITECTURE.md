@@ -13,7 +13,7 @@ Through the v15.8.x releases, Bastion shipped mainly as a **single large PowerSh
 The modular layout exists so that:
 
 1. **Reviewers and end users** can open a named module that matches their concern instead of searching one giant script.  
-2. **GPLv3 auditability** stays honest — every product module is **plain text**, never encrypted.  
+2. **GPLv3 auditability** stays honest: every product module is **plain text**, never encrypted.  
 3. **Maintainers** can change one domain (for example Recovery) with a smaller, reviewable diff.  
 4. **Integrity** can be checked **per file** via `src\MANIFEST.sha256` (SHA256 hashes). A mismatch hard-fails startup.
 
@@ -41,7 +41,7 @@ Handbook-style overview for non-developers: [wiki Modular source](wiki/Modular-s
 | `src\MANIFEST.sha256` | **No** (not encryption) | SHA256 **integrity** hashes; tamper detection only |
 | DNS prior / RDP host prior in undo store | **Yes** | Windows **DPAPI** after a real Apply that recorded them |
 
-If a launch fails after hardening, the cause is almost always **launcher / elevation / ExecutionPolicy / cmd parse** — not “encrypted modules.” Modules are intentionally readable.
+If a launch fails after hardening, the cause is almost always **launcher / elevation / ExecutionPolicy / cmd parse**, not "encrypted modules." Modules are intentionally readable.
 
 ## Runtime layout
 
@@ -79,7 +79,7 @@ bastion-hardening-v15.9.7\   (folder name matches the release tag)
 | Source form | Plain text | Plain text (never encrypted) |
 | Runtime entry | Elevated `.bat` | Same elevated `.bat` path |
 
-**Not shipped in the release zip:** `tools\` (pack/wiki scripts, optional monolith archive under `tools\archive\` for git history / comparison only — not the supported runtime layout).
+**Not shipped in the release zip:** `tools\` (pack/wiki scripts, optional monolith archive under `tools\archive\` for git history / comparison only; not the supported runtime layout).
 
 ## Load order
 
@@ -88,7 +88,7 @@ bastion-hardening-v15.9.7\   (folder name matches the release tag)
 1. Detects **true elevation** with **whoami High Mandatory Level** SID `S-1-16-12288` (not `net session`, which fails after Bastion disables LanmanServer; not Administrators group SID alone, which appears as deny-only on non-elevated UAC tokens).
 2. If not elevated: re-launches via `tools-elevate-self.ps1` (or inline `Start-Process -Verb RunAs` fallback) and exits.
 3. If elevated: calls `tools-run-bootstrap.ps1`, which sets Process-scope ExecutionPolicy Bypass, recursively `Unblock-File`s the product tree (Mark-of-the-Web from zip downloads), and invokes `Bastion-Hardening.ps1` with `&`.
-4. Uses **goto labels** instead of large parenthesized `if (...)` blocks with `echo` text containing `(` / `)` — those caused `. was unexpected at this time.` after Server was disabled and the bat was re-run elevated.
+4. Uses **goto labels** instead of large parenthesized `if (...)` blocks with `echo` text containing `(` / `)`. Those caused `. was unexpected at this time.` after Server was disabled and the bat was re-run elevated.
 
 Bootstrap (`Bastion-Hardening.ps1`) always:
 
@@ -118,7 +118,7 @@ Bootstrap (`Bastion-Hardening.ps1`) always:
 
 ### Write-Banner path
 
-`Write-Banner` prefers `$script:BastionRoot` (product root next to the banner file). If that is empty and Core’s `$PSScriptRoot` is `...\src`, it uses the **parent** of `src` so `Bastion-Banner.utf8.txt` is found after modular split.
+`Write-Banner` prefers `$script:BastionRoot` (product root next to the banner file). If that is empty and Core's `$PSScriptRoot` is `...\src`, it uses the **parent** of `src` so `Bastion-Banner.utf8.txt` is found after modular split.
 
 ## Integrity
 
@@ -162,7 +162,7 @@ Bat path smoke (elevated host, LanmanServer may be stopped/disabled):
 cmd /c Bastion-Hardening.bat
 ```
 
-Expected: “Elevated console ready”, then main menu (or use `tools-run-bootstrap.ps1` with bootstrap args in automated tests).
+Expected: "Elevated console ready", then main menu (or use `tools-run-bootstrap.ps1` with bootstrap args in automated tests).
 
 ## Version
 

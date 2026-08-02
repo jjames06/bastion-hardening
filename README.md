@@ -137,14 +137,14 @@ System Restore remains the strongest rollback path.
 
 Bastion used to ship as a **single large PowerShell script** (a *monolith*). That was simple to distribute, but it made careful review harder: DNS, Recovery, Apply, browsers, and menus all lived in one multi-thousand-line file.
 
-**Current releases use a modular layout** so anyone who wants to inspect the product can do so in smaller, named pieces—without changing how you install or launch Bastion.
+**Current releases use a modular layout** so anyone who wants to inspect the product can do so in smaller, named pieces, without changing how you install or launch Bastion.
 
 | Piece | What it is |
 |-------|------------|
 | `Bastion-Hardening.bat` | Only supported elevated launcher |
 | `Bastion-Hardening.ps1` | Thin bootstrap (integrity checks, then loads modules) |
-| `src\Bastion.*.ps1` | Implementation by domain (Init, Core, Config, DNS, Browsers, Apply, Recovery, Menus, …) |
-| `src\MANIFEST.sha256` | SHA256 of each module — **integrity**, not encryption |
+| `src\Bastion.*.ps1` | Implementation by domain (Init, Core, Config, DNS, Browsers, Apply, Recovery, Menus, and more) |
+| `src\MANIFEST.sha256` | SHA256 of each module: **integrity**, not encryption |
 
 **Why**
 
@@ -163,7 +163,7 @@ Bastion used to ship as a **single large PowerShell script** (a *monolith*). Tha
 |--------------------------------|-------------------------|
 | One large script held most logic | Thin bootstrap + `src\` modules |
 | Review meant scrolling one file | Open the matching module |
-| Integrity mainly “file present” | Per-module `MANIFEST.sha256` |
+| Integrity mainly "file present" | Per-module `MANIFEST.sha256` |
 
 Longer handbook write-up: [docs/wiki/Modular-source.md](docs/wiki/Modular-source.md). Technical load order and threat notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -280,7 +280,7 @@ After the elevated menu opens:
 | Symptom | What to try |
 |---------|-------------|
 | Nothing happens / window flashes | Run `Bastion-Hardening.bat` **as administrator**, not the `.ps1` alone. Prefer **v15.9.5+** (launch) / **v15.9.6+** (dark console) / **v15.9.7+** (Help colors) if you already applied HighRisk services |
-| `. was unexpected at this time.` | Fixed in **v15.9.5** (cmd paren/echo parse). Re-download modular zip; do not use older 15.9.0–15.9.4 bats after Server/LanmanServer is disabled |
+| `. was unexpected at this time.` | Fixed in **v15.9.5** (cmd paren/echo parse). Re-download modular zip; do not use older 15.9.0-15.9.4 bats after Server/LanmanServer is disabled |
 | "running scripts is disabled" / UnauthorizedAccess | **Do not** double-click the `.ps1`. Use **`Bastion-Hardening.bat`** only. Unblock the zip (Properties) then re-extract. v15.9.4+ also Unblock-Files the tree and sets Process Bypass before start |
 | SmartScreen / "Windows protected your PC" | Prefer Unblock on the zip (Method A step 2). More info -> Run anyway **only** if you trust the official site or this GitHub release |
 | winget / Programs installs fail | Install **App Installer** from the Microsoft Store, open a new elevated window, retry |

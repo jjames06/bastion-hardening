@@ -33,7 +33,7 @@ Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.C
 
 ## Why is Bastion modular now? Was it one big script?
 
-**Yes — earlier public lines (through v15.8.x) shipped mainly as one large PowerShell script.** That was easy to package, but it made independent review harder: Recovery, DNS, Apply, browsers, and menus all lived in a single multi-thousand-line file.
+**Yes. Earlier public lines (through v15.8.x) shipped mainly as one large PowerShell script.** That was easy to package, but it made independent review harder: Recovery, DNS, Apply, browsers, and menus all lived in a single multi-thousand-line file.
 
 **Current releases (v15.9.x+) are modular on purpose:**
 
@@ -50,7 +50,7 @@ Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.C
 |--------------|-------------|
 | One large script held most logic | Thin bootstrap + `src\Bastion.*.ps1` |
 | Review meant searching one file | Open the matching module |
-| Integrity mostly “files present” | Per-module SHA256 MANIFEST |
+| Integrity mostly "files present" | Per-module SHA256 MANIFEST |
 
 Full handbook page: [Modular source layout](Modular-source). Technical detail: [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
 
@@ -79,7 +79,7 @@ Deleting that folder does **not** un-harden Windows or remove browser enterprise
 - press **A** on the DNS menu (**Apply preferred DNS to adapters now**), or  
 - run main menu **8 Apply** with the DNS section enabled.
 
-The DNS menu shows **Preferred** vs **Live Windows adapters** so you can see the difference. Recovery option **4** restores the **last Apply snapshot**, not “whatever is selected in menu D.”
+The DNS menu shows **Preferred** vs **Live Windows adapters** so you can see the difference. Recovery option **4** restores the **last Apply snapshot**, not "whatever is selected in menu D."
 
 ## Recovery 9 → 3 → 4 restored the wrong DNS / snapshot felt stuck
 
@@ -89,12 +89,12 @@ From **v15.8.3**, later Applies that do **not** re-capture DNS **preserve** the 
 
 Path: main menu **9** → **3 Network** → **4** (not **3** then **4**; **3** is DHCP reset only and is not required before restore).
 
-## Why does Windows Settings say DNS is “Unencrypted” after Bastion?
+## Why does Windows Settings say DNS is "Unencrypted" after Bastion?
 
-**Two different meanings of “encrypted”:**
+**Two different meanings of "encrypted":**
 
 1. **Bastion snapshot DPAPI** - prior DNS is stored encrypted **on disk** in `Bastion-LastApply.json`.  
-2. **Windows Settings “Encrypted”** - **DNS-over-HTTPS (DoH)** on the wire.
+2. **Windows Settings "Encrypted"** - **DNS-over-HTTPS (DoH)** on the wire.
 
 All Bastion public resolvers (Quad9, Cloudflare, Cloudflare security, Google, OpenDNS) are **DoH-capable**. From **v15.8.4**, Apply writes the **same per-interface DoH keys** Settings Edit DNS uses (`DohTemplate` + `QWord DohFlags=17`, AutoUpgrade, no UDP fallback), so the **Encrypted** badge should appear **without** opening Edit DNS. **Do not change DNS** leaves Windows as-is.
 
@@ -107,7 +107,7 @@ All Bastion public resolvers (Quad9, Cloudflare, Cloudflare security, Google, Op
 
 Menu **D** alone still does not change Windows until Apply (**A** or main **8**).
 
-If you are on **v15.8.1–15.8.3** and Settings still says **Unencrypted**, upgrade to **v15.8.4+** and re-Apply DNS (or Network → restore snapshot / Apply preferred). Manual fallback (old builds only): adapter → DNS → **Edit** → DNS over HTTPS → **On (automatic template)** → Fallback off → Save.
+If you are on **v15.8.1-15.8.3** and Settings still says **Unencrypted**, upgrade to **v15.8.4+** and re-Apply DNS (or Network -> restore snapshot / Apply preferred). Manual fallback (old builds only): adapter -> DNS -> **Edit** -> DNS over HTTPS -> **On (automatic template)** -> Fallback off -> Save.
 
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 
