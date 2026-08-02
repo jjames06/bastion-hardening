@@ -2,7 +2,7 @@
 
 **Selective - State-aware - Safety-first Windows hardening for a personal workstation**
 
-Version **15.8.1**
+Version **15.8.2**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)

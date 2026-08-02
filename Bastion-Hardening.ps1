@@ -1,15 +1,16 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.8.1 FINAL
+    Bastion Hardening Framework v15.8.2 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
 .NOTES
-    Version 15.8.1 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.8.2 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
+    v15.8.2: DNS menu shows live vs preferred, DoH labels, and Apply DNS now (A); preference alone does not change Windows.
 #>
 
 $ErrorActionPreference = "Continue"
@@ -17,7 +18,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.8.1"
+    ScriptVersion = "15.8.2"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
@@ -178,41 +179,47 @@ $script:DnsProviders = [ordered]@{
         Primary     = "9.9.9.9"
         Secondary   = "149.112.112.112"
         DohTemplate = "https://dns.quad9.net/dns-query"
-        Notes       = "Blocks known malicious domains. Bastion also enables Windows DNS-over-HTTPS (DoH) for this resolver when supported."
+        WireDoH     = $true
+        Notes       = "Blocks known malicious domains."
     }
     "Cloudflare" = @{
         DisplayName = "Cloudflare (1.1.1.1)"
         Primary     = "1.1.1.1"
         Secondary   = "1.0.0.1"
         DohTemplate = "https://cloudflare-dns.com/dns-query"
-        Notes       = "Fast, privacy-focused public DNS. Bastion enables Windows DoH for this resolver when supported."
+        WireDoH     = $true
+        Notes       = "Fast, privacy-focused public DNS."
     }
     "CloudflareSecurity" = @{
         DisplayName = "Cloudflare security (malware block)"
         Primary     = "1.1.1.2"
         Secondary   = "1.0.0.2"
         DohTemplate = "https://security.cloudflare-dns.com/dns-query"
-        Notes       = "Cloudflare malware-blocking DNS. Bastion enables Windows DoH for this resolver when supported."
+        WireDoH     = $true
+        Notes       = "Cloudflare malware-blocking DNS."
     }
     "Google" = @{
         DisplayName = "Google Public DNS"
         Primary     = "8.8.8.8"
         Secondary   = "8.8.4.4"
         DohTemplate = "https://dns.google/dns-query"
-        Notes       = "Highly available public DNS. Bastion enables Windows DoH for this resolver when supported."
+        WireDoH     = $true
+        Notes       = "Highly available public DNS."
     }
     "OpenDNS" = @{
         DisplayName = "Cisco OpenDNS"
         Primary     = "208.67.222.222"
         Secondary   = "208.67.220.220"
         DohTemplate = "https://doh.opendns.com/dns-query"
-        Notes       = "Cisco OpenDNS public resolvers. Bastion enables Windows DoH when the template is accepted."
+        WireDoH     = $true
+        Notes       = "Cisco OpenDNS public resolvers."
     }
     "None" = @{
         DisplayName = "Do not change DNS"
         Primary     = $null
         Secondary   = $null
         DohTemplate = $null
+        WireDoH     = $false
         Notes       = "Leave adapter DNS as-is (DHCP/manual). Disables the DNS hardening section."
     }
 }
@@ -4633,15 +4640,163 @@ function Show-SectionMenu {
     }
 }
 
+function Get-BastionLiveDnsSummaryLines {
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $adapters = @(Get-BastionDnsAdapters)
+    if ($adapters.Count -eq 0) {
+        [void]$lines.Add("  Live adapters: (none eligible)")
+        return @($lines)
+    }
+    foreach ($a in $adapters) {
+        $dns = @(Get-AdapterDnsServers -InterfaceIndex $a.ifIndex)
+        $s = if ($dns.Count) { $dns -join ", " } else { "(automatic/DHCP or empty)" }
+        [void]$lines.Add(("  Live {0}: {1}" -f $a.Name, $s))
+    }
+    return @($lines)
+}
+
+function Invoke-BastionDnsSectionApply {
+    <#
+      Applies menu D provider to eligible adapters (IPs + DoH).
+      Writes Bastion-LastApply.json undo with DNS snapshot when changes are needed.
+      Returns $true if at least one adapter was touched successfully.
+    #>
+    param([switch]$SkipRestorePrompt)
+    $prov = Get-BastionDnsProvider
+    if (-not $prov -or -not $prov.Primary -or $script:DnsProviderId -eq "None" -or -not $script:Sections["DNS"]) {
+        Write-Status "DNS section off or no provider selected; nothing to apply" "Warn"
+        return $false
+    }
+    $servers = @([string]$prov.Primary)
+    if ($prov.Secondary) { $servers += [string]$prov.Secondary }
+    $adapters = @(Get-BastionDnsAdapters)
+    if ($adapters.Count -eq 0) {
+        Write-Status "No eligible adapters found" "Warn"
+        return $false
+    }
+
+    if (-not $SkipRestorePrompt) {
+        if (-not (Confirm-RestorePointBeforeApply -ActionLabel "DNS Apply")) {
+            Write-Host "  DNS Apply cancelled." -ForegroundColor Yellow
+            return $false
+        }
+        if (-not (Read-ConfirmYes -Prompt "  Type YES to set adapter DNS to the selected provider now")) {
+            Write-Host "  Cancelled." -ForegroundColor Yellow
+            return $false
+        }
+    }
+
+    $undoTrack = @{
+        Timestamp       = Get-Date -Format "yyyy-MM-dd HH:mm"
+        ScriptVersion   = $script:Config.ScriptVersion
+        SectionsRun     = @("DNS")
+        DisabledServices = @()
+        FirewallGroups  = @()
+        ProgramsInstalledList = @()
+        BrowserPolicyMode = $script:BrowserPolicyMode
+        BrowserPolicyModes = [ordered]@{}
+        BrowserEchLocks = [ordered]@{}
+        DnsProviderId   = $script:DnsProviderId
+        HasDnsSnapshot  = $false
+        RdpHostLocked   = $false
+        RdpHostPrior    = $null
+    }
+    foreach ($bk in $script:BrowserPolicyModes.Keys) {
+        $undoTrack.BrowserPolicyModes[$bk] = [string]$script:BrowserPolicyModes[$bk]
+    }
+    foreach ($ek in $script:BrowserEchLocks.Keys) {
+        $undoTrack.BrowserEchLocks[$ek] = [bool]$script:BrowserEchLocks[$ek]
+    }
+
+    Write-Host ("  [DNS] Applying {0} ..." -f $prov.DisplayName) -ForegroundColor Cyan
+    $needSnap = $false
+    foreach ($a in $adapters) {
+        try {
+            if (-not (Test-AdapterDnsMatchesProvider -InterfaceIndex $a.ifIndex)) { $needSnap = $true; break }
+        } catch { $needSnap = $true; break }
+    }
+    if ($needSnap) {
+        $undoTrack.DnsSnapshot = Get-BastionDnsSnapshot
+        Write-Status ("Captured DNS snapshot for {0} eligible adapter(s) (stored DPAPI-encrypted on save)" -f @($undoTrack.DnsSnapshot.Adapters).Count) "Applied"
+    }
+
+    $changed = 0
+    foreach ($a in $adapters) {
+        try {
+            $guid = ""
+            try { $guid = [string]$a.InterfaceGuid } catch {}
+            if (Test-AdapterDnsMatchesProvider -InterfaceIndex $a.ifIndex) {
+                $dohN = Enable-BastionDnsOverHttpsForAdapter -InterfaceGuid $guid -Servers $servers
+                if ($dohN -gt 0) {
+                    Write-Status ("{0} already {1}-first; DoH re-confirmed" -f $a.Name, $prov.DisplayName) "Already"
+                } else {
+                    Write-Status ("{0} already {1}-first" -f $a.Name, $prov.DisplayName) "Already"
+                }
+            } else {
+                Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses $servers -ErrorAction Stop
+                $dohN = Enable-BastionDnsOverHttpsForAdapter -InterfaceGuid $guid -Servers $servers
+                if ($dohN -gt 0) {
+                    Write-Status ("{0} -> {1} (IPs set; DoH enabled for {2} server(s))" -f $a.Name, $prov.DisplayName, $dohN) "Applied"
+                } else {
+                    Write-Status ("{0} -> {1} (IPs set; classic DNS only)" -f $a.Name, $prov.DisplayName) "Applied"
+                }
+                $changed++
+            }
+        } catch {
+            Write-Status ("DNS fail on {0}: {1}" -f $a.Name, $_.Exception.Message) "Failed"
+        }
+    }
+    try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
+    if ($needSnap -or $changed -gt 0) {
+        # Preserve non-DNS undo from last Apply when present (merge DNS snapshot into last file).
+        $prior = Read-BastionUndoData
+        if ($prior) {
+            try {
+                if ($prior.DisabledServices) { $undoTrack.DisabledServices = @($prior.DisabledServices) }
+                if ($prior.FirewallGroups) { $undoTrack.FirewallGroups = @($prior.FirewallGroups) }
+                if ($prior.RdpHostLocked) {
+                    $undoTrack.RdpHostLocked = $true
+                    if ($prior.RdpHostPriorProtected) {
+                        $undoTrack.RdpHostPriorProtected = $prior.RdpHostPriorProtected
+                    } elseif ($prior.RdpHostPrior) {
+                        $undoTrack.RdpHostPrior = $prior.RdpHostPrior
+                    }
+                }
+                if ($prior.SectionsRun) {
+                    $sr = [System.Collections.Generic.List[string]]::new()
+                    foreach ($s in @($prior.SectionsRun)) { if ($s -and -not $sr.Contains([string]$s)) { [void]$sr.Add([string]$s) } }
+                    if (-not $sr.Contains("DNS")) { [void]$sr.Add("DNS") }
+                    $undoTrack.SectionsRun = @($sr)
+                }
+            } catch {}
+        }
+        Save-UndoData $undoTrack
+    }
+    Write-Host "  Preference (menu D) and live adapter DNS should now match the provider above (VPN may still override)." -ForegroundColor DarkGray
+    Write-Host "  Windows Settings may still show 'Unencrypted' next to the IP; that badge often lags when DNS is set outside Settings." -ForegroundColor DarkGray
+    Write-Host "  Bastion enables DNS-over-HTTPS (DoH) for this provider when Windows accepts the template (wire encryption)." -ForegroundColor DarkGray
+    return ($changed -gt 0 -or -not $needSnap)
+}
+
 function Show-DnsProviderMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "DNS RESOLVER"
-        Write-Host "  Choose a public recursive DNS provider, or leave adapters unchanged." -ForegroundColor Cyan
-        Write-Host "  VPN software may override these settings while a tunnel is connected." -ForegroundColor Yellow
+        Write-Host "  This menu only chooses Bastion's preferred provider (saved preference)." -ForegroundColor Cyan
+        Write-Host "  Windows adapter DNS does NOT change until you Apply (main menu 8) or press A here." -ForegroundColor Yellow
+        Write-Host "  VPN software may override DNS while a tunnel is connected." -ForegroundColor Yellow
         Write-Host ""
-        Write-Host ("  Current: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor White
+        Write-Host ("  Preferred (menu D / Apply): {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor White
         Write-Host ("  Section DNS enabled: {0}" -f $(if ($script:Sections["DNS"]) { "Yes" } else { "No" })) -ForegroundColor DarkGray
+        Write-Host "  Live Windows adapters (what Settings shows):" -ForegroundColor Cyan
+        foreach ($line in @(Get-BastionLiveDnsSummaryLines)) {
+            Write-Host $line -ForegroundColor White
+        }
+        Write-Host ""
+        Write-Host "  Wire encryption (DNS-over-HTTPS):" -ForegroundColor Cyan
+        Write-Host "    DoH-capable (Bastion enables DoH on Apply): Quad9, Cloudflare, Cloudflare security, Google, OpenDNS" -ForegroundColor Green
+        Write-Host "    Leave unchanged: keeps whatever Windows already has (may be DoH, plain, or DHCP)" -ForegroundColor DarkGray
+        Write-Host "    Settings 'Unencrypted' badge is separate from Bastion DPAPI snapshot encryption on disk." -ForegroundColor DarkGray
         Write-Host ""
 
         $ids = @($script:DnsProviders.Keys)
@@ -4652,28 +4807,45 @@ function Show-DnsProviderMenu {
             if ($id -eq "None") {
                 $mark = if (-not $script:Sections["DNS"] -or $script:DnsProviderId -eq "None") { ">" } else { " " }
                 Write-Host ("  {0} {1,2}. {2}" -f $mark, ($i + 1), $p.DisplayName) -ForegroundColor $(if ($mark -eq ">") { "Green" } else { "White" })
-                Write-Host ("         {0}" -f $p.Notes) -ForegroundColor DarkGray
+                Write-Host ("         Wire: leave as-is  |  {0}" -f $p.Notes) -ForegroundColor DarkGray
             } else {
+                $wire = if ($p.WireDoH) { "DoH (encrypted transport when Windows accepts template)" } else { "classic DNS only" }
                 Write-Host ("  {0} {1,2}. {2}" -f $mark, ($i + 1), $p.DisplayName) -ForegroundColor $(if ($mark -eq ">") { "Green" } else { "White" })
                 Write-Host ("         Primary {0}  Secondary {1}" -f $p.Primary, $p.Secondary) -ForegroundColor DarkGray
+                Write-Host ("         Wire: {0}" -f $wire) -ForegroundColor DarkGray
                 Write-Host ("         {0}" -f $p.Notes) -ForegroundColor DarkGray
             }
             Write-Host ""
         }
-        Write-Host "  0 Back (save)" -ForegroundColor Yellow
-        $valid = @("0") + (1..$ids.Count | ForEach-Object { "$_" })
+        Write-Host "  A  Apply preferred DNS to adapters now (snapshot + IPs + DoH)" -ForegroundColor Yellow
+        Write-Host "  0  Back (save preference only; does not change Windows yet)" -ForegroundColor Yellow
+        $valid = @("0", "A", "a") + (1..$ids.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
         if ($c -eq "0") {
             Save-BastionConfig
+            Write-Host "  Preference saved. Live Windows DNS is unchanged until Apply (8) or A on this menu." -ForegroundColor Yellow
+            Start-Sleep -Milliseconds 900
             return
+        }
+        if ($c.ToUpper() -eq "A") {
+            Save-BastionConfig
+            if (-not $script:Sections["DNS"] -or $script:DnsProviderId -eq "None") {
+                Write-Host "  Pick a provider (1-5) and enable DNS first." -ForegroundColor Yellow
+                Wait-ForKey
+                continue
+            }
+            [void](Invoke-BastionDnsSectionApply)
+            Wait-ForKey
+            continue
         }
         if ($c -match '^\d+$') {
             $idx = [int]$c - 1
             if ($idx -ge 0 -and $idx -lt $ids.Count) {
                 [void](Set-BastionDnsProviderId -Id $ids[$idx])
                 Save-BastionConfig
-                Write-Host ("  DNS set to: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor Green
-                Start-Sleep -Milliseconds 700
+                Write-Host ("  Preferred provider saved: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor Green
+                Write-Host "  Windows adapters are NOT updated yet. Press A to apply now, or main menu 8 Apply." -ForegroundColor Yellow
+                Start-Sleep -Milliseconds 1200
             }
         }
     }
@@ -7510,10 +7682,9 @@ function Invoke-ApplyHardening {
                     $guid = ""
                     try { $guid = [string]$a.InterfaceGuid } catch {}
                     if (Test-AdapterDnsMatchesProvider -InterfaceIndex $a.ifIndex) {
-                        # Still ensure DoH is registered for this provider (Settings Encrypted badge).
                         $dohN = Enable-BastionDnsOverHttpsForAdapter -InterfaceGuid $guid -Servers $servers
                         if ($dohN -gt 0) {
-                            Write-Status ("{0} already {1}-first; DoH encryption confirmed" -f $a.Name, $prov.DisplayName) "Already"
+                            Write-Status ("{0} already {1}-first; DoH re-confirmed" -f $a.Name, $prov.DisplayName) "Already"
                         } else {
                             Write-Status ("{0} already {1}-first" -f $a.Name, $prov.DisplayName) "Already"
                         }
@@ -7521,9 +7692,9 @@ function Invoke-ApplyHardening {
                         Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses $servers -ErrorAction Stop
                         $dohN = Enable-BastionDnsOverHttpsForAdapter -InterfaceGuid $guid -Servers $servers
                         if ($dohN -gt 0) {
-                            Write-Status ("{0} -> {1} (DoH encryption enabled for {2} server(s))" -f $a.Name, $prov.DisplayName, $dohN) "Applied"
+                            Write-Status ("{0} -> {1} (IPs set; DoH enabled for {2} server(s))" -f $a.Name, $prov.DisplayName, $dohN) "Applied"
                         } else {
-                            Write-Status ("{0} -> {1} (classic DNS; no DoH template)" -f $a.Name, $prov.DisplayName) "Applied"
+                            Write-Status ("{0} -> {1} (IPs set; classic DNS only)" -f $a.Name, $prov.DisplayName) "Applied"
                         }
                     }
                 } catch {
@@ -7531,7 +7702,8 @@ function Invoke-ApplyHardening {
                 }
             }
             try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
-            Write-Host "  Note: Windows Settings 'Encrypted' means DNS-over-HTTPS. Bastion snapshot DPAPI is separate (on-disk undo only)." -ForegroundColor DarkGray
+            Write-Host "  Note: Windows Settings may still show 'Unencrypted' even when DoH is active (UI quirk)." -ForegroundColor DarkGray
+            Write-Host "  Bastion DPAPI snapshot encryption is separate (undo file on disk)." -ForegroundColor DarkGray
         }
     }
 
