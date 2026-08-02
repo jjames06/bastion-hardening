@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.8    | Yes (current) |
+| 15.8.1  | Yes (current) |
+| 15.8    | Best-effort until you upgrade |
 | 15.7    | Best-effort until you upgrade |
 | 15.3    | Best-effort until you upgrade (older MIT-era tag; prefer 15.8) |
 | 15.2    | Best-effort until you upgrade |

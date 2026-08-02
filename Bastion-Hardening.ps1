@@ -1,14 +1,15 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.8 FINAL
+    Bastion Hardening Framework v15.8.1 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
 .NOTES
-    Version 15.8 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.8.1 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
+    v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) so Settings can show Encrypted (separate from DPAPI).
 #>
 
 $ErrorActionPreference = "Continue"
@@ -16,7 +17,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.8"
+    ScriptVersion = "15.8.1"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
@@ -176,39 +177,60 @@ $script:DnsProviders = [ordered]@{
         DisplayName = "Quad9 (malware blocking)"
         Primary     = "9.9.9.9"
         Secondary   = "149.112.112.112"
-        Notes       = "Blocks known malicious domains. Privacy-oriented recursive resolver (quad9.net)."
+        DohTemplate = "https://dns.quad9.net/dns-query"
+        Notes       = "Blocks known malicious domains. Bastion also enables Windows DNS-over-HTTPS (DoH) for this resolver when supported."
     }
     "Cloudflare" = @{
         DisplayName = "Cloudflare (1.1.1.1)"
         Primary     = "1.1.1.1"
         Secondary   = "1.0.0.1"
-        Notes       = "Fast, privacy-focused public DNS. Widely used and independently audited practices."
+        DohTemplate = "https://cloudflare-dns.com/dns-query"
+        Notes       = "Fast, privacy-focused public DNS. Bastion enables Windows DoH for this resolver when supported."
     }
     "CloudflareSecurity" = @{
         DisplayName = "Cloudflare security (malware block)"
         Primary     = "1.1.1.2"
         Secondary   = "1.0.0.2"
-        Notes       = "Cloudflare DNS with malware domain blocking (1.1.1.2 family)."
+        DohTemplate = "https://security.cloudflare-dns.com/dns-query"
+        Notes       = "Cloudflare malware-blocking DNS. Bastion enables Windows DoH for this resolver when supported."
     }
     "Google" = @{
         DisplayName = "Google Public DNS"
         Primary     = "8.8.8.8"
         Secondary   = "8.8.4.4"
-        Notes       = "Highly available public DNS with broad client and network support."
+        DohTemplate = "https://dns.google/dns-query"
+        Notes       = "Highly available public DNS. Bastion enables Windows DoH for this resolver when supported."
     }
     "OpenDNS" = @{
         DisplayName = "Cisco OpenDNS"
         Primary     = "208.67.222.222"
         Secondary   = "208.67.220.220"
-        Notes       = "Cisco OpenDNS public resolvers with phishing protection features."
+        DohTemplate = "https://doh.opendns.com/dns-query"
+        Notes       = "Cisco OpenDNS public resolvers. Bastion enables Windows DoH when the template is accepted."
     }
     "None" = @{
         DisplayName = "Do not change DNS"
         Primary     = $null
         Secondary   = $null
+        DohTemplate = $null
         Notes       = "Leave adapter DNS as-is (DHCP/manual). Disables the DNS hardening section."
     }
 }
+# Known recursive IPs -> DoH template (for snapshot restore of prior servers, not only menu D providers).
+$script:DnsKnownDohTemplates = [ordered]@{
+    "9.9.9.9"           = "https://dns.quad9.net/dns-query"
+    "149.112.112.112"   = "https://dns.quad9.net/dns-query"
+    "1.1.1.1"           = "https://cloudflare-dns.com/dns-query"
+    "1.0.0.1"           = "https://cloudflare-dns.com/dns-query"
+    "1.1.1.2"           = "https://security.cloudflare-dns.com/dns-query"
+    "1.0.0.2"           = "https://security.cloudflare-dns.com/dns-query"
+    "8.8.8.8"           = "https://dns.google/dns-query"
+    "8.8.4.4"           = "https://dns.google/dns-query"
+    "208.67.222.222"    = "https://doh.opendns.com/dns-query"
+    "208.67.220.220"    = "https://doh.opendns.com/dns-query"
+}
+# Interface DoH registry flag used by Windows Settings "Encrypted" badge (observed working value).
+$script:BastionDnsDohInterfaceFlags = 17
 $script:Stats = @{
     AlreadyConfigured = 0
     Applied           = 0
@@ -287,10 +309,10 @@ $script:SectionDocs = [ordered]@{
     }
     "DNS" = @{
         Intent  = "Optionally set eligible network adapters to a user-chosen public recursive DNS provider, or leave DNS unchanged."
-        Changes = "When a provider is selected (menu D), sets IPv4 DNS on active adapters via Set-DnsClientServerAddress. Before changing, Bastion snapshots prior IPv4 DNS per eligible adapter and stores it DPAPI-protected in Bastion-LastApply.json. Providers: Quad9 malware-blocking, Cloudflare 1.1.1.1, Cloudflare security 1.1.1.2, Google Public DNS, Cisco OpenDNS. Choose 'Do not change DNS' to skip."
-        Impact  = "Name resolution uses the chosen resolver while those adapter settings apply. A connected VPN may override DNS while the tunnel is up; that is expected."
-        Revert  = "Recovery > 3 Network: (3) Reset DNS to automatic (DHCP), or (4) Restore prior DNS from last Apply snapshot when present. Undo also restores snapshot when available. Best-effort if adapters changed. VPN may still override while connected."
-        Notes   = "Default provider is Quad9. Dry Run and Audit compare the first configured IPv4 DNS server per adapter against the selected primary. Snapshot is encrypted with Windows DPAPI (CurrentUser of the elevating account)."
+        Changes = "When a provider is selected (menu D), sets IPv4 DNS on active adapters via Set-DnsClientServerAddress, then enables Windows DNS-over-HTTPS (DoH) for known provider templates when supported. Before changing, Bastion snapshots prior IPv4 servers and per-adapter DoH settings and stores them DPAPI-protected in Bastion-LastApply.json. Providers: Quad9, Cloudflare, Cloudflare security, Google, OpenDNS. Choose 'Do not change DNS' to skip."
+        Impact  = "Name resolution uses the chosen resolver while those adapter settings apply. Windows Settings should show Encrypted for DoH-capable resolvers after Apply (not the same as Bastion's on-disk DPAPI snapshot encryption). A connected VPN may override DNS while the tunnel is up."
+        Revert  = "Recovery > 3 Network: (3) Reset DNS to automatic (DHCP), or (4) Restore prior DNS + DoH from last Apply snapshot when present. Undo also restores snapshot when available. Best-effort if adapters changed. VPN may still override while connected."
+        Notes   = "Default provider is Quad9. Dry Run and Audit compare the first configured IPv4 DNS server per adapter against the selected primary. On-disk snapshot uses Windows DPAPI (CurrentUser of the elevating account). Settings UI 'Unencrypted' means plain DNS on the wire; Bastion aims to set DoH so known resolvers show Encrypted."
     }
     "RdpHostLock" = @{
         Intent  = "Optionally deny this PC as a Remote Desktop host (workstation that should not accept RDP logons)."
@@ -2849,6 +2871,149 @@ function Set-BastionSensitiveFileAcl {
     }
 }
 
+function Format-BastionInterfaceGuid {
+    param([string]$Raw)
+    if ([string]::IsNullOrWhiteSpace($Raw)) { return $null }
+    $g = $Raw.Trim()
+    if ($g -notmatch '^\{') { $g = "{$g}" }
+    if ($g -notmatch '^\{[0-9A-Fa-f\-]{36}\}$') { return $null }
+    return $g
+}
+
+function Get-BastionDnsKnownDohTemplate {
+    param([Parameter(Mandatory)][string]$Server)
+    $ip = $Server.Trim()
+    if ($script:DnsKnownDohTemplates.Contains($ip)) {
+        return [string]$script:DnsKnownDohTemplates[$ip]
+    }
+    try {
+        $row = Get-DnsClientDohServerAddress -ServerAddress $ip -ErrorAction SilentlyContinue
+        if ($row -and $row.DohTemplate) { return [string]$row.DohTemplate }
+    } catch {}
+    return $null
+}
+
+function Get-BastionInterfaceDohEntries {
+    param([string]$InterfaceGuid)
+    $out = @()
+    $guid = Format-BastionInterfaceGuid -Raw $InterfaceGuid
+    if (-not $guid) { return @($out) }
+    $base = "HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\$guid\DohInterfaceSettings\Doh"
+    if (-not (Test-Path -LiteralPath $base)) { return @($out) }
+    foreach ($child in @(Get-ChildItem -LiteralPath $base -ErrorAction SilentlyContinue)) {
+        try {
+            $p = Get-ItemProperty -LiteralPath $child.PSPath -ErrorAction Stop
+            $tpl = ""
+            $flags = 0
+            try { $tpl = [string]$p.DohTemplate } catch {}
+            try { $flags = [int]$p.DohFlags } catch { $flags = 0 }
+            $out += [ordered]@{
+                Server      = [string]$child.PSChildName
+                DohTemplate = $tpl
+                DohFlags    = $flags
+            }
+        } catch {}
+    }
+    return @($out)
+}
+
+function Clear-BastionInterfaceDohEntries {
+    param([string]$InterfaceGuid)
+    $guid = Format-BastionInterfaceGuid -Raw $InterfaceGuid
+    if (-not $guid) { return }
+    $base = "HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\$guid\DohInterfaceSettings\Doh"
+    if (-not (Test-Path -LiteralPath $base)) { return }
+    foreach ($child in @(Get-ChildItem -LiteralPath $base -ErrorAction SilentlyContinue)) {
+        try { Remove-Item -LiteralPath $child.PSPath -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+    }
+}
+
+function Set-BastionInterfaceDohEntry {
+    param(
+        [Parameter(Mandatory)][string]$InterfaceGuid,
+        [Parameter(Mandatory)][string]$Server,
+        [Parameter(Mandatory)][string]$DohTemplate,
+        [int]$DohFlags = $script:BastionDnsDohInterfaceFlags
+    )
+    $guid = Format-BastionInterfaceGuid -Raw $InterfaceGuid
+    $ip = $Server.Trim()
+    if (-not $guid -or [string]::IsNullOrWhiteSpace($ip) -or [string]::IsNullOrWhiteSpace($DohTemplate)) { return $false }
+    try {
+        # Global DoH server list (templates Windows knows about).
+        try {
+            $exist = Get-DnsClientDohServerAddress -ServerAddress $ip -ErrorAction SilentlyContinue
+            if (-not $exist) {
+                Add-DnsClientDohServerAddress -ServerAddress $ip -DohTemplate $DohTemplate `
+                    -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction Stop | Out-Null
+            } else {
+                Set-DnsClientDohServerAddress -ServerAddress $ip -DohTemplate $DohTemplate `
+                    -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue | Out-Null
+            }
+        } catch {
+            Write-Log ("DoH global register {0}: {1}" -f $ip, $_.Exception.Message) -Level Warning
+        }
+        # Per-interface encryption flags (what Settings uses for Encrypted vs Unencrypted).
+        $path = "HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\$guid\DohInterfaceSettings\Doh\$ip"
+        if (-not (Test-Path -LiteralPath $path)) {
+            New-Item -Path $path -Force -ErrorAction Stop | Out-Null
+        }
+        New-ItemProperty -Path $path -Name DohTemplate -PropertyType String -Value $DohTemplate -Force -ErrorAction Stop | Out-Null
+        New-ItemProperty -Path $path -Name DohFlags -PropertyType DWord -Value $DohFlags -Force -ErrorAction Stop | Out-Null
+        return $true
+    } catch {
+        Write-Log ("DoH interface set {0}/{1}: {2}" -f $guid, $ip, $_.Exception.Message) -Level Warning
+        return $false
+    }
+}
+
+function Enable-BastionDnsOverHttpsForAdapter {
+    param(
+        [string]$InterfaceGuid,
+        [string[]]$Servers,
+        [object[]]$DohEntries = @()
+    )
+    $guid = Format-BastionInterfaceGuid -Raw $InterfaceGuid
+    if (-not $guid) { return 0 }
+    $n = 0
+    $want = @{}
+    # Prefer explicit snapshot entries (prior encryption state).
+    foreach ($e in @($DohEntries)) {
+        try {
+            $srv = [string]$e.Server
+            $tpl = [string]$e.DohTemplate
+            if ([string]::IsNullOrWhiteSpace($srv) -or [string]::IsNullOrWhiteSpace($tpl)) { continue }
+            $flags = $script:BastionDnsDohInterfaceFlags
+            try { if ($null -ne $e.DohFlags -and [int]$e.DohFlags -gt 0) { $flags = [int]$e.DohFlags } } catch {}
+            if (Set-BastionInterfaceDohEntry -InterfaceGuid $guid -Server $srv -DohTemplate $tpl -DohFlags $flags) {
+                $want[$srv] = $true
+                $n++
+            }
+        } catch {}
+    }
+    # Fill known templates for active servers not already covered.
+    foreach ($s in @($Servers)) {
+        $ip = [string]$s
+        if ([string]::IsNullOrWhiteSpace($ip) -or $want.ContainsKey($ip)) { continue }
+        $tpl = Get-BastionDnsKnownDohTemplate -Server $ip
+        if (-not $tpl) { continue }
+        if (Set-BastionInterfaceDohEntry -InterfaceGuid $guid -Server $ip -DohTemplate $tpl) {
+            $want[$ip] = $true
+            $n++
+        }
+    }
+    # Drop interface DoH keys for servers no longer configured on this adapter.
+    $base = "HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\$guid\DohInterfaceSettings\Doh"
+    if (Test-Path -LiteralPath $base) {
+        foreach ($child in @(Get-ChildItem -LiteralPath $base -ErrorAction SilentlyContinue)) {
+            $ip = [string]$child.PSChildName
+            if (-not $want.ContainsKey($ip) -and ($Servers -notcontains $ip)) {
+                try { Remove-Item -LiteralPath $child.PSPath -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+            }
+        }
+    }
+    return $n
+}
+
 function Get-BastionDnsSnapshot {
     $adapters = @()
     foreach ($a in @(Get-BastionDnsAdapters)) {
@@ -2856,18 +3021,35 @@ function Get-BastionDnsSnapshot {
             $servers = @(Get-AdapterDnsServers -InterfaceIndex $a.ifIndex)
             $guid = ""
             try { $guid = [string]$a.InterfaceGuid } catch { $guid = "" }
+            $doh = @(Get-BastionInterfaceDohEntries -InterfaceGuid $guid)
+            # If registry has no per-interface DoH yet, still record known templates for current servers
+            # so a later restore can re-enable Encrypted mode after a plain Set-DnsClientServerAddress.
+            if ($doh.Count -eq 0 -and $servers.Count -gt 0) {
+                foreach ($s in $servers) {
+                    $tpl = Get-BastionDnsKnownDohTemplate -Server ([string]$s)
+                    if ($tpl) {
+                        $doh += [ordered]@{
+                            Server      = [string]$s
+                            DohTemplate = $tpl
+                            DohFlags    = $script:BastionDnsDohInterfaceFlags
+                            Inferred    = $true
+                        }
+                    }
+                }
+            }
             $adapters += [ordered]@{
                 Name           = [string]$a.Name
                 InterfaceIndex = [int]$a.ifIndex
                 InterfaceGuid  = $guid
                 Servers        = @($servers | ForEach-Object { [string]$_ })
                 WasEmpty       = ($servers.Count -eq 0)
+                DohEntries     = @($doh)
             }
         } catch {}
     }
     return [ordered]@{
         CapturedAt = (Get-Date -Format "o")
-        Version    = 1
+        Version    = 2
         Adapters   = $adapters
     }
 }
@@ -2911,19 +3093,33 @@ function Restore-BastionDnsFromSnapshot {
             } catch { $servers = @() }
             $wasEmpty = $false
             try { $wasEmpty = [bool]$row.WasEmpty } catch {}
+            $dohEntries = @()
+            try {
+                if ($row.DohEntries) { $dohEntries = @($row.DohEntries) }
+            } catch { $dohEntries = @() }
+            $matchGuid = ""
+            try { $matchGuid = [string]$match.InterfaceGuid } catch { $matchGuid = $guid }
             if ($wasEmpty -or $servers.Count -eq 0) {
                 Set-DnsClientServerAddress -InterfaceIndex $match.ifIndex -ResetServerAddresses -ErrorAction Stop
+                Clear-BastionInterfaceDohEntries -InterfaceGuid $matchGuid
                 Write-Status ("{0}: prior DNS was automatic/empty; reset to DHCP" -f $match.Name) "Applied"
             } else {
                 Set-DnsClientServerAddress -InterfaceIndex $match.ifIndex -ServerAddresses $servers -ErrorAction Stop
-                Write-Status ("{0}: restored prior DNS ({1})" -f $match.Name, ($servers -join ", ")) "Applied"
+                $dohN = Enable-BastionDnsOverHttpsForAdapter -InterfaceGuid $matchGuid -Servers $servers -DohEntries $dohEntries
+                if ($dohN -gt 0) {
+                    Write-Status ("{0}: restored prior DNS ({1}) + DoH encryption for {2} server(s)" -f $match.Name, ($servers -join ", "), $dohN) "Applied"
+                } else {
+                    Write-Status ("{0}: restored prior DNS ({1}) (no DoH template available; Windows may show Unencrypted)" -f $match.Name, ($servers -join ", ")) "Applied"
+                }
             }
             $n++
         } catch {
             Write-Status ("DNS restore failed on {0}: {1}" -f $match.Name, $_.Exception.Message) "Failed"
         }
     }
+    try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
     Write-Host "  Bastion menu D provider preference is unchanged. VPN may still override DNS while connected." -ForegroundColor DarkGray
+    Write-Host "  Settings 'Encrypted' = DNS-over-HTTPS on the wire. Bastion's snapshot file uses separate DPAPI on-disk encryption." -ForegroundColor DarkGray
     Write-Host "  Snapshot restore is best-effort if adapters were renamed or removed after Apply." -ForegroundColor DarkGray
     Write-Log ("Restore-BastionDnsFromSnapshot restored={0}" -f $n) -NoConsole
     return ($n -gt 0)
@@ -6029,12 +6225,14 @@ function Reset-BastionDnsToAutomatic {
     foreach ($a in $adapters) {
         try {
             Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ResetServerAddresses -ErrorAction Stop
+            try { Clear-BastionInterfaceDohEntries -InterfaceGuid ([string]$a.InterfaceGuid) } catch {}
             Write-Status ("{0}: DNS reset to automatic (DHCP/system)" -f $a.Name) "Applied"
             $n++
         } catch {
             Write-Status ("DNS reset failed on {0}: {1}" -f $a.Name, $_.Exception.Message) "Failed"
         }
     }
+    try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
     Write-Host "  Bastion DNS provider preference is unchanged (menu D). This only cleared static servers on adapters." -ForegroundColor DarkGray
     Write-Host "  A VPN may still override DNS while connected." -ForegroundColor DarkGray
     Write-Log ("Reset-BastionDnsToAutomatic adapters={0}" -f $n) -NoConsole
@@ -6116,9 +6314,9 @@ function Show-NetworkRecoveryMenu {
                     Wait-ForKey "Press any key to return to Network recovery..."
                     continue
                 }
-                Write-Host "  Restores IPv4 DNS servers captured before the last Bastion DNS Apply (or DHCP if empty)." -ForegroundColor Yellow
-                Write-Host "  Best-effort if adapters were renamed or removed. Menu D preference is unchanged." -ForegroundColor DarkGray
-                Write-Host "  VPN may still override DNS while connected." -ForegroundColor DarkGray
+                Write-Host "  Restores IPv4 DNS servers and Windows DNS-over-HTTPS (DoH) settings from the last Bastion DNS Apply snapshot." -ForegroundColor Yellow
+                Write-Host "  Settings 'Encrypted' means DoH on the wire. Bastion's snapshot file uses separate DPAPI encryption on disk." -ForegroundColor DarkGray
+                Write-Host "  Best-effort if adapters were renamed or removed. Menu D preference is unchanged. VPN may still override DNS while connected." -ForegroundColor DarkGray
                 if ((Read-YesNo -Prompt "  Restore prior DNS from snapshot now (Y/N)?") -eq "Y") {
                     $snap = Get-BastionDnsSnapshotFromUndo -UndoData $undoPeek
                     if ($snap) { [void](Restore-BastionDnsFromSnapshot -Snapshot $snap) }
@@ -7294,16 +7492,31 @@ function Invoke-ApplyHardening {
             }
             foreach ($a in $adapters) {
                 try {
+                    $guid = ""
+                    try { $guid = [string]$a.InterfaceGuid } catch {}
                     if (Test-AdapterDnsMatchesProvider -InterfaceIndex $a.ifIndex) {
-                        Write-Status ("{0} already {1}-first" -f $a.Name, $prov.DisplayName) "Already"
+                        # Still ensure DoH is registered for this provider (Settings Encrypted badge).
+                        $dohN = Enable-BastionDnsOverHttpsForAdapter -InterfaceGuid $guid -Servers $servers
+                        if ($dohN -gt 0) {
+                            Write-Status ("{0} already {1}-first; DoH encryption confirmed" -f $a.Name, $prov.DisplayName) "Already"
+                        } else {
+                            Write-Status ("{0} already {1}-first" -f $a.Name, $prov.DisplayName) "Already"
+                        }
                     } else {
                         Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses $servers -ErrorAction Stop
-                        Write-Status ("{0} -> {1}" -f $prov.DisplayName, $a.Name) "Applied"
+                        $dohN = Enable-BastionDnsOverHttpsForAdapter -InterfaceGuid $guid -Servers $servers
+                        if ($dohN -gt 0) {
+                            Write-Status ("{0} -> {1} (DoH encryption enabled for {2} server(s))" -f $a.Name, $prov.DisplayName, $dohN) "Applied"
+                        } else {
+                            Write-Status ("{0} -> {1} (classic DNS; no DoH template)" -f $a.Name, $prov.DisplayName) "Applied"
+                        }
                     }
                 } catch {
                     Write-Status ("DNS fail on {0}: {1}" -f $a.Name, $_.Exception.Message) "Failed"
                 }
             }
+            try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
+            Write-Host "  Note: Windows Settings 'Encrypted' means DNS-over-HTTPS. Bastion snapshot DPAPI is separate (on-disk undo only)." -ForegroundColor DarkGray
         }
     }
 

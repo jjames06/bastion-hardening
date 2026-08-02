@@ -36,6 +36,15 @@ Deleting that folder does **not** un-harden Windows or remove browser enterprise
 
 **Mostly limited by design.** The main menu shows the Bastion **data directory** path (needed so you can find logs). Winget preflight and Security Audit report trusted sources **without** printing the full winget executable path under your profile. Custom install roots you choose still appear in config when you set them. When sharing logs, redact anything you do not want public.
 
+## Why does Windows Settings say DNS is “Unencrypted” after Bastion?
+
+**Two different meanings of “encrypted”:**
+
+1. **Bastion snapshot DPAPI** - prior DNS is stored encrypted **on disk** in `Bastion-LastApply.json` so a casual file reader does not get plaintext history. That is not the Windows Settings badge.  
+2. **Windows Settings “Encrypted”** - means **DNS-over-HTTPS (DoH)** for that resolver on the wire.
+
+Bastion DNS Apply sets the public resolver IPs **and** enables DoH for known templates (Quad9, Cloudflare, Google, OpenDNS) when Windows supports them. Recovery option **4** / Undo restore IPs **and** re-apply DoH from the snapshot (or known templates). If you still see Unencrypted, close and reopen Settings, check the adapter is not a VPN override, and confirm you are on a Bastion build that includes DoH support.
+
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 
 **Never.** ECH is a separate Yes/No choice under browser **Strict**, and only for installed Firefox, Chrome, or Brave. For full detail, see [docs/BROWSER-POLICIES-AND-ECH.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/BROWSER-POLICIES-AND-ECH.md).
