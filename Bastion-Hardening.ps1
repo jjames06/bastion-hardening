@@ -5448,6 +5448,7 @@ function Get-DetectedCatalogInstalls {
 function Show-UninstallMenu {
     Clear-BastionScreen
     Write-Header "UNINSTALL"
+    Write-AppliesWhen -Mode Now -Extra "Uninstall runs from this menu after YES confirm. It does not wait for main menu 8."
     $wg = Test-WingetAvailable
     if (-not $wg.Ok) {
         Write-Host ("  {0}" -f $wg.Error) -ForegroundColor Red
