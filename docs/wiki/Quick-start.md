@@ -11,7 +11,7 @@ Use an **official** source only:
 1. **Recommended:** open **https://www.operationlockedin.com/bastion/download** (the site resolves the same GitHub Latest zip), **or** open **https://github.com/jjames06/bastion-hardening/releases/latest**  
 2. Download **`bastion-hardening-v*.zip`** (the current Latest build is also noted in [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17))  
 3. **Unblock the zip** (Mark-of-the-Web): right-click the zip -> **Properties** -> check **Unblock** if shown -> **OK**. Skipping this often causes *running scripts is disabled on this system*.  
-4. Extract the zip to a location **you** control (for example `C:\Tools\`). Official zips expand to one folder such as `bastion-hardening-v15.9.5\` with the bootstrap, `src\` modules, and docs already together.  
+4. Extract the zip to a location **you** control (for example `C:\Tools\`). Official zips expand to one folder such as `bastion-hardening-v15.9.6\` with the bootstrap, `src\` modules, and docs already together.  
 5. Open that folder and confirm: `Bastion-Hardening.bat`, `Bastion-Hardening.ps1`, and `src\` (optional: `Bastion-Banner.utf8.txt`, `docs\`)
 
 **Always use `Bastion-Hardening.bat`.** Never double-click `Bastion-Hardening.ps1` alone under Windows **Restricted** ExecutionPolicy - the host blocks the script before Bastion runs. The bat unblocks the product tree and starts PowerShell with Process-scope Bypass.

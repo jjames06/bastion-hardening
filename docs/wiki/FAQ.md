@@ -14,9 +14,9 @@
 
 ## Which file do I download?
 
-Prefer **v15.9.5** modular (High-IL bat elevation, goto-safe launcher, works after LanmanServer is disabled). Official site download may still pin GitHub **Latest** (often monolith **v15.8.4**) until modular is promoted - that is intentional.
+Prefer **v15.9.6** modular (forced black console theme; High-IL bat elevation; goto-safe launcher; works after LanmanServer is disabled). Official site download may still pin GitHub **Latest** (often monolith **v15.8.4**) until modular is promoted - that is intentional.
 
-- **Modular prerelease (recommended for hardened PCs):** https://github.com/jjames06/bastion-hardening/releases/tag/v15.9.5  
+- **Modular prerelease (recommended for hardened PCs):** https://github.com/jjames06/bastion-hardening/releases/tag/v15.9.6  
 - **Official site / GitHub Latest (public pin):** https://www.operationlockedin.com/bastion/download and https://github.com/jjames06/bastion-hardening/releases/latest  
 
 **Install rule:** Unblock the zip, extract, always run **`Bastion-Hardening.bat`** as administrator. Never double-click `Bastion-Hardening.ps1` alone under Restricted policy.

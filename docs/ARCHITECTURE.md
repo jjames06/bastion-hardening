@@ -1,10 +1,10 @@
-# Bastion architecture (v15.9.5)
+# Bastion architecture (v15.9.6)
 
 ## Purpose
 
 Bastion Hardening Framework is a **menu-driven**, **state-aware** Windows workstation hardener. It runs elevated, records preferences and optional Apply undo data under a local data directory, and never invents Apply history on first launch.
 
-This document maps the **code layout** after the v15.9.x modular restructure (script-scope module load, post-load command probe, self-elevating bat, Mark-of-the-Web / ExecutionPolicy launch hardening, and v15.9.5 LanmanServer-safe bat parse). Product behavior is unchanged from the prior monolith unless noted in release notes.
+This document maps the **code layout** after the v15.9.x modular restructure (script-scope module load, post-load command probe, self-elevating bat, Mark-of-the-Web / ExecutionPolicy launch hardening, v15.9.5 LanmanServer-safe bat parse, and v15.9.6 forced black console theme). Product behavior is unchanged from the prior monolith unless noted in release notes.
 
 ## Design principles
 
@@ -31,7 +31,7 @@ If a launch fails after hardening, the cause is almost always **launcher / eleva
 ## Runtime layout
 
 ```
-bastion-hardening-v15.9.5\
+bastion-hardening-v15.9.6\
   Bastion-Hardening.bat      # UAC launcher; High-IL whoami check; goto-safe; calls helpers
   tools-elevate-self.ps1     # UAC re-launch helper (avoids nested parentheses in cmd)
   tools-run-bootstrap.ps1    # Unblock-File + Process Bypass + & Bastion-Hardening.ps1
@@ -41,7 +41,7 @@ bastion-hardening-v15.9.5\
   src\
     MANIFEST.sha256          # SHA256 of each module (paths relative to src\)
     Bastion.Init.ps1         # $script: catalogs, sections, providers, flags
-    Bastion.Core.ps1         # UI, log, prompts, console (Write-Banner uses BastionRoot)
+    Bastion.Core.ps1         # UI, log, prompts, console theme (black/gray); Write-Banner uses BastionRoot
     Bastion.Config.ps1       # paths, config/undo, DPAPI, ACL, session store
     Bastion.Programs.ps1     # winget catalog install / uninstall helpers
     Bastion.Services.ps1     # high-risk / Xbox service helpers
@@ -129,7 +129,7 @@ Elevated:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Bastion-Hardening.ps1 -BastionSmokeLoadOnly
 ```
 
-Expected: `Bastion smoke load OK v15.9.5 (commands verified)` and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
+Expected: `Bastion smoke load OK v15.9.6 (commands verified)` and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
 
 Bat path smoke (elevated host, LanmanServer may be stopped/disabled):
 
@@ -141,7 +141,7 @@ Expected: “Elevated console ready”, then main menu (or use `tools-run-bootst
 
 ## Version
 
-Product-facing version is **15.9.5** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.5** on Bastion-hardened machines where Server/LanmanServer is disabled and earlier modular bats flash-closed with `. was unexpected at this time.` Always start with the `.bat`, never the `.ps1` alone.
+Product-facing version is **15.9.6** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.6** for consistent dark console theme plus **15.9.5** launch fixes on Bastion-hardened machines where Server/LanmanServer is disabled. Always start with the `.bat`, never the `.ps1` alone.
 
 **Public site note:** Official site download may remain pinned to GitHub **Latest** (often monolith **15.8.4**) while modular **15.9.x** ships as GitHub **prerelease**. That is intentional until modular is promoted to Latest.
 
