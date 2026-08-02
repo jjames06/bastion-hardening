@@ -1,17 +1,18 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.8.3 FINAL
+    Bastion Hardening Framework v15.8.4 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
 .NOTES
-    Version 15.8.3 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.8.4 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
     v15.8.2: DNS menu shows live vs preferred, DoH labels, and Apply DNS now (A); preference alone does not change Windows.
     v15.8.3: Preserve DNS/RDP undo blobs across Applies; Network option 4 previews snapshot targets; clearer restore UX.
+    v15.8.4: Match Settings Edit DNS DoH path (per-interface QWord DohFlags=17 + template) so Encrypted shows without manual click.
 #>
 
 $ErrorActionPreference = "Continue"
@@ -19,7 +20,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.8.3"
+    ScriptVersion = "15.8.4"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
@@ -237,8 +238,11 @@ $script:DnsKnownDohTemplates = [ordered]@{
     "208.67.222.222"    = "https://doh.opendns.com/dns-query"
     "208.67.220.220"    = "https://doh.opendns.com/dns-query"
 }
-# Interface DoH registry flag (5 = encrypted-only style used by Windows DoH UI paths).
-$script:BastionDnsDohInterfaceFlags = 5
+# Per-interface DoH registry flag. Windows Settings "DNS over HTTPS: On (automatic template)"
+# with "Fallback to plaintext: Off" writes REG_QWORD DohFlags = 17 under
+# Dnscache\InterfaceSpecificParameters\{GUID}\DohInterfaceSettings\Doh\{IP}.
+# Older scripts used 1 or 5 as DWORD; those do not match the Settings Encrypted badge on current Win11.
+$script:BastionDnsDohInterfaceFlags = 17
 $script:Stats = @{
     AlreadyConfigured = 0
     Applied           = 0
@@ -316,11 +320,11 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Dry Run reads the current policy value so repeated runs show Already OK when set."
     }
     "DNS" = @{
-        Intent  = "Optionally set eligible network adapters to a user-chosen public recursive DNS provider, or leave DNS unchanged."
-        Changes = "When a provider is selected (menu D), sets IPv4 DNS on active adapters via Set-DnsClientServerAddress, then enables Windows DNS-over-HTTPS (DoH) for known provider templates when supported. Before changing, Bastion snapshots prior IPv4 servers and per-adapter DoH settings and stores them DPAPI-protected in Bastion-LastApply.json. Providers: Quad9, Cloudflare, Cloudflare security, Google, OpenDNS. Choose 'Do not change DNS' to skip."
-        Impact  = "Name resolution uses the chosen resolver while those adapter settings apply. Windows Settings should show Encrypted for DoH-capable resolvers after Apply (not the same as Bastion's on-disk DPAPI snapshot encryption). A connected VPN may override DNS while the tunnel is up."
-        Revert  = "Recovery > 3 Network: (3) Reset DNS to automatic (DHCP), or (4) Restore prior DNS + DoH from last Apply snapshot when present. Undo also restores snapshot when available. Best-effort if adapters changed. VPN may still override while connected."
-        Notes   = "Default provider is Quad9. Dry Run and Audit compare the first configured IPv4 DNS server per adapter against the selected primary. On-disk snapshot uses Windows DPAPI (CurrentUser of the elevating account). Settings UI 'Unencrypted' means plain DNS on the wire; Bastion aims to set DoH so known resolvers show Encrypted."
+        Intent  = "Optionally set eligible adapters to a public DNS provider (with DNS-over-HTTPS), or leave DNS alone."
+        Changes = "On Apply (main menu 8, or DNS menu A): snapshot prior DNS, set IPv4 servers, enable DoH for known resolvers. Providers: Quad9, Cloudflare, Cloudflare security, Google, OpenDNS. 'Do not change DNS' skips this section."
+        Impact  = "Name resolution uses the chosen resolver. Settings should show Encrypted for DoH-capable resolvers. A VPN may override DNS while connected."
+        Revert  = "Recovery > 3 Network: option 3 = DHCP, option 4 = restore last DNS snapshot (runs now). Undo can also restore the snapshot. Best-effort if adapters changed."
+        Notes   = "Menu D only saves preference. Apply is required for Windows. Snapshot on disk is DPAPI-encrypted (separate from Settings Encrypted = DoH on the wire)."
     }
     "RdpHostLock" = @{
         Intent  = "Optionally deny this PC as a Remote Desktop host (workstation that should not accept RDP logons)."
@@ -983,6 +987,47 @@ function Write-Header([string]$Title) {
 function Write-MenuGroup([string]$Label) {
     Write-Host ""
     Write-Host ("  -- {0} --" -f $Label) -ForegroundColor DarkCyan
+}
+
+function Write-UxDivider {
+    Write-Host "  ------------------------------------------------------------" -ForegroundColor DarkGray
+}
+
+# Consistent "when does this take effect?" line so menus do not contradict each other.
+function Write-AppliesWhen {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet("Now", "MainMenu8", "PreferenceOrApply")]
+        [string]$Mode,
+        [string]$Extra = ""
+    )
+    switch ($Mode) {
+        "Now" {
+            Write-Host "  Takes effect: NOW from this menu (no main menu 8 needed)." -ForegroundColor Green
+        }
+        "MainMenu8" {
+            Write-Host "  Takes effect: after main menu 8 (Apply Hardening)." -ForegroundColor Yellow
+        }
+        "PreferenceOrApply" {
+            Write-Host "  Preference: saved immediately." -ForegroundColor Cyan
+            Write-Host "  Windows DNS: only after Apply - press A here, or main menu 8 (DNS section on)." -ForegroundColor Yellow
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Extra)) {
+        Write-Host ("  {0}" -f $Extra) -ForegroundColor DarkGray
+    }
+}
+
+function Write-UxBullets {
+    param(
+        [string[]]$Items,
+        [ConsoleColor]$ForegroundColor = [ConsoleColor]::White,
+        [string]$Bullet = "-"
+    )
+    foreach ($item in @($Items)) {
+        if ([string]::IsNullOrWhiteSpace($item)) { continue }
+        Write-Host ("    {0} {1}" -f $Bullet, $item) -ForegroundColor $ForegroundColor
+    }
 }
 
 function Read-YesNo([string]$Prompt) {
@@ -2885,7 +2930,8 @@ function Format-BastionInterfaceGuid {
     $g = $Raw.Trim()
     if ($g -notmatch '^\{') { $g = "{$g}" }
     if ($g -notmatch '^\{[0-9A-Fa-f\-]{36}\}$') { return $null }
-    return $g
+    # Windows stores InterfaceSpecificParameters GUIDs lowercase; normalize for stable paths.
+    return $g.ToLowerInvariant()
 }
 
 function Get-BastionDnsKnownDohTemplate {
@@ -2948,7 +2994,8 @@ function Set-BastionInterfaceDohEntry {
     if (-not $guid -or [string]::IsNullOrWhiteSpace($ip) -or [string]::IsNullOrWhiteSpace($DohTemplate)) { return $false }
     $ok = $false
     try {
-        # 1) Global DoH list via DnsClient module.
+        # 1) Global DoH list via DnsClient module (known server + auto-upgrade, no UDP fallback).
+        #    Mirrors Settings: DNS over HTTPS On (automatic template), Fallback to plaintext Off.
         try {
             $exist = Get-DnsClientDohServerAddress -ServerAddress $ip -ErrorAction SilentlyContinue
             if (-not $exist) {
@@ -2972,13 +3019,23 @@ function Set-BastionInterfaceDohEntry {
         } catch {
             Write-Log ("DoH netsh {0}: {1}" -f $ip, $_.Exception.Message) -Level Warning
         }
-        # 3) Per-interface DoH keys (Settings / stack).
+        # 3) Per-interface DoH keys - required for Settings "Encrypted" badge (same path Edit DNS saves).
+        #    Windows writes DohFlags as REG_QWORD (not DWORD). Value 17 = On automatic template, no plaintext fallback.
         $path = "HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\$guid\DohInterfaceSettings\Doh\$ip"
         if (-not (Test-Path -LiteralPath $path)) {
             New-Item -Path $path -Force -ErrorAction Stop | Out-Null
         }
-        New-ItemProperty -Path $path -Name DohTemplate -PropertyType String -Value $DohTemplate -Force -ErrorAction Stop | Out-Null
-        New-ItemProperty -Path $path -Name DohFlags -PropertyType DWord -Value $DohFlags -Force -ErrorAction Stop | Out-Null
+        # Drop wrong property kinds so QWord/String land cleanly (legacy Bastion wrote DWORD 5).
+        try {
+            $item = Get-Item -LiteralPath $path -ErrorAction Stop
+            try {
+                if ($item.GetValueKind("DohFlags") -ne [Microsoft.Win32.RegistryValueKind]::QWord) {
+                    Remove-ItemProperty -LiteralPath $path -Name DohFlags -Force -ErrorAction SilentlyContinue
+                }
+            } catch {}
+        } catch {}
+        New-ItemProperty -LiteralPath $path -Name DohTemplate -PropertyType String -Value $DohTemplate -Force -ErrorAction Stop | Out-Null
+        New-ItemProperty -LiteralPath $path -Name DohFlags -PropertyType QWord -Value ([uint64]$DohFlags) -Force -ErrorAction Stop | Out-Null
         $ok = $true
         return $ok
     } catch {
@@ -3139,11 +3196,13 @@ function Restore-BastionDnsFromSnapshot {
         }
     }
     try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
-    Write-Host "  Bastion menu D provider preference is unchanged. VPN may still override DNS while connected." -ForegroundColor DarkGray
-    Write-Host "  Two meanings of encrypted: (1) Bastion DPAPI = snapshot file on disk. (2) Windows DoH = HTTPS DNS on the wire." -ForegroundColor DarkGray
-    Write-Host "  Settings may still show 'Unencrypted' next to the IP even when DoH is active (Windows UI often lags when DNS is set outside Settings)." -ForegroundColor DarkGray
-    Write-Host "  To force the Settings badge: Edit DNS on the adapter > Preferred DNS encryption > On (automatic template), Save." -ForegroundColor DarkGray
-    Write-Host "  Snapshot restore is best-effort if adapters were renamed or removed after Apply." -ForegroundColor DarkGray
+    Write-UxDivider
+    Write-Host "  Restore finished (this menu already applied it - no main menu 8)." -ForegroundColor Green
+    Write-Host "  Menu D preference was not changed. VPN may still override DNS while connected." -ForegroundColor DarkGray
+    Write-Host "  Settings Encrypted = DNS-over-HTTPS on the wire (re-open Settings if the badge was already open)." -ForegroundColor DarkGray
+    if ($n -eq 0) {
+        Write-Host "  No adapters were restored (renamed/removed since snapshot, or snapshot empty)." -ForegroundColor Yellow
+    }
     Write-Log ("Restore-BastionDnsFromSnapshot restored={0}" -f $n) -NoConsole
     return ($n -gt 0)
 }
@@ -3655,7 +3714,8 @@ function New-BastionRestorePoint {
 function Invoke-DryRun {
     Clear-BastionScreen
     Write-Header "DRY RUN (NO CHANGES)"
-    Write-Host "  State-aware preview of what Apply would do with current toggles." -ForegroundColor Cyan
+    Write-Host "  Preview only - nothing is changed on Windows." -ForegroundColor Cyan
+    Write-Host "  Based on current section toggles / DNS preference. To make changes: main menu 8 (or 7 Quick Harden)." -ForegroundColor DarkGray
     Write-Host ""
 
     $would = 0
@@ -4575,9 +4635,9 @@ function Show-ProgramMenu {
         $apps = @(Get-CatalogProgramRows)
         Clear-BastionScreen
         Write-Header "PROGRAMS AND INSTALL PATHS"
-        Write-Host "  [X] = queued to INSTALL (missing apps only). Installed apps cannot be checked here." -ForegroundColor DarkGray
-        Write-Host "  Status is detected live. Use menu 10 to uninstall catalog apps." -ForegroundColor DarkGray
-        Write-Host "  No location chosen => vendor defaults. L sets paths for pending installs only." -ForegroundColor DarkGray
+        Write-AppliesWhen -Mode MainMenu8 -Extra "Queue missing apps here. Installs run only when you Apply (main menu 8). Uninstall is menu 10 (runs now)."
+        Write-Host "  [X] = queued to install (missing apps only). Installed apps stay [ ] here." -ForegroundColor DarkGray
+        Write-Host "  No custom path => vendor defaults. L sets paths for the current queue only." -ForegroundColor DarkGray
         Write-Host ""
         for ($i = 0; $i -lt $apps.Count; $i++) {
             $a = $apps[$i]
@@ -4603,12 +4663,14 @@ function Show-ProgramMenu {
             $pendingCount, $missingCount, $installedCount,
             $(if ($script:GlobalInstallRoot) { $script:GlobalInstallRoot } else { "(none)" })) -ForegroundColor Cyan
         # No bulk "select everything" for installs: users opt in app-by-app (safer, clearer).
-        Write-Host "  N clear-queue  L locations  C confirm  0 back" -ForegroundColor Yellow
+        Write-Host "  N clear queue   L install locations   C save and back   0 back" -ForegroundColor Yellow
+        Write-Host "  Tip: number keys toggle a missing app into the queue. Nothing installs until main menu 8." -ForegroundColor DarkGray
         $valid = @("N","L","C","0","n","l","c") + (1..$apps.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
         switch ($c.ToUpper()) {
             "0" {
                 Sync-ProgramInstallQueue
+                Save-BastionConfig
                 return
             }
             "N" {
@@ -4627,7 +4689,8 @@ function Show-ProgramMenu {
             "C" {
                 Sync-ProgramInstallQueue
                 Save-BastionConfig
-                Write-Host ("  Saved. Queued for install: {0}" -f $(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { "(none)" })) -ForegroundColor Green
+                Write-Host ("  Queue saved: {0}" -f $(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { "(none)" })) -ForegroundColor Green
+                Write-Host "  Installs still need main menu 8 (Apply Hardening)." -ForegroundColor Yellow
                 Start-Sleep -Seconds 1
                 return
             }
@@ -4659,6 +4722,10 @@ function Show-SectionMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "HARDENING SECTIONS"
+        Write-AppliesWhen -Mode MainMenu8 -Extra "Toggles here only choose what Apply will run. Windows is not hardened until you leave and press 8."
+        Write-Host ""
+        Write-Host "  [X] = included in next Apply   [ ] = skipped" -ForegroundColor DarkGray
+        Write-Host ""
         for ($i = 0; $i -lt $names.Count; $i++) {
             $n = $names[$i]
             $mark = if ($script:Sections[$n]) { "[X]" } else { "[ ]" }
@@ -4676,18 +4743,29 @@ function Show-SectionMenu {
             Write-Host ("  {0,2}. {1}  {2}{3}" -f ($i + 1), $mark, $n, $suffix) `
                 -ForegroundColor $(if ($script:Sections[$n]) { "Green" } else { "DarkGray" })
         }
-        Write-Host "  A all  N none  D DNS provider  C confirm  0 back" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  A all on   N all off   D DNS provider menu   C save and back   0 back" -ForegroundColor Yellow
+        Write-Host "  Tip: number keys toggle one section. DNS provider is chosen under D (or main menu D)." -ForegroundColor DarkGray
         $valid = @("A","N","C","D","0","a","n","c","d") + (1..$names.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
         switch ($c.ToUpper()) {
-            "0" { return }
+            "0" { Save-BastionConfig; return }
             "A" {
                 foreach ($k in $names) { $script:Sections[$k] = $true }
                 if ($script:DnsProviderId -eq "None") { $script:DnsProviderId = "Quad9" }
+                Save-BastionConfig
             }
-            "N" { foreach ($k in $names) { $script:Sections[$k] = $false } }
+            "N" {
+                foreach ($k in $names) { $script:Sections[$k] = $false }
+                Save-BastionConfig
+            }
             "D" { Show-DnsProviderMenu; return }
-            "C" { Save-BastionConfig; return }
+            "C" {
+                Save-BastionConfig
+                Write-Host "  Sections saved. Run main menu 8 (Apply) when you want them on Windows." -ForegroundColor Yellow
+                Start-Sleep -Milliseconds 1000
+                return
+            }
             default {
                 if ($c -match '^\d+$') {
                     $idx = [int]$c - 1
@@ -4701,6 +4779,7 @@ function Show-SectionMenu {
                                 # Section off = do not change DNS; keep last real provider for easy re-enable
                             }
                         }
+                        Save-BastionConfig
                     }
                 }
             }
@@ -4840,9 +4919,10 @@ function Invoke-BastionDnsSectionApply {
         }
         Save-UndoData $undoTrack
     }
-    Write-Host "  Preference (menu D) and live adapter DNS should now match the provider above (VPN may still override)." -ForegroundColor DarkGray
-    Write-Host "  Windows Settings may still show 'Unencrypted' next to the IP; that badge often lags when DNS is set outside Settings." -ForegroundColor DarkGray
-    Write-Host "  Bastion enables DNS-over-HTTPS (DoH) for this provider when Windows accepts the template (wire encryption)." -ForegroundColor DarkGray
+    Write-UxDivider
+    Write-Host "  DNS Apply finished (this run already changed Windows - no extra main menu 8 for DNS)." -ForegroundColor Green
+    Write-Host "  Preference and live adapters should match above (VPN may still override while connected)." -ForegroundColor DarkGray
+    Write-Host "  Settings Encrypted = DoH on the wire. Re-open Settings if that page was already open." -ForegroundColor DarkGray
     return ($changed -gt 0 -or -not $needSnap)
 }
 
@@ -4850,21 +4930,18 @@ function Show-DnsProviderMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "DNS RESOLVER"
-        Write-Host "  This menu only chooses Bastion's preferred provider (saved preference)." -ForegroundColor Cyan
-        Write-Host "  Windows adapter DNS does NOT change until you Apply (main menu 8) or press A here." -ForegroundColor Yellow
-        Write-Host "  VPN software may override DNS while a tunnel is connected." -ForegroundColor Yellow
+        Write-AppliesWhen -Mode PreferenceOrApply -Extra "VPN software may override DNS while a tunnel is connected."
         Write-Host ""
-        Write-Host ("  Preferred (menu D / Apply): {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor White
-        Write-Host ("  Section DNS enabled: {0}" -f $(if ($script:Sections["DNS"]) { "Yes" } else { "No" })) -ForegroundColor DarkGray
-        Write-Host "  Live Windows adapters (what Settings shows):" -ForegroundColor Cyan
+        Write-Host "  Status" -ForegroundColor Cyan
+        Write-Host ("    Preferred provider:  {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor White
+        Write-Host ("    DNS section for Apply 8: {0}" -f $(if ($script:Sections["DNS"] -and $script:DnsProviderId -ne "None") { "ON" } else { "OFF (will not change DNS on full Apply)" })) -ForegroundColor DarkGray
+        Write-Host "    Live Windows adapters right now:" -ForegroundColor Cyan
         foreach ($line in @(Get-BastionLiveDnsSummaryLines)) {
             Write-Host $line -ForegroundColor White
         }
         Write-Host ""
-        Write-Host "  Wire encryption (DNS-over-HTTPS):" -ForegroundColor Cyan
-        Write-Host "    DoH-capable (Bastion enables DoH on Apply): Quad9, Cloudflare, Cloudflare security, Google, OpenDNS" -ForegroundColor Green
-        Write-Host "    Leave unchanged: keeps whatever Windows already has (may be DoH, plain, or DHCP)" -ForegroundColor DarkGray
-        Write-Host "    Settings 'Unencrypted' badge is separate from Bastion DPAPI snapshot encryption on disk." -ForegroundColor DarkGray
+        Write-Host "  Pick a preferred provider (saves preference only)" -ForegroundColor Cyan
+        Write-Host "  > marks the current preference" -ForegroundColor DarkGray
         Write-Host ""
 
         $ids = @($script:DnsProviders.Keys)
@@ -4875,33 +4952,39 @@ function Show-DnsProviderMenu {
             if ($id -eq "None") {
                 $mark = if (-not $script:Sections["DNS"] -or $script:DnsProviderId -eq "None") { ">" } else { " " }
                 Write-Host ("  {0} {1,2}. {2}" -f $mark, ($i + 1), $p.DisplayName) -ForegroundColor $(if ($mark -eq ">") { "Green" } else { "White" })
-                Write-Host ("         Wire: leave as-is  |  {0}" -f $p.Notes) -ForegroundColor DarkGray
+                Write-Host ("         Leave Windows DNS as-is  |  {0}" -f $p.Notes) -ForegroundColor DarkGray
             } else {
-                $wire = if ($p.WireDoH) { "DoH (encrypted transport when Windows accepts template)" } else { "classic DNS only" }
+                $wire = if ($p.WireDoH) { "DNS-over-HTTPS on Apply (Settings Encrypted)" } else { "classic DNS only" }
                 Write-Host ("  {0} {1,2}. {2}" -f $mark, ($i + 1), $p.DisplayName) -ForegroundColor $(if ($mark -eq ">") { "Green" } else { "White" })
-                Write-Host ("         Primary {0}  Secondary {1}" -f $p.Primary, $p.Secondary) -ForegroundColor DarkGray
-                Write-Host ("         Wire: {0}" -f $wire) -ForegroundColor DarkGray
-                Write-Host ("         {0}" -f $p.Notes) -ForegroundColor DarkGray
+                Write-Host ("         {0} / {1}  |  {2}" -f $p.Primary, $p.Secondary, $wire) -ForegroundColor DarkGray
+                if (-not [string]::IsNullOrWhiteSpace($p.Notes)) {
+                    Write-Host ("         {0}" -f $p.Notes) -ForegroundColor DarkGray
+                }
             }
             Write-Host ""
         }
-        Write-Host "  A  Apply preferred DNS to adapters now (snapshot + IPs + DoH)" -ForegroundColor Yellow
-        Write-Host "  0  Back (save preference only; does not change Windows yet)" -ForegroundColor Yellow
+        Write-Host "  Actions" -ForegroundColor Cyan
+        Write-Host "  A  Apply preferred DNS to Windows NOW (snapshot + servers + DoH)" -ForegroundColor Yellow
+        Write-Host "  0  Back (keep preference; Windows unchanged until you Apply)" -ForegroundColor White
+        Write-Host ""
+        Write-Host "  Tip: choosing 1-6 only saves. Press A here, or later main menu 8, to change adapters." -ForegroundColor DarkGray
         $valid = @("0", "A", "a") + (1..$ids.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
         if ($c -eq "0") {
             Save-BastionConfig
-            Write-Host "  Preference saved. Live Windows DNS is unchanged until Apply (8) or A on this menu." -ForegroundColor Yellow
+            Write-Host "  Preference saved. Windows DNS unchanged until A (this menu) or main menu 8." -ForegroundColor Yellow
             Start-Sleep -Milliseconds 900
             return
         }
         if ($c.ToUpper() -eq "A") {
             Save-BastionConfig
             if (-not $script:Sections["DNS"] -or $script:DnsProviderId -eq "None") {
-                Write-Host "  Pick a provider (1-5) and enable DNS first." -ForegroundColor Yellow
+                Write-Host "  Choose a real provider first (numbers 1-5), not 'Do not change DNS'." -ForegroundColor Yellow
                 Wait-ForKey
                 continue
             }
+            Write-Host ""
+            Write-AppliesWhen -Mode Now -Extra "This is the same DNS work main menu 8 would do for the DNS section."
             [void](Invoke-BastionDnsSectionApply)
             Wait-ForKey
             continue
@@ -4911,9 +4994,15 @@ function Show-DnsProviderMenu {
             if ($idx -ge 0 -and $idx -lt $ids.Count) {
                 [void](Set-BastionDnsProviderId -Id $ids[$idx])
                 Save-BastionConfig
-                Write-Host ("  Preferred provider saved: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor Green
-                Write-Host "  Windows adapters are NOT updated yet. Press A to apply now, or main menu 8 Apply." -ForegroundColor Yellow
-                Start-Sleep -Milliseconds 1200
+                Write-Host ""
+                Write-Host ("  Saved preference: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor Green
+                if ($script:DnsProviderId -eq "None" -or -not $script:Sections["DNS"]) {
+                    Write-Host "  DNS section is off / leave-unchanged - full Apply (8) will not touch adapter DNS." -ForegroundColor Yellow
+                } else {
+                    Write-Host "  Windows adapters are still on the LIVE list above until you Apply." -ForegroundColor Yellow
+                    Write-Host "  Next: press A here to apply now, or main menu 8 later." -ForegroundColor Yellow
+                }
+                Start-Sleep -Milliseconds 1400
             }
         }
     }
@@ -4982,20 +5071,23 @@ function Show-BrowserPolicyMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "BROWSER PRIVACY POLICIES"
-        Write-Host "  Only installed, supported browsers are listed (Firefox, Chrome, Brave)." -ForegroundColor Cyan
-        Write-Host "  Configure each one independently. Encrypted Client Hello (ECH) is never applied unless you opt in." -ForegroundColor Cyan
+        Write-AppliesWhen -Mode Now -Extra "Unlike sections/DNS, a confirmed mode is written immediately. You do not need main menu 8."
+        Write-Host "  Only installed Firefox / Chrome / Brave are listed. ECH is never on unless you opt in under Strict." -ForegroundColor Cyan
         Write-Host ""
         Write-Host "  Modes" -ForegroundColor White
-        Write-Host "    Default  Remove Bastion policies for that browser only (best-effort revert; backups kept)." -ForegroundColor DarkGray
-        Write-Host "    Medium   Privacy baseline (telemetry / tracking / cookies). Usually fewer breakages." -ForegroundColor DarkGray
-        Write-Host "    Strict   Medium + HTTPS-Only. Does not enable Encrypted Client Hello (ECH) by itself." -ForegroundColor DarkGray
+        Write-UxBullets -Items @(
+            "Default - remove Bastion policies for that browser (best-effort; backups kept)"
+            "Medium  - privacy baseline (telemetry / tracking / cookies); usually fewer breakages"
+            "Strict  - Medium + HTTPS-Only; does not enable ECH by itself"
+        ) -ForegroundColor DarkGray
         Write-Host ""
-        Write-Host "  Encrypted Client Hello (ECH) pack (optional)" -ForegroundColor White
-        Write-Host "    Offered only after you choose Strict, as a separate Yes/No. Default answer path is No" -ForegroundColor DarkGray
-        Write-Host "    unless you type Y. Never enabled for browsers you did not select." -ForegroundColor DarkGray
-        Write-Host "    Firefox: locks Encrypted Client Hello (ECH) preferences in policies.json." -ForegroundColor DarkGray
-        Write-Host "    Chrome/Brave: ECH intent marker + strongest transport policies Bastion can set" -ForegroundColor DarkGray
-        Write-Host "    (HTTPS-Only, DNS-over-HTTPS, optional Chromium ECH policy value if honored)." -ForegroundColor DarkGray
+        Write-Host "  Encrypted Client Hello (ECH) pack" -ForegroundColor White
+        Write-UxBullets -Items @(
+            "Asked only after you pick Strict, as a separate Y/N (default path is No)"
+            "Applies only to the browser(s) you selected on this screen"
+            "Firefox: preference locks in policies.json"
+            "Chrome/Brave: strongest transport policies Bastion can set (+ ECH marker)"
+        ) -ForegroundColor DarkGray
         Write-Host ""
         Write-BrowserStrictDisclaimer -Compact
         Write-Host ("  Saved: {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor DarkGray
@@ -5008,15 +5100,14 @@ function Show-BrowserPolicyMenu {
         $browsers = @(Get-InstalledBastionBrowsers)
         if ($browsers.Count -eq 0) {
             Write-Host "  No supported browsers are installed on this PC." -ForegroundColor Yellow
-            Write-Host "  Supported: Firefox, Chrome, Brave (install from Programs, option 5)." -ForegroundColor DarkGray
-            Write-Host "  Nothing to configure until one of those is detected." -ForegroundColor DarkGray
+            Write-Host "  Install Firefox, Chrome, or Brave from Programs (main menu 5), then Apply (8) if queued." -ForegroundColor DarkGray
             Write-Host ""
             Write-Host "  0 Back"
             $c = Read-MenuChoice -Prompt "  Select" -Valid @("0")
             return
         }
 
-        Write-Host "  Detected installed browsers only" -ForegroundColor Cyan
+        Write-Host "  Installed browsers" -ForegroundColor Cyan
         for ($i = 0; $i -lt $browsers.Count; $i++) {
             $b = $browsers[$i]
             $echL = if ($b.EchLive) { "on" } else { "off" }
@@ -5025,8 +5116,8 @@ function Show-BrowserPolicyMenu {
                 ($i + 1), $b.Name, $b.Mode, $b.SavedMode, $echL, $echS) -ForegroundColor White
         }
         Write-Host ""
-        Write-Host "  Choose a number for one installed browser, then a mode." -ForegroundColor DarkGray
-        Write-Host "  A  Same mode for all detected installed browsers (still one ECH Yes/No if Strict)" -ForegroundColor Yellow
+        Write-Host "  Next: pick a browser number (or A for all), then a mode. Policies write on confirm." -ForegroundColor DarkGray
+        Write-Host "  A  Same mode for all listed browsers (one ECH Y/N if Strict)" -ForegroundColor Yellow
         Write-Host "  0  Back"
         $valid = @("0", "A", "a") + (1..$browsers.Count | ForEach-Object { "$_" })
         $c = Read-MenuChoice -Prompt "  Select" -Valid $valid
@@ -5088,9 +5179,10 @@ function Show-BrowserPolicyMenu {
         $script:BrowserPolicyMode = $mode
         Save-BastionConfig
         Save-BrowserPolicyStateFile
-        Write-Host "  Restart affected browsers fully (close all windows) so policies load or drop." -ForegroundColor Yellow
-        Write-Host "  Revert one browser: menu 6 > that browser > Default." -ForegroundColor DarkGray
-        Write-Host ("  State log: {0}" -f (Get-BrowserPolicyStatePath)) -ForegroundColor DarkGray
+        Write-UxDivider
+        Write-Host "  Policies were written NOW (no main menu 8 needed)." -ForegroundColor Green
+        Write-Host "  Fully quit the browser (all windows), then reopen so policies load or drop." -ForegroundColor Yellow
+        Write-Host "  Revert later: this menu > that browser > Default." -ForegroundColor DarkGray
         Wait-ForKey
     }
 }
@@ -5569,8 +5661,18 @@ function Enable-PrintSpooler {
 function Invoke-UndoHardening {
     Clear-BastionScreen
     Write-Header "UNDO LAST HARDENING"
-    Write-Host "  Best-effort only. System Restore is stronger for full rollback." -ForegroundColor Yellow
-    Write-Host "  Restores tracked services, firewall groups, prior DNS snapshot (if any), and RDP host prior (if locked)." -ForegroundColor DarkGray
+    Write-AppliesWhen -Mode Now -Extra "Best-effort from last Apply only. System Restore (menu 13 / R) is stronger for full rollback."
+    Write-Host ""
+    Write-Host "  Will try to restore (when saved):" -ForegroundColor White
+    Write-UxBullets -Items @(
+        "Tracked services Bastion disabled"
+        "Firewall groups Bastion locked"
+        "Prior DNS snapshot (if a DNS Apply stored one)"
+        "RDP host prior (if RdpHostLock ran)"
+    )
+    Write-Host ""
+    Write-Host "  Will NOT: reinstall Appx/OneDrive, or reverse every registry tweak." -ForegroundColor DarkGray
+    Write-Host ""
     if (-not (Read-ConfirmYes -Prompt "  Type YES to attempt Undo")) { return }
     $undoData = Read-BastionUndoData
     try {
@@ -6197,25 +6299,18 @@ function Show-RemoteAccessRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "REMOTE ACCESS (RDP / ASSISTANCE / WINRM)"
+        Write-AppliesWhen -Mode Now -Extra "Opening remote paths increases attack surface. Prefer LOCKED when you are not using them."
         Write-BastionRemoteAccessStatusBlock
         Write-Host ""
         Write-Host "  What this menu is for" -ForegroundColor Cyan
-        Write-Host "    After Firewall Apply, Bastion disables inbound rule groups for Remote Desktop," -ForegroundColor White
-        Write-Host "    Remote Assistance, and Windows Remote Management so this PC is not reachable" -ForegroundColor White
-        Write-Host "    on those remote-control / remote-management paths." -ForegroundColor White
-        Write-Host "    Use this menu only when YOU need one of those features again." -ForegroundColor White
-        Write-Host ""
-        Write-Host "  Honest limits" -ForegroundColor Yellow
-        Write-Host "    Enabling any path increases network attack surface. Prefer LOCKED when idle." -ForegroundColor DarkGray
-        Write-Host "    This does not flip overall firewall profiles; only named groups (and optional RDP system)." -ForegroundColor DarkGray
-        Write-Host "    File and Printer Sharing / Network Discovery / mDNS are not here (use Undo or wf.msc)." -ForegroundColor DarkGray
-        Write-Host "    System Restore remains the strongest full rollback." -ForegroundColor DarkGray
+        Write-Host "    After Firewall Apply, Bastion locks inbound groups for Remote Desktop," -ForegroundColor White
+        Write-Host "    Remote Assistance, and WinRM. Re-open a path here only when you need it again." -ForegroundColor White
         Write-Host ""
         Write-Host "  1  Remote Desktop (firewall + optional system allow / TermService)" -ForegroundColor White
         Write-Host "  2  Remote Assistance (firewall group)" -ForegroundColor White
         Write-Host "  3  WinRM / Windows Remote Management (firewall group)" -ForegroundColor White
-        Write-Host "  4  Enable all three firewall groups (requires YES - opens remote surface)" -ForegroundColor Yellow
-        Write-Host "  5  Lock all three firewall groups (Bastion-style; recommended default)" -ForegroundColor Green
+        Write-Host "  4  Enable all three firewall groups (requires YES - more exposure)" -ForegroundColor Yellow
+        Write-Host "  5  Lock all three firewall groups (Bastion-style; safer default)" -ForegroundColor Green
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
         $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5")
@@ -6358,15 +6453,12 @@ function Show-ServicesRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "SERVICES RECOVERY"
+        Write-AppliesWhen -Mode Now -Extra "Re-enable only what you need (printing, share, Xbox) without full Undo."
         Write-Host "  Live status (Bastion-managed)" -ForegroundColor Cyan
         Write-Host "  -- High-risk / discovery stack --" -ForegroundColor DarkCyan
         [void](Write-BastionServiceStatusBlock -GroupFilter "HighRisk")
         Write-Host "  -- Xbox --" -ForegroundColor DarkCyan
         [void](Write-BastionServiceStatusBlock -GroupFilter "Xbox")
-        Write-Host ""
-        Write-Host "  What this is for" -ForegroundColor Cyan
-        Write-Host "    HighRiskServices and XboxGaming disable these on Apply. Use this hub to re-enable" -ForegroundColor White
-        Write-Host "    only what you need (printing, LAN share, Xbox) without full Undo." -ForegroundColor White
         Write-Host ""
         Write-Host "  1  Print Spooler (common fix when printing stopped)" -ForegroundColor Green
         Write-Host "  2  High-risk services (file share, UPnP, Remote Registry, ...)" -ForegroundColor White
@@ -6488,8 +6580,9 @@ function Reset-BastionDnsToAutomatic {
         }
     }
     try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
-    Write-Host "  Bastion DNS provider preference is unchanged (menu D). This only cleared static servers on adapters." -ForegroundColor DarkGray
-    Write-Host "  A VPN may still override DNS while connected." -ForegroundColor DarkGray
+    Write-UxDivider
+    Write-Host "  DHCP reset done (this menu already applied it - no main menu 8)." -ForegroundColor Green
+    Write-Host "  Menu D preference was not changed. VPN may still override DNS while connected." -ForegroundColor DarkGray
     Write-Log ("Reset-BastionDnsToAutomatic adapters={0}" -f $n) -NoConsole
     return ($n -gt 0)
 }
@@ -6498,7 +6591,9 @@ function Show-NetworkRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "NETWORK RECOVERY"
-        Write-Host "  Live snapshot" -ForegroundColor Cyan
+        Write-AppliesWhen -Mode Now -Extra "Open a path below for firewall or DNS fixes. Prefer a specific option over full Undo when you know what broke."
+        Write-Host ""
+        Write-Host "  Live Windows status" -ForegroundColor Cyan
         Write-Host "  -- Remote access groups --" -ForegroundColor DarkCyan
         foreach ($g in $script:RemoteAccessFirewallGroups) {
             $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
@@ -6516,41 +6611,43 @@ function Show-NetworkRecoveryMenu {
             $color = if ($st.Label -eq "OPEN") { "Yellow" } elseif ($st.Label -eq "LOCKED") { "Green" } else { "DarkGray" }
             Write-Host ("    {0,-28} {1}" -f $g, $st.Label) -ForegroundColor $color
         }
-        Write-Host "  -- DNS (eligible adapters) --" -ForegroundColor DarkCyan
+        Write-Host "  -- DNS on eligible adapters (live) --" -ForegroundColor DarkCyan
         $adapters = @(Get-BastionDnsAdapters)
         if ($adapters.Count -eq 0) {
             Write-Host "    (no eligible adapters)" -ForegroundColor DarkGray
         } else {
             foreach ($a in $adapters) {
                 $dns = @(Get-AdapterDnsServers -InterfaceIndex $a.ifIndex)
-                $first = if ($dns.Count) { $dns[0] } else { "(automatic/none listed)" }
+                $first = if ($dns.Count) { $dns[0] } else { "(automatic / none listed)" }
                 Write-Host ("    {0,-28} {1}" -f $a.Name, $first) -ForegroundColor White
             }
         }
-        Write-Host ("  Bastion DNS intent (menu D / next Apply): {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  Bastion DNS notes" -ForegroundColor Cyan
+        Write-Host ("    Preferred provider (menu D):  {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor White
         $undoPeek = Read-BastionUndoData
         $hasSnap = Test-BastionUndoHasDnsSnapshot -UndoData $undoPeek
-        $snapPreview = if ($hasSnap) { Get-BastionDnsSnapshotPreviewText -UndoData $undoPeek } else { "none" }
-        Write-Host ("  Prior DNS snapshot: {0}" -f $(if ($hasSnap) { "available (DPAPI on disk)" } else { "none" })) -ForegroundColor DarkGray
+        $snapPreview = if ($hasSnap) { Get-BastionDnsSnapshotPreviewText -UndoData $undoPeek } else { $null }
         if ($hasSnap) {
-            Write-Host ("  Snapshot will restore to: {0}" -f $snapPreview) -ForegroundColor Cyan
+            Write-Host ("    Prior snapshot available:     {0}" -f $snapPreview) -ForegroundColor Cyan
+            Write-Host "    (snapshot = what adapters had BEFORE your last Bastion DNS Apply)" -ForegroundColor DarkGray
+        } else {
+            Write-Host "    Prior snapshot available:     none yet" -ForegroundColor DarkGray
+            Write-Host "    (create one by applying DNS once via DNS menu A or main menu 8)" -ForegroundColor DarkGray
         }
         Write-Host ""
-        Write-Host "  What this hub is for" -ForegroundColor Cyan
-        Write-Host "    Live lines above = Windows right now. Intent = Bastion preference (not live)." -ForegroundColor White
-        Write-Host "    Option 4 restores the snapshot taken BEFORE the last DNS Apply (not menu D)." -ForegroundColor White
-        Write-Host "    Option 3 = DHCP only. You do not need 3 before 4." -ForegroundColor White
-        Write-Host ""
-        Write-Host "  1  Remote access (RDP / Assistance / WinRM + optional system RDP)" -ForegroundColor Cyan
+        Write-Host "  Choose an action" -ForegroundColor Cyan
+        Write-Host "  1  Remote access (RDP / Assistance / WinRM + system RDP)" -ForegroundColor White
         Write-Host "  2  LAN / discovery (File Sharing, Network Discovery, mDNS)" -ForegroundColor White
-        Write-Host "  3  Reset DNS on eligible adapters to automatic (DHCP)" -ForegroundColor Yellow
+        Write-Host "  3  DNS -> automatic (DHCP) on eligible adapters" -ForegroundColor Yellow
         if ($hasSnap) {
-            Write-Host "  4  Restore prior DNS from last Apply snapshot" -ForegroundColor Yellow
+            Write-Host "  4  DNS -> restore prior snapshot (before last Bastion DNS Apply)" -ForegroundColor Yellow
         } else {
-            Write-Host "  4  Restore prior DNS (unavailable - no snapshot yet; Apply DNS once first)" -ForegroundColor DarkGray
+            Write-Host "  4  DNS -> restore prior snapshot (unavailable until you Apply DNS once)" -ForegroundColor DarkGray
         }
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
+        Write-Host "  Tip: 3 and 4 are independent. You do not need 3 before 4." -ForegroundColor DarkGray
         $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4")
         switch ($c) {
             "0" { return }
@@ -6558,29 +6655,78 @@ function Show-NetworkRecoveryMenu {
             "2" { Show-LanDiscoveryRecoveryMenu }
             "3" {
                 Write-Host ""
-                Write-Host "  Clears static IPv4 DNS on Bastion-eligible adapters so Windows can use DHCP/automatic." -ForegroundColor Yellow
-                Write-Host "  Does not change menu D preference or the saved snapshot." -ForegroundColor DarkGray
-                Write-Host "  VPN clients may still override DNS while connected." -ForegroundColor DarkGray
+                Write-Host "  Reset DNS to automatic (DHCP)" -ForegroundColor Cyan
+                Write-UxDivider
+                Write-AppliesWhen -Mode Now
+                Write-Host ""
+                Write-Host "  Will do:" -ForegroundColor White
+                Write-UxBullets -Items @(
+                    "Clear static IPv4 DNS on Bastion-eligible adapters"
+                    "Clear per-adapter DNS-over-HTTPS keys Bastion set"
+                    "Let Windows use DHCP / automatic DNS again"
+                )
+                Write-Host ""
+                Write-Host "  Will NOT do:" -ForegroundColor White
+                Write-UxBullets -Items @(
+                    ("Change menu D preference (still: {0})" -f (Get-BastionDnsProviderLabel))
+                    "Delete the saved prior-DNS snapshot (option 4 still works later)"
+                    "Require main menu 8"
+                ) -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host "  Note: a VPN may still force its own DNS while connected." -ForegroundColor DarkGray
+                Write-Host ""
                 if ((Read-YesNo -Prompt "  Reset adapter DNS to automatic now (Y/N)?") -eq "Y") {
                     [void](Reset-BastionDnsToAutomatic)
+                } else {
+                    Write-Host "  Cancelled." -ForegroundColor DarkGray
                 }
                 Wait-ForKey "Press any key to return to Network recovery..."
             }
             "4" {
                 Write-Host ""
                 if (-not $hasSnap) {
-                    Write-Host "  No DNS snapshot found." -ForegroundColor Yellow
-                    Write-Host "  A snapshot is saved when DNS Apply actually changes adapters (main 8 or DNS menu A)." -ForegroundColor DarkGray
-                    Write-Host "  Later Applies that do not re-capture DNS now preserve the last snapshot (v15.8.3+)." -ForegroundColor DarkGray
+                    Write-Host "  Restore prior DNS - unavailable" -ForegroundColor Yellow
+                    Write-UxDivider
+                    Write-Host "  Bastion has no prior-DNS snapshot yet." -ForegroundColor White
+                    Write-Host ""
+                    Write-Host "  How to create one:" -ForegroundColor Cyan
+                    Write-UxBullets -Items @(
+                        "Main menu D - pick a provider (saves preference only)"
+                        "Apply that provider so adapters actually change:"
+                        "  DNS menu: press A   - or -   main menu 8 (DNS section on)"
+                        "Bastion saves what was on the adapters before that change"
+                    )
+                    Write-Host ""
+                    Write-Host "  Then return here and choose 4 to put those prior servers back." -ForegroundColor DarkGray
                     Wait-ForKey "Press any key to return to Network recovery..."
                     continue
                 }
-                Write-Host ("  Will restore to: {0}" -f $snapPreview) -ForegroundColor Cyan
-                Write-Host "  This puts adapters back to the state captured before the last DNS change Apply." -ForegroundColor Yellow
-                Write-Host ("  Menu D preference stays as-is (still {0})." -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
-                Write-Host "  Also re-applies DNS-over-HTTPS (DoH) for known resolvers when templates exist." -ForegroundColor DarkGray
-                Write-Host "  Settings may still show 'Unencrypted' even when DoH is active (Windows UI quirk)." -ForegroundColor DarkGray
-                if ((Read-YesNo -Prompt "  Restore prior DNS from snapshot now (Y/N)?") -eq "Y") {
+                Write-Host "  Restore prior DNS from snapshot" -ForegroundColor Cyan
+                Write-UxDivider
+                Write-AppliesWhen -Mode Now
+                Write-Host ""
+                Write-Host "  Will do:" -ForegroundColor White
+                Write-UxBullets -Items @(
+                    ("Set eligible adapters back to: {0}" -f $snapPreview)
+                    "Restore DNS-over-HTTPS when templates are known (Settings Encrypted)"
+                ) -ForegroundColor Cyan
+                Write-Host ""
+                Write-Host "  Will NOT do:" -ForegroundColor White
+                Write-UxBullets -Items @(
+                    ("Change menu D preference (still: {0})" -f (Get-BastionDnsProviderLabel))
+                    "Change firewall, services, or other sections"
+                    "Require main menu 8"
+                ) -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host "  Notes:" -ForegroundColor White
+                Write-UxBullets -Items @(
+                    "Snapshot = adapter state before your last Bastion DNS Apply (not menu D alone)"
+                    "Best-effort if adapters were renamed or removed"
+                    "VPN may still override DNS while connected"
+                    "Re-open Windows Settings if the Encrypted badge was already on screen"
+                ) -ForegroundColor DarkGray
+                Write-Host ""
+                if ((Read-YesNo -Prompt "  Restore prior DNS now (Y/N)?") -eq "Y") {
                     $snap = Get-BastionDnsSnapshotFromUndo -UndoData $undoPeek
                     if ($snap) {
                         [void](Restore-BastionDnsFromSnapshot -Snapshot $snap)
@@ -6592,6 +6738,8 @@ function Show-NetworkRecoveryMenu {
                     } else {
                         Write-Status "Could not load snapshot (decrypt failed or corrupt)" "Failed"
                     }
+                } else {
+                    Write-Host "  Cancelled." -ForegroundColor DarkGray
                 }
                 Wait-ForKey "Press any key to return to Network recovery..."
             }
@@ -7000,18 +7148,22 @@ function Show-RecoveryMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "RECOVERY / FIX"
-        Write-Host "  Modular hubs (status + targeted reverse). Prefer these over full Undo when you know what broke." -ForegroundColor DarkGray
+        Write-AppliesWhen -Mode Now -Extra "Prefer a specific hub when you know what broke. Full Undo (1) is broader and still best-effort."
         Write-Host ""
-        Write-Host "  1  Undo last hardening (services, firewall groups, DNS snapshot, RDP host prior when saved)"
-        Write-Host "  2  Services (Spooler, high-risk stack, Xbox)" -ForegroundColor White
-        Write-Host "  3  Network (remote access, LAN discovery, DNS reset / restore)" -ForegroundColor Cyan
-        Write-Host "  4  Browser policies (per browser; Default reverts Bastion policies)"
+        Write-Host "  1  Undo last Apply (tracked services, firewall groups, DNS snapshot, RDP prior)" -ForegroundColor White
+        Write-Host "  2  Services (Print Spooler, high-risk stack, Xbox)" -ForegroundColor White
+        Write-Host "  3  Network (remote access, LAN discovery, DNS DHCP / restore snapshot)" -ForegroundColor Cyan
+        Write-Host "  4  Browser policies (per browser; Default reverts Bastion policies)" -ForegroundColor White
         Write-Host "  5  Apps and UI (Copilot, Widgets/Suggestions, Game Bar)" -ForegroundColor Green
         Write-Host "  6  Security mitigations (StrictHandle, Defender, LSA, policies/tasks)" -ForegroundColor Yellow
-        Write-Host "  0  Back"
+        Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
-        Write-Host "  Note: Appx bloat and OneDrive removal are not reinstallable here - System Restore or vendor installers." -ForegroundColor DarkGray
-        Write-Host "  Tip:  Hubs show live status first. Enabling remote/LAN paths or services increases attack surface." -ForegroundColor DarkGray
+        Write-Host "  Notes:" -ForegroundColor DarkGray
+        Write-UxBullets -Items @(
+            "Hubs show live status first, then offer reverse / re-harden actions"
+            "Re-opening remote/LAN paths or services increases attack surface"
+            "Appx bloat and OneDrive are not reinstallable here - System Restore or vendor installers"
+        ) -ForegroundColor DarkGray
         $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6")
         switch ($c) {
             "0" { return }
@@ -7483,12 +7635,17 @@ function Reset-ToDefaults {
 function Invoke-QuickHardening {
     Clear-BastionScreen
     Write-Header "QUICK HARDEN"
-    Write-Host "  Safe preset (list below). BloatApps / Xbox stay off unless you enable them later." -ForegroundColor Cyan
+    Write-AppliesWhen -Mode Now -Extra "This guided path sets a safe preset and then runs Apply in this flow (you will still confirm YES)."
+    Write-Host "  BloatApps / Xbox stay off unless you enable them later under sections (4)." -ForegroundColor Cyan
     Write-Host ""
-    foreach ($s in $script:QuickSections) { Write-Host ("  * {0}" -f $s) -ForegroundColor Green }
+    Write-Host "  Preset sections:" -ForegroundColor White
+    foreach ($s in $script:QuickSections) { Write-Host ("    - {0}" -f $s) -ForegroundColor Green }
     Write-Host ""
-    Write-Host "  Note: HighRiskServices can disable the Print Spooler (printing will stop)." -ForegroundColor Yellow
-    Write-Host "  Note: Firewall locks remote and LAN discovery groups (Recovery > 3 Network to re-open)." -ForegroundColor Yellow
+    Write-Host "  Heads-up:" -ForegroundColor Yellow
+    Write-UxBullets -Items @(
+        "HighRiskServices can disable Print Spooler (printing stops until Recovery > 2)"
+        "Firewall locks remote/LAN discovery groups (re-open under Recovery > 3 Network)"
+    ) -ForegroundColor Yellow
     Write-Host ""
     if ((Read-YesNo -Prompt "  Continue with this preset (Y/N)?") -ne "Y") { return }
     foreach ($k in @($script:Sections.Keys)) { $script:Sections[$k] = $false }
@@ -7584,11 +7741,13 @@ function Invoke-ApplyHardening {
 
     Clear-BastionScreen
     Write-Header "APPLY HARDENING"
+    Write-AppliesWhen -Mode Now -Extra "This is the main 'make it real' step for sections (4), program queue (5), and DNS preference (D) when DNS is enabled."
+    Write-Host ""
     foreach ($k in $script:Sections.Keys) {
         if ($script:Sections[$k]) { $undoTrack.SectionsRun += $k }
     }
     if ($undoTrack.SectionsRun.Count -eq 0) {
-        Write-Host "  No sections enabled. Enable some under option 4." -ForegroundColor Yellow
+        Write-Host "  No sections enabled. Turn some on under main menu 4, then return to 8." -ForegroundColor Yellow
         Start-Sleep -Seconds 2
         return
     }
@@ -7787,7 +7946,7 @@ function Invoke-ApplyHardening {
                 }
             }
             try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
-            Write-Host "  Note: Windows Settings may still show 'Unencrypted' even when DoH is active (UI quirk)." -ForegroundColor DarkGray
+            Write-Host "  DNS/DoH were applied during this run. Re-open Settings if the Encrypted badge was already on screen." -ForegroundColor DarkGray
             Write-Host "  Bastion DPAPI snapshot encryption is separate (undo file on disk)." -ForegroundColor DarkGray
         }
     }
@@ -8049,22 +8208,22 @@ function Show-MainMenu {
         Write-Host ("  Browser policies: {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor DarkGray
         Write-Host ("  DNS resolver:   {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
 
-        Write-MenuGroup "REVIEW"
-        Write-Host "   1    Dry Run"
+        Write-MenuGroup "REVIEW (no changes)"
+        Write-Host "   1    Dry Run (preview only)"
         Write-Host "   2    Security audit"
         Write-Host "   3    Hardware and driver guidance"
 
-        Write-MenuGroup "CONFIGURE"
+        Write-MenuGroup "CONFIGURE (save choices; Windows not changed yet)"
         Write-Host "   4    Hardening sections"
         Write-Host "   5    Programs and install paths"
-        Write-Host "   6    Browser privacy policies"
-        Write-Host "   D    DNS resolver (or leave unchanged)"
+        Write-Host "   6    Browser privacy policies (applies NOW to chosen browsers)"
+        Write-Host "   D    DNS resolver (preference; Apply via A inside D, or 8)"
 
-        Write-MenuGroup "EXECUTE"
-        Write-Host "   7    Quick Harden" -ForegroundColor Green
-        Write-Host "   8    Apply Hardening" -ForegroundColor Yellow
+        Write-MenuGroup "EXECUTE (makes system changes)"
+        Write-Host "   7    Quick Harden (guided preset + Apply)" -ForegroundColor Green
+        Write-Host "   8    Apply Hardening (run enabled sections + install queue)" -ForegroundColor Yellow
 
-        Write-MenuGroup "MAINTAIN"
+        Write-MenuGroup "MAINTAIN (actions run NOW)"
         Write-Host "   9    Recovery / fix"
         Write-Host "  10    Uninstall programs"
 
@@ -8098,8 +8257,9 @@ function Show-MainMenu {
             Write-Host "  Restore status: could not query System Restore." -ForegroundColor Yellow
             Write-Host "  Check System Protection is on for the system drive (sysdm.cpl > System Protection)." -ForegroundColor Yellow
         }
-        Write-Host "  Installs: catalog IDs only; winget hash enforced; no hash bypass." -ForegroundColor Yellow
-        Write-Host "  GPU/BIOS: option 3 guidance only (no automated installs)." -ForegroundColor Yellow
+        Write-Host "  Flow: configure (4/5/D) -> Dry Run (1) optional -> restore point (13) -> Apply (8)." -ForegroundColor Yellow
+        Write-Host "  Exception: menu 6 browser policies apply as soon as you confirm a mode." -ForegroundColor Yellow
+        Write-Host "  Installs: catalog IDs only; winget hash enforced. GPU/BIOS: option 3 is guidance only." -ForegroundColor DarkGray
         Write-Host "  --------------------------------------------------------------" -ForegroundColor DarkRed
         Write-Host ("  Programs queued to install: {0}" -f $(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { "None" })) -ForegroundColor White
         Write-Host ""

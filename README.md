@@ -2,7 +2,7 @@
 
 **Selective - State-aware - Safety-first Windows hardening for a personal workstation**
 
-Version **15.8.3**
+Version **15.8.4**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -375,7 +375,7 @@ From main menu **D** (or Sections -> **D**), choose one of:
 | **Cisco OpenDNS** | `208.67.222.222` / `208.67.220.220` | Public OpenDNS resolvers |
 | **Do not change DNS** | - | Leaves adapters on DHCP/manual settings |
 
-A connected VPN may override these settings while the tunnel is up. That is expected.
+Public resolvers above are DoH-capable. On Apply (v15.8.4+), Bastion sets Windows DNS-over-HTTPS the same way Settings **Edit DNS** does so the **Encrypted** badge appears without a manual click. A connected VPN may override these settings while the tunnel is up. That is expected.
 
 ---
 
@@ -386,7 +386,7 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 - **Browser policies / Encrypted Client Hello (ECH)** - BrowserPolicies section defaults off. ECH is **never** applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only and ECH can break some sites or networks. Details: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
 - **Undo** - Restores tracked services, firewall groups, an **encrypted DNS snapshot** (when a DNS Apply stored one), and **RDP host prior** (when **RdpHostLock** ran) from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive. Prefer Recovery hubs when you know what broke.
 - **Recovery hubs (menu 9)** - One main-menu entry, six hubs with live status: **1** Undo - **2** Services (Spooler / high-risk / Xbox) - **3** Network (remote access, LAN discovery, DNS reset to DHCP, **restore prior DNS from snapshot**) - **4** Browser policies - **5** Apps and UI (Copilot, Widgets, Game Bar) - **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
-- **DNS** - Optional. Choose a provider or leave DNS unchanged. Before Bastion changes adapter DNS, it snapshots prior IPv4 servers and stores them **DPAPI-encrypted** for Undo / Network recovery option **4**. VPN software may still override while connected.
+- **DNS** - Optional. Choose a provider or leave DNS unchanged. Before Bastion changes adapter DNS, it snapshots prior IPv4 servers and stores them **DPAPI-encrypted** for Undo / Network recovery option **4**. Known public resolvers also get Windows DNS-over-HTTPS (same Edit DNS path: template + Encrypted badge). VPN software may still override while connected.
 - **RDP triad / RdpHostLock** - Dry Run and Security Audit report firewall Remote Desktop group + system `fDenyTSConnections` + TermService. Optional section **RdpHostLock** (off by default) denies the OS host switch on Apply; prior state is encrypted for Undo.
 - **Custom install paths** - Only allowed on fixed local volumes outside system directories.
 - **Logs and config** - Live under the **data directory** shown on the main menu (prefer `C:\Temp\Bastion`; durable fallbacks; `%TEMP%\Bastion` last). Full file list: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).

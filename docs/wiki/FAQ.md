@@ -60,9 +60,9 @@ Path: main menu **9** → **3 Network** → **4** (not **3** then **4**; **3** i
 1. **Bastion snapshot DPAPI** - prior DNS is stored encrypted **on disk** in `Bastion-LastApply.json`.  
 2. **Windows Settings “Encrypted”** - **DNS-over-HTTPS (DoH)** on the wire.
 
-All Bastion public resolvers (Quad9, Cloudflare, Cloudflare security, Google, OpenDNS) are **DoH-capable**; Bastion **v15.8.1+** enables DoH templates on Apply. **Do not change DNS** leaves Windows as-is.
+All Bastion public resolvers (Quad9, Cloudflare, Cloudflare security, Google, OpenDNS) are **DoH-capable**. From **v15.8.4**, Apply writes the **same per-interface DoH keys** Settings Edit DNS uses (`DohTemplate` + `QWord DohFlags=17`, AutoUpgrade, no UDP fallback), so the **Encrypted** badge should appear **without** opening Edit DNS. **Do not change DNS** leaves Windows as-is.
 
-Windows Settings often still labels the IP as **Unencrypted** when DNS was set outside the Settings app, even if DoH is active. To force the badge: adapter → DNS → **Edit** → Preferred DNS encryption → **On (automatic template)** → Save. Use Bastion **v15.8.2+** for the clearer DNS menu (live vs preferred, DoH labels, Apply now).
+If you are on **v15.8.1–15.8.3** and Settings still says **Unencrypted**, upgrade to **v15.8.4+** and re-Apply DNS (or Network → restore snapshot / Apply preferred). Manual fallback (old builds only): adapter → DNS → **Edit** → DNS over HTTPS → **On (automatic template)** → Fallback off → Save. Menu **D** alone still does not change Windows until Apply (**A** or main **8**).
 
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 
