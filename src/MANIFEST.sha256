@@ -1,5 +1,5 @@
 # Bastion source integrity manifest (SHA256)
-# Generated: 2026-08-02 16:39:55
+# Generated: 2026-08-02 16:48:24
 # Regenerate: pwsh -File tools/New-BastionSourceManifest.ps1
 # Format: hash  relativepath (paths relative to src\)
 
