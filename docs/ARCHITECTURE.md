@@ -111,7 +111,12 @@ Expected: `Bastion smoke load OK v15.9.4 (commands verified)` and exit 0. After 
 
 ## Version
 
-Product-facing version is **15.9.4** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.4** if zip extracts fail with *running scripts is disabled* (Mark-of-the-Web / Restricted); always start with the `.bat`, never the `.ps1` alone.
+Product-facing version is **15.9.4** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.4** if:
+
+- After Apply, the bat flash-closed or looped UAC on an already-admin console (**Server / LanmanServer disabled** — fixed by whoami SID check instead of `net session`), or
+- Zip extracts fail with *running scripts is disabled* (Mark-of-the-Web / Restricted).
+
+Always start with the `.bat`, never the `.ps1` alone.
 
 ## Related docs
 

@@ -12,15 +12,17 @@ Use an **official** source only:
 2. Download **`bastion-hardening-v*.zip`** (the current Latest build is also noted in [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17))  
 3. **Unblock the zip** (Mark-of-the-Web): right-click the zip -> **Properties** -> check **Unblock** if shown -> **OK**. Skipping this often causes *running scripts is disabled on this system*.  
 4. Extract the zip to a location **you** control (for example `C:\Tools\`). Official zips expand to one folder such as `bastion-hardening-v15.9.4\` with the bootstrap, `src\` modules, and docs already together.  
-5. Open that folder and confirm: `Bastion-Hardening.bat`, `Bastion-Hardening.ps1`, and `src\` (optional: `Bastion-Banner.utf8.txt`, `docs\`)
+5. Open that folder and confirm: `Bastion-Hardening.bat`, `tools-elevate-self.ps1`, `Bastion-Hardening.ps1`, and `src\` (optional: `Bastion-Banner.utf8.txt`, `docs\`)
 
-**Always use `Bastion-Hardening.bat`.** Never double-click `Bastion-Hardening.ps1` alone under Windows **Restricted** ExecutionPolicy - the host blocks the script before Bastion runs. The bat unblocks the product tree and starts PowerShell with Process-scope Bypass.
+**Always use `Bastion-Hardening.bat`.** Never double-click `Bastion-Hardening.ps1` alone under Windows **Restricted** ExecutionPolicy - the host blocks the script before Bastion runs ("running scripts is disabled" / UnauthorizedAccess). The bat unblocks the product tree and starts PowerShell with Process-scope Bypass.
 
 ## 2. Run elevated
 
 1. Right-click **`Bastion-Hardening.bat`** (the only supported launcher)  
 2. Choose **Run as administrator**  
 3. Accept the UAC prompt  
+
+**Admin check note (v15.9.4+):** the bat does **not** use `net session` to detect elevation. Bastion hardening can disable the **Server** service (`LanmanServer`); after that, `net session` fails even when you are already elevated, which made older bats re-request UAC in a loop and flash-close. v15.9.4 uses a **whoami SID** check instead, so Run as administrator on a hardened machine starts cleanly without a re-elevate loop.
 
 On first elevated launch, Bastion creates a **data directory** (the path appears on the main menu) for logs and preferences. It does **not** invent Apply history until you actually Apply. For more detail, see [docs/DATA-DIRECTORY.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/DATA-DIRECTORY.md).
 
