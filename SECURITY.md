@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.8.2  | Yes (current) |
+| 15.8.3  | Yes (current) |
+| 15.8.2  | Best-effort until you upgrade |
 | 15.8.1  | Best-effort until you upgrade |
 | 15.8    | Best-effort until you upgrade |
 | 15.7    | Best-effort until you upgrade |

@@ -1,16 +1,17 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.8.2 FINAL
+    Bastion Hardening Framework v15.8.3 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
 .NOTES
-    Version 15.8.2 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.8.3 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
     v15.8.2: DNS menu shows live vs preferred, DoH labels, and Apply DNS now (A); preference alone does not change Windows.
+    v15.8.3: Preserve DNS/RDP undo blobs across Applies; Network option 4 previews snapshot targets; clearer restore UX.
 #>
 
 $ErrorActionPreference = "Continue"
@@ -18,7 +19,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.8.2"
+    ScriptVersion = "15.8.3"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
@@ -3323,36 +3324,103 @@ function Load-BastionConfig {
 function Save-UndoData($Data) {
     if (-not (Ensure-BastionPaths)) { return }
     try {
+        if ($Data -isnot [hashtable]) {
+            Write-Log "Save-UndoData expected hashtable" -Level Warning
+            return
+        }
+
         # Never write plaintext DNS history; store DPAPI-protected blob only.
-        if ($Data -is [hashtable] -and $Data.ContainsKey("DnsSnapshot") -and $Data["DnsSnapshot"]) {
+        $wroteNewDns = $false
+        if ($Data.ContainsKey("DnsSnapshot") -and $Data["DnsSnapshot"]) {
             $snapJson = ($Data["DnsSnapshot"] | ConvertTo-Json -Depth 8 -Compress)
             $blob = Protect-BastionBlob -PlainText $snapJson
             if ($blob) {
                 $Data["DnsSnapshotProtected"] = $blob
                 $Data["HasDnsSnapshot"] = $true
+                $wroteNewDns = $true
             } else {
-                Write-Log "DNS snapshot encryption failed; snapshot not stored" -Level Warning
+                Write-Log "DNS snapshot encryption failed; will try preserve prior blob" -Level Warning
                 $Data["HasDnsSnapshot"] = $false
             }
             [void]$Data.Remove("DnsSnapshot")
         }
-        # RDP host prior is low sensitivity but encrypted for the same honest on-disk story.
-        if ($Data -is [hashtable] -and $Data.ContainsKey("RdpHostPrior") -and $Data["RdpHostPrior"]) {
+
+        $wroteNewRdp = $false
+        if ($Data.ContainsKey("RdpHostPrior") -and $Data["RdpHostPrior"]) {
             $priorJson = ($Data["RdpHostPrior"] | ConvertTo-Json -Depth 6 -Compress)
             $priorBlob = Protect-BastionBlob -PlainText $priorJson
             if ($priorBlob) {
                 $Data["RdpHostPriorProtected"] = $priorBlob
+                $wroteNewRdp = $true
             } else {
-                Write-Log "RDP host prior encryption failed; prior not stored (Undo cannot restore RDP host)" -Level Warning
+                Write-Log "RDP host prior encryption failed; will try preserve prior blob" -Level Warning
                 $Data["RdpHostLocked"] = $false
             }
             [void]$Data.Remove("RdpHostPrior")
         }
+
+        # Critical: do not wipe DNS/RDP secrets on later Applies that did not re-capture them
+        # (e.g. DNS already matched provider, or RdpHostLock off this run).
+        $existing = $null
+        if (Test-Path -LiteralPath $script:undoFile) {
+            try {
+                $existing = Get-Content -LiteralPath $script:undoFile -Raw -ErrorAction Stop | ConvertFrom-Json
+            } catch { $existing = $null }
+        }
+        if ($existing) {
+            $hasNewDnsBlob = $wroteNewDns -or (
+                $Data.ContainsKey("DnsSnapshotProtected") -and $Data["DnsSnapshotProtected"]
+            )
+            if (-not $hasNewDnsBlob -and $existing.DnsSnapshotProtected) {
+                $Data["DnsSnapshotProtected"] = [string]$existing.DnsSnapshotProtected
+                $Data["HasDnsSnapshot"] = $true
+                Write-Log "Preserved existing DNS snapshot blob across Apply (no new capture this run)" -NoConsole
+            }
+            $hasNewRdpBlob = $wroteNewRdp -or (
+                $Data.ContainsKey("RdpHostPriorProtected") -and $Data["RdpHostPriorProtected"]
+            )
+            if (-not $hasNewRdpBlob -and $existing.RdpHostPriorProtected) {
+                $Data["RdpHostPriorProtected"] = [string]$existing.RdpHostPriorProtected
+                $Data["RdpHostLocked"] = $true
+                Write-Log "Preserved existing RDP host prior blob across Apply" -NoConsole
+            }
+        }
+
+        if (-not $Data.ContainsKey("HasDnsSnapshot")) {
+            $Data["HasDnsSnapshot"] = [bool]($Data["DnsSnapshotProtected"])
+        }
+
         $Data | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $script:undoFile -Encoding utf8 -Force
         Set-BastionSensitiveFileAcl -Path $script:undoFile
     } catch {
         Write-Log ("Undo save failed: {0}" -f $_.Exception.Message) -Level Warning
     }
+}
+
+function Get-BastionDnsSnapshotPreviewText {
+    param($UndoData)
+    $snap = Get-BastionDnsSnapshotFromUndo -UndoData $UndoData
+    if (-not $snap) { return "unavailable (cannot decrypt or missing)" }
+    $parts = [System.Collections.Generic.List[string]]::new()
+    try {
+        foreach ($row in @($snap.Adapters)) {
+            $name = [string]$row.Name
+            $wasEmpty = $false
+            try { $wasEmpty = [bool]$row.WasEmpty } catch {}
+            $servers = @()
+            try {
+                if ($row.Servers -is [string]) { $servers = @([string]$row.Servers) }
+                else { $servers = @($row.Servers | ForEach-Object { [string]$_ } | Where-Object { $_ }) }
+            } catch {}
+            if ($wasEmpty -or $servers.Count -eq 0) {
+                [void]$parts.Add(("{0}=DHCP/auto" -f $name))
+            } else {
+                [void]$parts.Add(("{0}={1}" -f $name, ($servers -join "/")))
+            }
+        }
+    } catch {}
+    if ($parts.Count -eq 0) { return "empty snapshot" }
+    return ($parts -join "; ")
 }
 
 function Get-BastionRdpHostPriorFromUndo {
@@ -6459,22 +6527,27 @@ function Show-NetworkRecoveryMenu {
                 Write-Host ("    {0,-28} {1}" -f $a.Name, $first) -ForegroundColor White
             }
         }
-        Write-Host ("  Bastion DNS intent: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
+        Write-Host ("  Bastion DNS intent (menu D / next Apply): {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
         $undoPeek = Read-BastionUndoData
         $hasSnap = Test-BastionUndoHasDnsSnapshot -UndoData $undoPeek
-        Write-Host ("  Prior DNS snapshot (last Apply): {0}" -f $(if ($hasSnap) { "available (encrypted)" } else { "none" })) -ForegroundColor DarkGray
+        $snapPreview = if ($hasSnap) { Get-BastionDnsSnapshotPreviewText -UndoData $undoPeek } else { "none" }
+        Write-Host ("  Prior DNS snapshot: {0}" -f $(if ($hasSnap) { "available (DPAPI on disk)" } else { "none" })) -ForegroundColor DarkGray
+        if ($hasSnap) {
+            Write-Host ("  Snapshot will restore to: {0}" -f $snapPreview) -ForegroundColor Cyan
+        }
         Write-Host ""
         Write-Host "  What this hub is for" -ForegroundColor Cyan
-        Write-Host "    Firewall Apply locks remote and LAN discovery groups. Menu D / DNS section sets resolvers." -ForegroundColor White
-        Write-Host "    Use the submenus below to open, lock, reset, or restore without full Undo." -ForegroundColor White
+        Write-Host "    Live lines above = Windows right now. Intent = Bastion preference (not live)." -ForegroundColor White
+        Write-Host "    Option 4 restores the snapshot taken BEFORE the last DNS Apply (not menu D)." -ForegroundColor White
+        Write-Host "    Option 3 = DHCP only. You do not need 3 before 4." -ForegroundColor White
         Write-Host ""
         Write-Host "  1  Remote access (RDP / Assistance / WinRM + optional system RDP)" -ForegroundColor Cyan
         Write-Host "  2  LAN / discovery (File Sharing, Network Discovery, mDNS)" -ForegroundColor White
         Write-Host "  3  Reset DNS on eligible adapters to automatic (DHCP)" -ForegroundColor Yellow
         if ($hasSnap) {
-            Write-Host "  4  Restore prior DNS from last Apply snapshot (best-effort)" -ForegroundColor Yellow
+            Write-Host "  4  Restore prior DNS from last Apply snapshot" -ForegroundColor Yellow
         } else {
-            Write-Host "  4  Restore prior DNS (unavailable - no snapshot)" -ForegroundColor DarkGray
+            Write-Host "  4  Restore prior DNS (unavailable - no snapshot yet; Apply DNS once first)" -ForegroundColor DarkGray
         }
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
@@ -6486,7 +6559,7 @@ function Show-NetworkRecoveryMenu {
             "3" {
                 Write-Host ""
                 Write-Host "  Clears static IPv4 DNS on Bastion-eligible adapters so Windows can use DHCP/automatic." -ForegroundColor Yellow
-                Write-Host "  Does not change your Bastion menu D preference; next Apply with DNS enabled may set public DNS again." -ForegroundColor DarkGray
+                Write-Host "  Does not change menu D preference or the saved snapshot." -ForegroundColor DarkGray
                 Write-Host "  VPN clients may still override DNS while connected." -ForegroundColor DarkGray
                 if ((Read-YesNo -Prompt "  Reset adapter DNS to automatic now (Y/N)?") -eq "Y") {
                     [void](Reset-BastionDnsToAutomatic)
@@ -6496,17 +6569,29 @@ function Show-NetworkRecoveryMenu {
             "4" {
                 Write-Host ""
                 if (-not $hasSnap) {
-                    Write-Host "  No encrypted DNS snapshot from a Bastion Apply was found." -ForegroundColor Yellow
-                    Write-Host "  Snapshots are taken when DNS Apply changes adapters (v15.8+)." -ForegroundColor DarkGray
+                    Write-Host "  No DNS snapshot found." -ForegroundColor Yellow
+                    Write-Host "  A snapshot is saved when DNS Apply actually changes adapters (main 8 or DNS menu A)." -ForegroundColor DarkGray
+                    Write-Host "  Later Applies that do not re-capture DNS now preserve the last snapshot (v15.8.3+)." -ForegroundColor DarkGray
                     Wait-ForKey "Press any key to return to Network recovery..."
                     continue
                 }
-                Write-Host "  Restores IPv4 DNS servers and Windows DNS-over-HTTPS (DoH) settings from the last Bastion DNS Apply snapshot." -ForegroundColor Yellow
-                Write-Host "  Settings 'Encrypted' means DoH on the wire. Bastion's snapshot file uses separate DPAPI encryption on disk." -ForegroundColor DarkGray
-                Write-Host "  Best-effort if adapters were renamed or removed. Menu D preference is unchanged. VPN may still override DNS while connected." -ForegroundColor DarkGray
+                Write-Host ("  Will restore to: {0}" -f $snapPreview) -ForegroundColor Cyan
+                Write-Host "  This puts adapters back to the state captured before the last DNS change Apply." -ForegroundColor Yellow
+                Write-Host ("  Menu D preference stays as-is (still {0})." -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
+                Write-Host "  Also re-applies DNS-over-HTTPS (DoH) for known resolvers when templates exist." -ForegroundColor DarkGray
+                Write-Host "  Settings may still show 'Unencrypted' even when DoH is active (Windows UI quirk)." -ForegroundColor DarkGray
                 if ((Read-YesNo -Prompt "  Restore prior DNS from snapshot now (Y/N)?") -eq "Y") {
                     $snap = Get-BastionDnsSnapshotFromUndo -UndoData $undoPeek
-                    if ($snap) { [void](Restore-BastionDnsFromSnapshot -Snapshot $snap) }
+                    if ($snap) {
+                        [void](Restore-BastionDnsFromSnapshot -Snapshot $snap)
+                        Write-Host ""
+                        Write-Host "  Live adapters after restore:" -ForegroundColor Cyan
+                        foreach ($line in @(Get-BastionLiveDnsSummaryLines)) {
+                            Write-Host $line -ForegroundColor Green
+                        }
+                    } else {
+                        Write-Status "Could not load snapshot (decrypt failed or corrupt)" "Failed"
+                    }
                 }
                 Wait-ForKey "Press any key to return to Network recovery..."
             }
