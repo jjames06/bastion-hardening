@@ -1,8 +1,8 @@
-# Bastion Hardening Framework wiki
+﻿# Bastion Hardening Framework wiki
 
 **Selective, state-aware, safety-first Windows hardening for a personal PC you administer.**
 
-This wiki is a short **user handbook** for **Bastion v15.9.4** (modular plain-text `src\` builds). Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Download only from the [official site](https://www.operationlockedin.com/bastion/download) or the [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest); avoid re-uploads from chat or third parties. Always start with **`Bastion-Hardening.bat`** (Unblock the zip first; never double-click the `.ps1` alone). v15.9.4 fixes bat re-launch on machines where Bastion disabled the **Server** service.
+This wiki is a short **user handbook** for **Bastion v15.9.5** (modular plain-text `src\` builds; source never encrypted; DPAPI only for Apply undo data). Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Prefer the [v15.9.5 prerelease](https://github.com/jjames06/bastion-hardening/releases/tag/v15.9.5) for modular launch fixes; the [official site](https://www.operationlockedin.com/bastion/download) / [Latest](https://github.com/jjames06/bastion-hardening/releases/latest) may still pin public **15.8.4**. Always start with **`Bastion-Hardening.bat`** (Unblock the zip first; never double-click the `.ps1` alone).
 
 ## Start here
 

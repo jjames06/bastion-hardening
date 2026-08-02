@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.9.4 FINAL
+    Bastion Hardening Framework v15.9.5 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
@@ -9,8 +9,9 @@
     v15.9.x modular layout: this file is a thin elevated bootstrap. Implementation
     lives in plain-text src\*.ps1 modules (NEVER encrypted - GPLv3 + auditability).
     Modules are dot-sourced into this runspace so $script: scope is shared.
+    Encryption is data-only (DPAPI for DNS/RDP undo). MANIFEST.sha256 is integrity, not encryption.
 .NOTES
-    Version 15.9.4 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.9.5 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
@@ -22,6 +23,7 @@
     v15.9.2: Post-load command probe; startup try/catch + pause; friendly admin check; self-elevating bat.
     v15.9.3: Banner path via BastionRoot/parent of src.
     v15.9.4: Bat admin check without net session (works after Server service disabled); Unblock-File + Process Bypass; never double-click .ps1 alone.
+    v15.9.5: High-IL elevation SID; goto bat (no paren echo parse); tools-run-bootstrap.ps1; LanmanServer-disabled launch fixed.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
@@ -239,7 +241,7 @@ function Test-BastionCommandsPresent {
         }
     }
     if ($missing.Count -gt 0) {
-        throw ("Bastion module load incomplete - missing commands: {0}`nThis usually means modules were not dot-sourced at script scope. Re-download the official v15.9.4+ zip." -f ($missing -join ", "))
+        throw ("Bastion module load incomplete - missing commands: {0}`nThis usually means modules were not dot-sourced at script scope. Re-download the official v15.9.5+ zip." -f ($missing -join ", "))
     }
     return $true
 }
