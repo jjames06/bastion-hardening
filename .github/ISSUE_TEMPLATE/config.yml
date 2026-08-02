@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Bastion Help (site)
+    url: https://www.operationlockedin.com/bastion/help
+    about: Recovery paths, Safe Mode, and phone-friendly guides
+  - name: Support (tagged email)
+    url: https://www.operationlockedin.com/support
+    about: Site questions, suggestions, or private coordination
+  - name: Discussions
+    url: https://github.com/jjames06/bastion-hardening/discussions
+    about: General Q&A and testing feedback
+  - name: Game compatibility thread
+    url: https://github.com/jjames06/bastion-hardening/discussions/23
+    about: Ongoing game reports (Discussions #23)

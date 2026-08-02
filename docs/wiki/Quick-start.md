@@ -1,8 +1,8 @@
 # Quick start
 
-This guide walks you from download to a careful first Apply. For full installation detail, see the repository [README](https://github.com/jjames06/bastion-hardening#how-to-install-properly).
+This guide walks you from download to a careful first Apply. The product site [Download](https://www.operationlockedin.com/bastion/download) page uses the same path after the zip lands. For full installation detail, see the repository [README](https://github.com/jjames06/bastion-hardening#how-to-install-properly).
 
-If you need help while you work, open the site [Help](https://www.operationlockedin.com/bastion/help) page on this PC or on another device (phone, tablet, or second computer). The [Recovery cookbook](Recovery-cookbook) covers common side effects after Apply.
+If you need help while you work, open the site [Help](https://www.operationlockedin.com/bastion/help) page on this PC or on another device (phone, tablet, or second computer). The [Recovery cookbook](Recovery-cookbook) covers common side effects after Apply. For email or GitHub bugs, use [Support](https://www.operationlockedin.com/support).
 
 ## 1. Download the right build
 
