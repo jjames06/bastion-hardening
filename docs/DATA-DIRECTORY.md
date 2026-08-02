@@ -118,6 +118,7 @@ Full section behavior is documented in the in-app Help (menu **11**) and the mai
 
 - Bastion does **not** upload your logs or config to a network service as part of normal operation.
 - Logs may include paths, hostnames of local adapters, and status lines useful for debugging.
+- **Winget preflight / Security Audit** report whether trusted sources exist; they do **not** print the full winget binary path (that path often sits under a user profile). Custom install roots you configure still appear in config when you set them.
 - When filing an Issue or Discussion, you may attach **redacted** log lines; avoid pasting secrets if you ever put them in custom paths.
 
 ### Encrypted Apply undo fields (honest limits)

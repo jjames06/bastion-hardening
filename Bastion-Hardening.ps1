@@ -6814,6 +6814,7 @@ function Show-Help {
         "4. Preflight checks that winget exists and trusted sources (winget, msstore) are present.",
         "5. Optional custom install paths must sit on fixed local volumes and outside system directories.",
         "6. After install, Bastion checks known paths; some vendors still ignore --location.",
+        "7. Preflight and Audit do not print the full winget binary path (avoids echoing a user-profile path in logs and screenshots).",
         "## Uninstall",
         "Menu 10 lists detected catalog apps only, selection starts empty, confirms with YES, then uninstalls and re-checks paths."
     )
