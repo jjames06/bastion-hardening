@@ -1,0 +1,68 @@
+name: Game / StrictHandle report
+description: A game or program fails after Apply under system StrictHandle
+title: "[Game]: "
+labels: ["game-compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Prefer Recovery first: main menu **9 > 6 Security mitigations > StrictHandle**. Details: [Games and StrictHandle](https://www.operationlockedin.com/bastion/docs/strict-handle) and [Help](https://www.operationlockedin.com/bastion/help#games).
+  - type: input
+    id: game-name
+    attributes:
+      label: Game or program name
+    validations:
+      required: true
+  - type: input
+    id: exe-path
+    attributes:
+      label: Full path to the .exe
+      description: Example C:\Games\Title\Binaries\Win64\Game.exe
+      placeholder: "C:\\Path\\To\\Game.exe"
+    validations:
+      required: true
+  - type: dropdown
+    id: launcher
+    attributes:
+      label: Does the launcher still work?
+      options:
+        - "Yes (only the game fails)"
+        - "No (launcher also fails)"
+        - "Not sure / no separate launcher"
+    validations:
+      required: true
+  - type: input
+    id: bastion-version
+    attributes:
+      label: Bastion version
+      placeholder: v15.7
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+    validations:
+      required: true
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: Symptoms
+      description: Instant exit, crash dialog, error text, etc.
+    validations:
+      required: true
+  - type: dropdown
+    id: recovery
+    attributes:
+      label: Did Recovery (disable system StrictHandle + reboot) fix it?
+      options:
+        - "Yes"
+        - "No"
+        - "Not tried yet"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Extra notes
+      description: Crash logs, store (Steam/Battle.net), optional

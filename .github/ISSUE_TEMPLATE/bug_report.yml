@@ -1,0 +1,75 @@
+name: Bastion bug report
+description: Reproducible product bug or unexpected behavior after Dry Run / Apply
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For recovery steps while you wait, see [Bastion Help](https://www.operationlockedin.com/bastion/help) and the [Recovery cookbook](https://www.operationlockedin.com/bastion/docs/recovery).
+  - type: input
+    id: bastion-version
+    attributes:
+      label: Bastion version
+      description: Zip name or version shown in the app (for example v15.7)
+      placeholder: v15.7
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      description: Settings > System > About (for example Windows 11 23H2)
+    validations:
+      required: true
+  - type: dropdown
+    id: run-mode
+    attributes:
+      label: What did you run?
+      options:
+        - Dry Run only
+        - Apply
+        - Quick Harden
+        - Recovery only
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: menu-path
+    attributes:
+      label: Menu path
+      description: For example 4 Sections, 8 Apply, or 9 > 2 Services
+      placeholder: "9 > 2 Services"
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps help a lot
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines or error text
+      description: Paste relevant lines from the Bastion data directory logs (redact personal paths if needed)
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checks
+      options:
+        - label: I used an official download (site or GitHub Latest), not a random re-upload
+          required: true
+        - label: I understand this is community-scale support, not a paid SLA
+          required: false

@@ -64,12 +64,19 @@ Firewall Apply locks remote groups on purpose. Open Recovery **→ 3 Network →
 
 ## Where do I get help?
 
-- In-app Help: menu **11**  
-- This wiki  
-- Product site support: [operationlockedin.com/support](https://www.operationlockedin.com/support)  
-- [Discussions](https://github.com/jjames06/bastion-hardening/discussions)  
-- Bugs: [Issues](https://github.com/jjames06/bastion-hardening/issues)  
-- Security: [SECURITY.md](https://github.com/jjames06/bastion-hardening/blob/main/SECURITY.md) (do not post full exploit details publicly for new vulns)
+Use the path that matches your situation:
+
+| Situation | Where to go |
+|-----------|-------------|
+| Something broke after Apply (printing, network, games, browsers) | Site [Bastion Help](https://www.operationlockedin.com/bastion/help) (works from a phone) and [Recovery cookbook](Recovery-cookbook); in-app Recovery menu **9** when Bastion still starts |
+| First install path | Site [Quick start](https://www.operationlockedin.com/bastion/docs/quick-start) and [Download](https://www.operationlockedin.com/bastion/download) |
+| Live paths on your machine | In-app Help (main menu **11**) |
+| Reproducible bug or crash | [GitHub Issues](https://github.com/jjames06/bastion-hardening/issues) (include Windows version, Bastion version, menu path, log lines) |
+| Game / StrictHandle report | [Issue #18](https://github.com/jjames06/bastion-hardening/issues/18) or [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23) |
+| General questions | [Discussions](https://github.com/jjames06/bastion-hardening/discussions) or site [Support](https://www.operationlockedin.com/support) (tagged email) |
+| Security vulnerability | [SECURITY.md](https://github.com/jjames06/bastion-hardening/blob/main/SECURITY.md) (prefer private reporting; do not post full exploit details publicly for new issues) |
+
+Handbook pages also live in this wiki and on the product site under `/bastion/docs/*`.
 
 ## What license is Bastion under?
 
