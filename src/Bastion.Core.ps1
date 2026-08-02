@@ -149,8 +149,40 @@ function Get-BastionConsoleHeight {
     }
 }
 
+function Set-BastionConsoleTheme {
+    # Consistent dark UI for almost all hosts (classic conhost + many Terminal profiles).
+    # Soft-fail: ISE / remoting / locked hosts keep their own theme.
+    try {
+        $ui = $Host.UI.RawUI
+        if (-not $ui) { return $false }
+        try { $ui.BackgroundColor = [ConsoleColor]::Black } catch {}
+        try { $ui.ForegroundColor = [ConsoleColor]::Gray } catch {}
+        # Paint the whole buffer so leftover host blue/white does not flash through.
+        try {
+            $buf = $ui.BufferSize
+            if ($buf -and $buf.Width -gt 0 -and $buf.Height -gt 0) {
+                $origin = New-Object System.Management.Automation.Host.Coordinates 0, 0
+                $rect = New-Object System.Management.Automation.Host.Rectangle 0, 0, ($buf.Width - 1), ($buf.Height - 1)
+                $cell = New-Object System.Management.Automation.Host.BufferCell
+                $cell.Character = ' '
+                $cell.ForegroundColor = [ConsoleColor]::Gray
+                $cell.BackgroundColor = [ConsoleColor]::Black
+                $cell.BufferCellType = [System.Management.Automation.Host.BufferCellType]::Complete
+                $ui.SetBufferContents($rect, $cell)
+                $ui.CursorPosition = $origin
+            }
+        } catch {
+            try { Clear-Host } catch {}
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 function Clear-BastionScreen {
-    # Clear visible buffer and pin cursor to top so the user always starts at the header
+    # Re-apply dark theme then clear so menus stay black (not host-default blue).
+    try { [void](Set-BastionConsoleTheme) } catch {}
     try { Clear-Host } catch {}
     try {
         $ui = $Host.UI.RawUI
@@ -160,8 +192,9 @@ function Clear-BastionScreen {
 }
 
 function Maximize-BastionConsole {
-    # Maximize host window for readability. Not exclusive Alt+Enter fullscreen.
-    # Fails softly in ISE, some Windows Terminal profiles, remoting, or constrained hosts.
+    # Dark theme first, then maximize for readability. Soft-fail on constrained hosts.
+    try { [void](Set-BastionConsoleTheme) } catch {}
+
     try {
         if (-not ("BastionNative.ConsoleWin" -as [type])) {
             Add-Type -Namespace BastionNative -Name ConsoleWin -MemberDefinition @"
@@ -189,6 +222,8 @@ function Maximize-BastionConsole {
                 $ui.WindowSize = New-Object System.Management.Automation.Host.Size ([int]$max.Width, [int]$max.Height)
             } catch { }
         }
+        # Re-paint after resize so new buffer cells are black too.
+        try { [void](Set-BastionConsoleTheme) } catch {}
     } catch { }
 }
 

@@ -2,7 +2,7 @@
 
 **Selective - State-aware - Safety-first Windows hardening for a personal workstation**
 
-Version **15.9.5**
+Version **15.9.6**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -69,7 +69,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.9.5** | GPLv3; modular plain-text `src\` (never encrypted); MANIFEST integrity; High-IL bat elevation works with LanmanServer disabled; tools-run-bootstrap; script-scope module load; encrypted DNS/RDP undo (DPAPI only); Settings-matching DoH Encrypted; handbook/wiki; as of 2026-08-02 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.9.6** | GPLv3; modular plain-text `src\` (never encrypted); MANIFEST integrity; forced black console theme; High-IL bat elevation works with LanmanServer disabled; tools-run-bootstrap; script-scope module load; encrypted DNS/RDP undo (DPAPI only); Settings-matching DoH Encrypted; handbook/wiki; as of 2026-08-02 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions -> Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -162,12 +162,12 @@ Best for most people. Prefer one of these **official** sources only (not random 
 
 Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). Older pinned tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain on GitHub if you need them.
 
-1. Download **`bastion-hardening-v15.9.5.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
+1. Download **`bastion-hardening-v15.9.6.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
 2. **Always Unblock the zip before extract** (Mark-of-the-Web): right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**.  
    Skipping this is a common cause of *running scripts is disabled on this system* after extract.
 3. Extract the zip to a location **you** control, for example `C:\Tools\`.  
    Official release zips expand to a **single folder** such as  
-   `bastion-hardening-v15.9.5\` with all product files already together inside.  
+   `bastion-hardening-v15.9.6\` with all product files already together inside.  
    Avoid extracting into `C:\Windows` or Program Files.
 4. Open that folder and confirm these files sit together:
 
@@ -241,7 +241,7 @@ After the elevated menu opens:
 
 | Symptom | What to try |
 |---------|-------------|
-| Nothing happens / window flashes | Run `Bastion-Hardening.bat` **as administrator**, not the `.ps1` alone. Prefer **v15.9.5+** if you already applied HighRisk services |
+| Nothing happens / window flashes | Run `Bastion-Hardening.bat` **as administrator**, not the `.ps1` alone. Prefer **v15.9.5+** (launch) / **v15.9.6+** (dark console) if you already applied HighRisk services |
 | `. was unexpected at this time.` | Fixed in **v15.9.5** (cmd paren/echo parse). Re-download modular zip; do not use older 15.9.0–15.9.4 bats after Server/LanmanServer is disabled |
 | "running scripts is disabled" / UnauthorizedAccess | **Do not** double-click the `.ps1`. Use **`Bastion-Hardening.bat`** only. Unblock the zip (Properties) then re-extract. v15.9.4+ also Unblock-Files the tree and sets Process Bypass before start |
 | SmartScreen / "Windows protected your PC" | Prefer Unblock on the zip (Method A step 2). More info -> Run anyway **only** if you trust the official site or this GitHub release |
@@ -467,12 +467,12 @@ Official assets should extract to **one folder** (not loose files at the zip roo
 ```powershell
 # From the repo root (Windows PowerShell 5.1+ or pwsh)
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1
-# Default version is 15.9.5 (or set -Version / BASTION_RELEASE_VERSION)
-# Regenerates src\MANIFEST.sha256, then writes dist\bastion-hardening-v15.9.5.zip
+# Default version is 15.9.6 (or set -Version / BASTION_RELEASE_VERSION)
+# Regenerates src\MANIFEST.sha256, then writes dist\bastion-hardening-v15.9.6.zip
 # Upload that file as the GitHub Release asset (name must match bastion-hardening-v*.zip)
 ```
 
-Layout inside the zip: `bastion-hardening-v15.9.5\Bastion-Hardening.bat` plus helpers (`tools-elevate-self.ps1`, `tools-run-bootstrap.ps1`), `src\Bastion.*.ps1`, and `src\MANIFEST.sha256`. Modular source is plain text; only Apply undo DNS/RDP blobs use DPAPI. The site download API may still resolve GitHub **Latest** (public pin often **15.8.4**) while **15.9.5** ships as a GitHub **prerelease**.
+Layout inside the zip: `bastion-hardening-v15.9.6\Bastion-Hardening.bat` plus helpers (`tools-elevate-self.ps1`, `tools-run-bootstrap.ps1`), `src\Bastion.*.ps1`, and `src\MANIFEST.sha256`. Modular source is plain text; only Apply undo DNS/RDP blobs use DPAPI. The site download API may still resolve GitHub **Latest** (public pin often **15.8.4**) while **15.9.6** ships as a GitHub **prerelease**.
 
 ---
 
