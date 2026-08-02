@@ -68,16 +68,18 @@ function Wait-ForKey([string]$Message = "Press any key to return...") {
 }
 
 function Write-Banner {
-    # External Bastion-Banner.utf8.txt (UTF-8) next to script if present; else ASCII fallback
+    # External Bastion-Banner.utf8.txt (UTF-8) next to product root (not src\). Prefer $script:BastionRoot.
     Write-Host ""
     $bannerFile = $null
     try {
-        if ($PSScriptRoot) { $bannerFile = Join-Path $PSScriptRoot "Bastion-Banner.utf8.txt" }
-        if (-not $bannerFile -or -not (Test-Path -LiteralPath $bannerFile)) {
-            if ($MyInvocation.MyCommand.Path) {
-                $bannerFile = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "Bastion-Banner.utf8.txt"
-            }
+        $root = $null
+        if ($script:BastionRoot) { $root = [string]$script:BastionRoot }
+        if (-not $root -and $PSScriptRoot) {
+            # When Core is under src\, parent of PSScriptRoot is product root
+            $leaf = Split-Path -Leaf $PSScriptRoot
+            if ($leaf -ieq "src") { $root = Split-Path -Parent $PSScriptRoot } else { $root = $PSScriptRoot }
         }
+        if ($root) { $bannerFile = Join-Path $root "Bastion-Banner.utf8.txt" }
     } catch { $bannerFile = $null }
 
     $usedUnicode = $false
