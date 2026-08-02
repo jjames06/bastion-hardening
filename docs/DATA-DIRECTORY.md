@@ -51,7 +51,7 @@ Each candidate is **write-probed** (create folder if needed, write a short tempo
 | *(the directory itself)* | First elevated launch that can write | Root for all Bastion runtime files |
 | `BastionInstallers/` | First launch (path ensure) | Staging area for optional winget-related install work |
 | `browser-policy-backups/` | First launch (path ensure); files added when menu **6** changes policies | Snapshots of browser policy material before Bastion overwrites it |
-| `Bastion-Config.json` | **Seeded on first run** (or after a full wipe of the store) | Section toggles, selected catalog apps, install roots, per-browser **wanted** modes, ECH Yes/No flags, DNS provider; optional **`WowInstallRoots`** (folders) and **`StrictHandleExceptionPaths`** (full `.exe` paths) for custom game layouts / extra StrictHandle exceptions |
+| `Bastion-Config.json` | **Seeded on first run** (or after a full wipe of the store) | Section toggles, selected catalog apps, install roots, per-browser **wanted** modes, ECH Yes/No flags, DNS provider; optional **`WowInstallRoots`** (folders) and **`StrictHandleExceptionPaths`** (full `.exe` paths) for custom game layouts / extra StrictHandle exceptions. **Not secret**, but on save Bastion applies an ACL of **SYSTEM + Administrators** (same posture as the undo file) so local standard users cannot casually read custom paths / choices. |
 | `Bastion-Session.json` | **Rewritten every launch** | Live browser posture vs wanted modes, whether prior config/Apply files existed, data directory path. Proves the store is real; **not** Apply history |
 | `Bastion-BrowserPolicies-State.json` | Created/updated when browser policy state is saved (every launch after init, and after menu **6** changes) | Wanted modes, live detection, last policy change summary |
 | `Bastion-Log-yyyyMMdd-HHmmss.txt` | Each session | Transcript lines for that run |
@@ -131,11 +131,16 @@ Full section behavior is documented in the in-app Help (menu **11**) and the mai
 
 If encryption fails on save, Bastion **does not** fall back to writing plaintext DNS or RDP prior; those fields are simply not stored, and restore is unavailable until a later successful Apply.
 
+### Config ACL (preferences, not secrets)
+
+`Bastion-Config.json` stores menu choices (sections, DNS preference, catalog queue, optional custom paths). Those values are **not** treated as credentials, but Bastion still applies the same **SYSTEM + Administrators** ACL when saving so other local accounts cannot casually inspect custom install roots or StrictHandle exception paths. Full threat model: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ---
 
 ## Related documentation
 
 - [README - How to install](../README.md#how-to-install-properly)
+- [Architecture (modular src, integrity)](ARCHITECTURE.md)
 - [Browser policies and Encrypted Client Hello (ECH)](BROWSER-POLICIES-AND-ECH.md)
 - [SECURITY.md](../SECURITY.md)
 - In-app **Help → page 12 (Files and logs)** shows the **live path for this session**

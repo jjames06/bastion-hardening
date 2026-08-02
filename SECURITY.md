@@ -4,13 +4,14 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.8.4  | Yes (current) |
+| 15.9.0  | Yes (current) - modular plain-text `src\` + MANIFEST integrity |
+| 15.8.4  | Best-effort until you upgrade |
 | 15.8.3  | Best-effort until you upgrade |
 | 15.8.2  | Best-effort until you upgrade |
 | 15.8.1  | Best-effort until you upgrade |
 | 15.8    | Best-effort until you upgrade |
 | 15.7    | Best-effort until you upgrade |
-| 15.3    | Best-effort until you upgrade (older MIT-era tag; prefer 15.8) |
+| 15.3    | Best-effort until you upgrade (older MIT-era tag; prefer 15.9) |
 | 15.2    | Best-effort until you upgrade |
 | 15.1    | Best-effort until you upgrade |
 | 15.0    | Best-effort until you upgrade |
@@ -29,8 +30,10 @@ Current tree: **GNU GPLv3** (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). Treat
 Bastion makes deliberate system changes on Windows (services, firewall, registry, DNS, Defender settings, AppX packages, browser enterprise policies when you opt in, and related areas). Treat every copy of the script as **privileged software**:
 
 - Run only from the [official site](https://www.operationlockedin.com/bastion/download), this official GitHub repository, or a release you verified yourself
-- Review `Bastion-Hardening.ps1` before first use
+- Review the thin bootstrap `Bastion-Hardening.ps1` and plain-text modules under `src\` before first use (source is never encrypted)
+- Startup verifies `src\MANIFEST.sha256` (SHA256) and hard-fails if modules are missing or tampered
 - Prefer a System Restore Point before Apply or Quick Harden
+- Code map and threat model: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Runtime files (transparency)
 
@@ -43,6 +46,8 @@ Full inventory: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 | First run | Seeds config defaults; rewrites session/browser-state snapshots from **live** detection |
 | Apply history file | `Bastion-LastApply.json` only after a **real** Apply |
 | DNS / RDP undo secrets | DNS snapshot and RDP host prior are **DPAPI-encrypted** in that file; ACL SYSTEM + Administrators. Same elevating account can decrypt; full account compromise still can. See [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) |
+| Config preferences | `Bastion-Config.json` is not a secret store (section toggles, custom paths); on save Bastion applies the same **SYSTEM + Administrators** ACL to reduce casual local reads |
+| Product source | Plain-text `src\*.ps1` + integrity MANIFEST; encrypt **data**, never code (GPLv3) |
 | Display privacy | Winget preflight / Audit do not echo the full winget executable path (often under a user profile). Data-directory path still appears on the main menu by design. |
 | Encrypted Client Hello (ECH) | Never written unless you opt in under Strict in menu **6** - see [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) |
 | Telemetry to Bastion authors | Bastion does not upload logs or config to a Bastion cloud service as part of normal operation |
@@ -61,7 +66,7 @@ Prefer one of:
 
 Include when possible:
 
-- Bastion version (`ScriptVersion` in the script header)
+- Bastion version (`ScriptVersion` in `src\Bastion.Init.ps1` / bootstrap header)
 - Windows 10/11 build
 - Steps to reproduce
 - Expected vs actual impact (privilege escalation, unexpected network exposure, data loss risk, etc.)

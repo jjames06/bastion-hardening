@@ -42,6 +42,7 @@ This wiki is a short **user handbook**. Deeper technical detail ships **in the r
 | Data directory, ECH, known-issue detail | Release zip `docs/` ([DATA-DIRECTORY](https://github.com/jjames06/bastion-hardening/blob/main/docs/DATA-DIRECTORY.md), [BROWSER-POLICIES-AND-ECH](https://github.com/jjames06/bastion-hardening/blob/main/docs/BROWSER-POLICIES-AND-ECH.md), [KNOWN-ISSUES](https://github.com/jjames06/bastion-hardening/blob/main/docs/KNOWN-ISSUES.md)) |
 | Product site / download | [operationlockedin.com](https://www.operationlockedin.com) and [Bastion download](https://www.operationlockedin.com/bastion/download) |
 | What changed in a version | [Releases](https://github.com/jjames06/bastion-hardening/releases) |
+| Modular source map / integrity | [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md) |
 | Community talk | [Discussions](https://github.com/jjames06/bastion-hardening/discussions) |
 
 ## Safety first
