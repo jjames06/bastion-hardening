@@ -3,6 +3,7 @@
 * [Recovery cookbook](Recovery-cookbook)
 * [Games and StrictHandle](Games-and-StrictHandle)
 * [FAQ](FAQ)
+* [Modular source layout](Modular-source)
 * [Official site](https://www.operationlockedin.com)
 * [Download](https://www.operationlockedin.com/bastion/download)
 * [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest)

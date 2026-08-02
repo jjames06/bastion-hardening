@@ -4,12 +4,15 @@
 
 This wiki is a short **user handbook** for **Bastion v15.9.7** (modular plain-text `src\` builds; source never encrypted; DPAPI only for Apply undo data; forced black console theme; Help docs color-coded for dark UI). Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). **v15.9.7** is the public recommended build on the [official site](https://www.operationlockedin.com/bastion/download) and [GitHub Latest](https://github.com/jjames06/bastion-hardening/releases/latest). Always start with **`Bastion-Hardening.bat`** (Unblock the zip first; never double-click the `.ps1` alone).
 
+**Source structure:** Current releases are **modular** (thin bootstrap + `src\Bastion.*.ps1` modules) so the product is easier to **read and review** than the older single large script. See [Modular source layout](Modular-source). Implementation remains plain text under GPLv3; `MANIFEST.sha256` is integrity only.
+
 ## Start here
 
 1. [Quick start](Quick-start) - install, restore point, Dry Run, Apply  
 2. [Recovery cookbook](Recovery-cookbook) - fix printing, network, games, Defender side effects  
 3. [Games and StrictHandle](Games-and-StrictHandle) - what breaks, how to reverse, how to report  
 4. [FAQ](FAQ) - common questions, honest limits  
+5. [Modular source layout](Modular-source) - why Bastion is no longer one giant script, and how to review it
 
 ## Official links
 
@@ -42,7 +45,8 @@ This wiki is a short **user handbook** for **Bastion v15.9.7** (modular plain-te
 | Data directory, ECH, known-issue detail | Release zip `docs/` ([DATA-DIRECTORY](https://github.com/jjames06/bastion-hardening/blob/main/docs/DATA-DIRECTORY.md), [BROWSER-POLICIES-AND-ECH](https://github.com/jjames06/bastion-hardening/blob/main/docs/BROWSER-POLICIES-AND-ECH.md), [KNOWN-ISSUES](https://github.com/jjames06/bastion-hardening/blob/main/docs/KNOWN-ISSUES.md)) |
 | Product site / download | [operationlockedin.com](https://www.operationlockedin.com) and [Bastion download](https://www.operationlockedin.com/bastion/download) |
 | What changed in a version | [Releases](https://github.com/jjames06/bastion-hardening/releases) |
-| Modular source map / integrity | [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md) |
+| Modular vs monolith (handbook) | [Modular source layout](Modular-source) |
+| Modular source map / integrity (technical) | [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md) |
 | Community talk | [Discussions](https://github.com/jjames06/bastion-hardening/discussions) |
 
 ## Safety first

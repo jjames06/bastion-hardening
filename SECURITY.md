@@ -34,13 +34,13 @@ Current tree: **GNU GPLv3** (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). Treat
 
 ## What this project does
 
-Bastion makes deliberate system changes on Windows (services, firewall, registry, DNS, Defender settings, AppX packages, browser enterprise policies when you opt in, and related areas). Treat every copy of the script as **privileged software**:
+Bastion makes deliberate system changes on Windows (services, firewall, registry, DNS, Defender settings, AppX packages, browser enterprise policies when you opt in, and related areas). Treat every copy as **privileged software**:
 
 - Run only from the [official site](https://www.operationlockedin.com/bastion/download), this official GitHub repository, or a release you verified yourself
-- Review the thin bootstrap `Bastion-Hardening.ps1` and plain-text modules under `src\` before first use (source is never encrypted)
+- Current builds are **modular plain text** under `src\` (not a single opaque script). Review the thin bootstrap `Bastion-Hardening.ps1` and the modules that match your concern before first use (**source is never encrypted**)
 - Startup verifies `src\MANIFEST.sha256` (SHA256) and hard-fails if modules are missing or tampered
 - Prefer a System Restore Point before Apply or Quick Harden
-- Code map and threat model: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Why modular / how to review: [docs/wiki/Modular-source.md](docs/wiki/Modular-source.md) · Code map and threat model: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Runtime files (transparency)
 

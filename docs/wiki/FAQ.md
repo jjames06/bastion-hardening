@@ -29,7 +29,30 @@ See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/
 
 ## Where is the code?
 
-Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.Core.ps1`, `Bastion.Apply.ps1`). `Bastion-Hardening.ps1` is a thin elevated bootstrap that dot-sources those modules and verifies **`src\MANIFEST.sha256`**. **Source is never encrypted** (GPLv3 + auditability). `MANIFEST.sha256` is integrity only. **DPAPI encryption applies only to undo data** (DNS snapshot / RDP host prior after Apply), not to modular load. See [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
+Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.Core.ps1`, `Bastion.Apply.ps1`). `Bastion-Hardening.ps1` is a thin elevated bootstrap that dot-sources those modules and verifies **`src\MANIFEST.sha256`**. **Source is never encrypted** (GPLv3 + auditability). `MANIFEST.sha256` is integrity only. **DPAPI encryption applies only to undo data** (DNS snapshot / RDP host prior after Apply), not to modular load. See [Modular source layout](Modular-source) and [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
+
+## Why is Bastion modular now? Was it one big script?
+
+**Yes — earlier public lines (through v15.8.x) shipped mainly as one large PowerShell script.** That was easy to package, but it made independent review harder: Recovery, DNS, Apply, browsers, and menus all lived in a single multi-thousand-line file.
+
+**Current releases (v15.9.x+) are modular on purpose:**
+
+| Goal | How modular layout helps |
+|------|---------------------------|
+| Easier review | Open named modules (for example `Bastion.Dns.ps1`, `Bastion.Recovery.ps1`) instead of scrolling one monolith |
+| Honest open source | Every module stays **readable plain text** under GPLv3; source is **never** encrypted |
+| Integrity | `src\MANIFEST.sha256` hashes each module; startup hard-fails on missing files or hash mismatch |
+| Maintainability | Smaller, reviewable changes when one domain is updated |
+
+**What did not change for users:** Unblock the zip, extract the product folder, run **`Bastion-Hardening.bat` as administrator**. You do not assemble modules yourself; the official zip already contains bootstrap + full `src\`.
+
+| Monolith era | Modular era |
+|--------------|-------------|
+| One large script held most logic | Thin bootstrap + `src\Bastion.*.ps1` |
+| Review meant searching one file | Open the matching module |
+| Integrity mostly “files present” | Per-module SHA256 MANIFEST |
+
+Full handbook page: [Modular source layout](Modular-source). Technical detail: [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
 
 ## How do I verify the download?
 

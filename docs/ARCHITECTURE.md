@@ -1,10 +1,25 @@
-# Bastion architecture (v15.9.6)
+# Bastion architecture
 
 ## Purpose
 
 Bastion Hardening Framework is a **menu-driven**, **state-aware** Windows workstation hardener. It runs elevated, records preferences and optional Apply undo data under a local data directory, and never invents Apply history on first launch.
 
-This document maps the **code layout** after the v15.9.x modular restructure (script-scope module load, post-load command probe, self-elevating bat, Mark-of-the-Web / ExecutionPolicy launch hardening, v15.9.5 LanmanServer-safe bat parse, and v15.9.6 forced black console theme). Product behavior is unchanged from the prior monolith unless noted in release notes.
+This document maps the **code layout** after the v15.9.x modular restructure (script-scope module load, post-load command probe, self-elevating bat, Mark-of-the-Web / ExecutionPolicy launch hardening, LanmanServer-safe bat parse, forced black console theme, and color-coded Help docs). Product behavior remains guided, selective hardening; the restructure is about **how the source is organized for review and maintenance**, not a secret rewrite of the safety model.
+
+## Why the source is modular
+
+Through the v15.8.x releases, Bastion shipped mainly as a **single large PowerShell script** (monolith). That was convenient to package, but it made independent review expensive: DNS, Recovery, Apply, browsers, and menus all lived in one multi-thousand-line file.
+
+The modular layout exists so that:
+
+1. **Reviewers and end users** can open a named module that matches their concern instead of searching one giant script.  
+2. **GPLv3 auditability** stays honest — every product module is **plain text**, never encrypted.  
+3. **Maintainers** can change one domain (for example Recovery) with a smaller, reviewable diff.  
+4. **Integrity** can be checked **per file** via `src\MANIFEST.sha256` (SHA256 hashes). A mismatch hard-fails startup.
+
+**User launch path is unchanged in spirit:** download the official zip, keep the tree together, run **`Bastion-Hardening.bat` as administrator**.
+
+Handbook-style overview for non-developers: [wiki Modular source](wiki/Modular-source.md) (also published on the GitHub Wiki).
 
 ## Design principles
 
@@ -31,7 +46,7 @@ If a launch fails after hardening, the cause is almost always **launcher / eleva
 ## Runtime layout
 
 ```
-bastion-hardening-v15.9.6\
+bastion-hardening-v15.9.7\   (folder name matches the release tag)
   Bastion-Hardening.bat      # UAC launcher; High-IL whoami check; goto-safe; calls helpers
   tools-elevate-self.ps1     # UAC re-launch helper (avoids nested parentheses in cmd)
   tools-run-bootstrap.ps1    # Unblock-File + Process Bypass + & Bastion-Hardening.ps1
@@ -54,7 +69,17 @@ bastion-hardening-v15.9.6\
   docs\                      # Handbook, data-directory, known issues, architecture
 ```
 
-**Not shipped in the release zip:** `tools\` (pack/wiki scripts, optional monolith archive under `tools\archive\` for git history only).
+### Monolith vs modular (summary)
+
+| Concern | Monolith era (through v15.8.x) | Modular era (v15.9.x+) |
+|---------|-------------------------------|-------------------------|
+| Where logic lives | One large script | Domain modules under `src\` + thin bootstrap |
+| Review cost | High (scroll/search entire file) | Lower (open named module) |
+| Integrity | Whole-file presence | Per-module `MANIFEST.sha256` hard-fail |
+| Source form | Plain text | Plain text (never encrypted) |
+| Runtime entry | Elevated `.bat` | Same elevated `.bat` path |
+
+**Not shipped in the release zip:** `tools\` (pack/wiki scripts, optional monolith archive under `tools\archive\` for git history / comparison only — not the supported runtime layout).
 
 ## Load order
 
@@ -129,7 +154,7 @@ Elevated:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Bastion-Hardening.ps1 -BastionSmokeLoadOnly
 ```
 
-Expected: `Bastion smoke load OK v15.9.6 (commands verified)` and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
+Expected: `Bastion smoke load OK v15.9.7 (commands verified)` (version string follows `ScriptVersion`) and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
 
 Bat path smoke (elevated host, LanmanServer may be stopped/disabled):
 
