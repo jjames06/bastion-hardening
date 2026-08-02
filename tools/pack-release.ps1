@@ -89,6 +89,7 @@ try {
   $paths = @(
     "Bastion-Hardening.bat",
     "Bastion-Hardening.ps1",
+    "tools-elevate-self.ps1",
     "Bastion-Banner.utf8.txt",
     "LICENSE",
     "NOTICE",

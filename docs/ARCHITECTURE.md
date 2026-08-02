@@ -20,7 +20,8 @@ This document maps the **code layout** after the v15.9.x modular restructure (in
 
 ```
 bastion-hardening-v15.9.4\
-  Bastion-Hardening.bat      # UAC launcher; Unblock-File tree + Process Bypass; invoke & bootstrap
+  Bastion-Hardening.bat      # UAC launcher; whoami admin check; Unblock-File + Process Bypass; & bootstrap
+  tools-elevate-self.ps1     # UAC re-launch helper (avoids nested parentheses in cmd)
   Bastion-Hardening.ps1      # Thin bootstrap: early Process Bypass; integrity; script-scope .
   Bastion-Banner.utf8.txt
   LICENSE, NOTICE, README.md, SECURITY.md
@@ -44,7 +45,7 @@ bastion-hardening-v15.9.4\
 
 ## Load order
 
-**Launcher (`Bastion-Hardening.bat`)** (preferred entry): elevates via UAC, then in the elevated console sets Process-scope ExecutionPolicy Bypass, recursively `Unblock-File`s the product tree (Mark-of-the-Web from zip downloads), and invokes `Bastion-Hardening.ps1` with the call operator (`&`) so policy and zone blocks do not stop startup.
+**Launcher (`Bastion-Hardening.bat`)** (preferred entry): detects elevation with **whoami Administrators SID** (not `net session`, which fails after Bastion disables LanmanServer), re-launches elevated via `tools-elevate-self.ps1` (or inline `Start-Process -Verb RunAs` fallback), then sets Process-scope ExecutionPolicy Bypass, recursively `Unblock-File`s the product tree (Mark-of-the-Web from zip downloads), and invokes `Bastion-Hardening.ps1` with the call operator (`&`) so policy and zone blocks do not stop startup.
 
 Bootstrap (`Bastion-Hardening.ps1`) always:
 
