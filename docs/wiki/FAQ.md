@@ -1,4 +1,4 @@
-# FAQ
+﻿# FAQ
 
 ## Is Bastion antivirus?
 
@@ -14,10 +14,10 @@
 
 ## Which file do I download?
 
-Use either official channel (both resolve the same GitHub Latest zip). Prefer **v15.9.4** (current modular release: Unblock-File + Process Bypass launcher; do not use older 15.9.0/15.9.1 zips if the elevated window flash-closed after UAC; use 15.9.4+ if you see *running scripts is disabled*):
+Prefer **v15.9.5** modular (High-IL bat elevation, goto-safe launcher, works after LanmanServer is disabled). Official site download may still pin GitHub **Latest** (often monolith **v15.8.4**) until modular is promoted - that is intentional.
 
-- **Official site:** https://www.operationlockedin.com/bastion/download  
-- **GitHub Releases:** https://github.com/jjames06/bastion-hardening/releases/latest  
+- **Modular prerelease (recommended for hardened PCs):** https://github.com/jjames06/bastion-hardening/releases/tag/v15.9.5  
+- **Official site / GitHub Latest (public pin):** https://www.operationlockedin.com/bastion/download and https://github.com/jjames06/bastion-hardening/releases/latest  
 
 **Install rule:** Unblock the zip, extract, always run **`Bastion-Hardening.bat`** as administrator. Never double-click `Bastion-Hardening.ps1` alone under Restricted policy.
 
@@ -29,7 +29,7 @@ See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/
 
 ## Where is the code?
 
-Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.Core.ps1`, `Bastion.Apply.ps1`). `Bastion-Hardening.ps1` is a thin elevated bootstrap that dot-sources those modules and verifies **`src\MANIFEST.sha256`**. Source is **never encrypted** (GPLv3 + auditability). See [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
+Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.Core.ps1`, `Bastion.Apply.ps1`). `Bastion-Hardening.ps1` is a thin elevated bootstrap that dot-sources those modules and verifies **`src\MANIFEST.sha256`**. **Source is never encrypted** (GPLv3 + auditability). `MANIFEST.sha256` is integrity only. **DPAPI encryption applies only to undo data** (DNS snapshot / RDP host prior after Apply), not to modular load. See [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
 
 ## How do I verify the download?
 

@@ -3,6 +3,8 @@
 .SYNOPSIS
   Elevate Bastion-Hardening.bat via UAC and wait (used only by the .bat).
   Kept as a .ps1 so cmd.exe never has to parse nested parentheses.
+.NOTES
+  Packaged in the release zip next to Bastion-Hardening.bat.
 #>
 param(
     [Parameter(Mandatory = $true)]

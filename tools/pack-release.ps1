@@ -6,9 +6,11 @@
 .DESCRIPTION
   Layout inside the zip:
 
-    bastion-hardening-v15.9.4/
+    bastion-hardening-v15.9.5/
       Bastion-Hardening.bat
       Bastion-Hardening.ps1
+      tools-elevate-self.ps1
+      tools-run-bootstrap.ps1
       src\
         Bastion.*.ps1
         MANIFEST.sha256
@@ -19,7 +21,7 @@
   together (not loose files at the extract root).
 
 .PARAMETER Version
-  Version label without leading v (e.g. 15.9.4). Default: BASTION_RELEASE_VERSION env or 15.9.4.
+  Version label without leading v (e.g. 15.9.5). Default: BASTION_RELEASE_VERSION env or 15.9.5.
 
 .PARAMETER OutputDir
   Where to write the zip. Default: repo root \dist
@@ -32,7 +34,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Version = $(if ($env:BASTION_RELEASE_VERSION) { $env:BASTION_RELEASE_VERSION } else { "15.9.4" }),
+  [string]$Version = $(if ($env:BASTION_RELEASE_VERSION) { $env:BASTION_RELEASE_VERSION } else { "15.9.5" }),
   [string]$OutputDir = "",
   [switch]$SkipManifestRegen
 )
@@ -90,6 +92,7 @@ try {
     "Bastion-Hardening.bat",
     "Bastion-Hardening.ps1",
     "tools-elevate-self.ps1",
+    "tools-run-bootstrap.ps1",
     "Bastion-Banner.utf8.txt",
     "LICENSE",
     "NOTICE",
@@ -133,6 +136,8 @@ try {
     $norm = @($zip.Entries | ForEach-Object { ($_.FullName -replace '\\', '/').TrimStart('/') })
     $bat = "$FolderName/Bastion-Hardening.bat"
     $ps1 = "$FolderName/Bastion-Hardening.ps1"
+    $elev = "$FolderName/tools-elevate-self.ps1"
+    $run = "$FolderName/tools-run-bootstrap.ps1"
     $core = "$FolderName/src/Bastion.Core.ps1"
     $manifest = "$FolderName/src/MANIFEST.sha256"
     if ($norm -notcontains $bat) {
@@ -141,6 +146,12 @@ try {
     }
     if ($norm -notcontains $ps1) {
       throw "Zip sanity failed: expected entry $ps1"
+    }
+    if ($norm -notcontains $elev) {
+      throw "Zip sanity failed: expected entry $elev"
+    }
+    if ($norm -notcontains $run) {
+      throw "Zip sanity failed: expected entry $run"
     }
     if ($norm -notcontains $core) {
       throw "Zip sanity failed: expected entry $core (modular sources)"

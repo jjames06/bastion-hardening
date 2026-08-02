@@ -1,15 +1,16 @@
-# Security Policy
+﻿# Security Policy
 
 ## Supported versions
 
 | Version | Supported |
 |---------|-----------|
-| 15.9.4  | Yes (current) - launcher Unblock-File (Mark-of-the-Web) + Process Bypass; always use `.bat` (not `.ps1` alone under Restricted) |
-| 15.9.3  | Superseded - banner path + MANIFEST integrity; use 15.9.4 if zip extracts fail with "running scripts is disabled" |
-| 15.9.2  | Superseded - launch hardening; use 15.9.4 |
-| 15.9.0  | Superseded - modular plain-text `src\` + MANIFEST + script-scope load (some installs still flash-closed after UAC; use 15.9.4) |
-| 15.9.1  | Retracted (tag/release removed; fix folded into 15.9.0 then 15.9.4) |
-| 15.8.4  | Best-effort until you upgrade |
+| 15.9.5  | Yes (current modular) - High-IL bat elevation; goto-safe launcher; tools-run-bootstrap; works when LanmanServer disabled; always use `.bat` |
+| 15.9.4  | Superseded - whoami SID + Unblock-File; still hit `. was unexpected` on some elevated re-launches; prefer 15.9.5 |
+| 15.9.3  | Superseded - banner path + MANIFEST integrity; use 15.9.5 |
+| 15.9.2  | Superseded - launch hardening; use 15.9.5 |
+| 15.9.0  | Superseded - modular plain-text `src\` + MANIFEST + script-scope load; use 15.9.5 |
+| 15.9.1  | Retracted (tag/release removed; fix folded into 15.9.0 then 15.9.5) |
+| 15.8.4  | Public Latest / site pin (monolith) until modular is promoted; best-effort |
 | 15.8.3  | Best-effort until you upgrade |
 | 15.8.2  | Best-effort until you upgrade |
 | 15.8.1  | Best-effort until you upgrade |
