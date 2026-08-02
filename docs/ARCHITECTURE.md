@@ -141,9 +141,9 @@ Expected: “Elevated console ready”, then main menu (or use `tools-run-bootst
 
 ## Version
 
-Product-facing version is **15.9.6** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.6** for consistent dark console theme plus **15.9.5** launch fixes on Bastion-hardened machines where Server/LanmanServer is disabled. Always start with the `.bat`, never the `.ps1` alone.
+Product-facing version is **15.9.7** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.7** for Help color-coded docs on the dark console, forced black theme (**15.9.6**), and **15.9.5** launch fixes on Bastion-hardened machines where Server/LanmanServer is disabled. Always start with the `.bat`, never the `.ps1` alone.
 
-**Public site note:** Official site download may remain pinned to GitHub **Latest** (often monolith **15.8.4**) while modular **15.9.x** ships as GitHub **prerelease**. That is intentional until modular is promoted to Latest.
+**Public site note:** Official site download and GitHub **Latest** recommend modular **15.9.7** (plain-text `src\`, MANIFEST integrity; source never encrypted).
 
 ## Related docs
 

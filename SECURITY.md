@@ -1,4 +1,4 @@
-﻿# Security Policy
+# Security Policy
 
 ## Supported versions
 
@@ -12,7 +12,7 @@
 | 15.9.2  | Superseded - launch hardening; use 15.9.7 |
 | 15.9.0  | Superseded - modular plain-text `src\` + MANIFEST + script-scope load; use 15.9.7 |
 | 15.9.1  | Retracted (tag/release removed; fix folded into 15.9.0 then 15.9.7) |
-| 15.8.4  | Public Latest / site pin (monolith) until modular is promoted; best-effort |
+| 15.8.4  | Superseded monolith - prefer modular 15.9.7; best-effort |
 | 15.8.3  | Best-effort until you upgrade |
 | 15.8.2  | Best-effort until you upgrade |
 | 15.8.1  | Best-effort until you upgrade |
