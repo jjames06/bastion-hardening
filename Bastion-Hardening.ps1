@@ -9,7 +9,7 @@
     Version 15.8.1 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
-    v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) so Settings can show Encrypted (separate from DPAPI).
+    v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
 #>
 
 $ErrorActionPreference = "Continue"
@@ -229,8 +229,8 @@ $script:DnsKnownDohTemplates = [ordered]@{
     "208.67.222.222"    = "https://doh.opendns.com/dns-query"
     "208.67.220.220"    = "https://doh.opendns.com/dns-query"
 }
-# Interface DoH registry flag used by Windows Settings "Encrypted" badge (observed working value).
-$script:BastionDnsDohInterfaceFlags = 17
+# Interface DoH registry flag (5 = encrypted-only style used by Windows DoH UI paths).
+$script:BastionDnsDohInterfaceFlags = 5
 $script:Stats = @{
     AlreadyConfigured = 0
     Applied           = 0
@@ -2938,8 +2938,9 @@ function Set-BastionInterfaceDohEntry {
     $guid = Format-BastionInterfaceGuid -Raw $InterfaceGuid
     $ip = $Server.Trim()
     if (-not $guid -or [string]::IsNullOrWhiteSpace($ip) -or [string]::IsNullOrWhiteSpace($DohTemplate)) { return $false }
+    $ok = $false
     try {
-        # Global DoH server list (templates Windows knows about).
+        # 1) Global DoH list via DnsClient module.
         try {
             $exist = Get-DnsClientDohServerAddress -ServerAddress $ip -ErrorAction SilentlyContinue
             if (-not $exist) {
@@ -2949,17 +2950,29 @@ function Set-BastionInterfaceDohEntry {
                 Set-DnsClientDohServerAddress -ServerAddress $ip -DohTemplate $DohTemplate `
                     -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue | Out-Null
             }
+            $ok = $true
         } catch {
-            Write-Log ("DoH global register {0}: {1}" -f $ip, $_.Exception.Message) -Level Warning
+            Write-Log ("DoH module register {0}: {1}" -f $ip, $_.Exception.Message) -Level Warning
         }
-        # Per-interface encryption flags (what Settings uses for Encrypted vs Unencrypted).
+        # 2) netsh encryption table (autoupgrade = use DoH when this server is configured).
+        try {
+            $null = & netsh.exe dns set encryption "server=$ip" "dohtemplate=$DohTemplate" autoupgrade=yes udpfallback=no 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $null = & netsh.exe dns add encryption "server=$ip" "dohtemplate=$DohTemplate" autoupgrade=yes udpfallback=no 2>&1
+            }
+            if ($LASTEXITCODE -eq 0) { $ok = $true }
+        } catch {
+            Write-Log ("DoH netsh {0}: {1}" -f $ip, $_.Exception.Message) -Level Warning
+        }
+        # 3) Per-interface DoH keys (Settings / stack).
         $path = "HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\$guid\DohInterfaceSettings\Doh\$ip"
         if (-not (Test-Path -LiteralPath $path)) {
             New-Item -Path $path -Force -ErrorAction Stop | Out-Null
         }
         New-ItemProperty -Path $path -Name DohTemplate -PropertyType String -Value $DohTemplate -Force -ErrorAction Stop | Out-Null
         New-ItemProperty -Path $path -Name DohFlags -PropertyType DWord -Value $DohFlags -Force -ErrorAction Stop | Out-Null
-        return $true
+        $ok = $true
+        return $ok
     } catch {
         Write-Log ("DoH interface set {0}/{1}: {2}" -f $guid, $ip, $_.Exception.Message) -Level Warning
         return $false
@@ -3107,9 +3120,9 @@ function Restore-BastionDnsFromSnapshot {
                 Set-DnsClientServerAddress -InterfaceIndex $match.ifIndex -ServerAddresses $servers -ErrorAction Stop
                 $dohN = Enable-BastionDnsOverHttpsForAdapter -InterfaceGuid $matchGuid -Servers $servers -DohEntries $dohEntries
                 if ($dohN -gt 0) {
-                    Write-Status ("{0}: restored prior DNS ({1}) + DoH encryption for {2} server(s)" -f $match.Name, ($servers -join ", "), $dohN) "Applied"
+                    Write-Status ("{0}: restored prior DNS ({1}) + DNS-over-HTTPS for {2} server(s)" -f $match.Name, ($servers -join ", "), $dohN) "Applied"
                 } else {
-                    Write-Status ("{0}: restored prior DNS ({1}) (no DoH template available; Windows may show Unencrypted)" -f $match.Name, ($servers -join ", ")) "Applied"
+                    Write-Status ("{0}: restored prior DNS ({1}) (classic only; no DoH template)" -f $match.Name, ($servers -join ", ")) "Applied"
                 }
             }
             $n++
@@ -3119,7 +3132,9 @@ function Restore-BastionDnsFromSnapshot {
     }
     try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
     Write-Host "  Bastion menu D provider preference is unchanged. VPN may still override DNS while connected." -ForegroundColor DarkGray
-    Write-Host "  Settings 'Encrypted' = DNS-over-HTTPS on the wire. Bastion's snapshot file uses separate DPAPI on-disk encryption." -ForegroundColor DarkGray
+    Write-Host "  Two meanings of encrypted: (1) Bastion DPAPI = snapshot file on disk. (2) Windows DoH = HTTPS DNS on the wire." -ForegroundColor DarkGray
+    Write-Host "  Settings may still show 'Unencrypted' next to the IP even when DoH is active (Windows UI often lags when DNS is set outside Settings)." -ForegroundColor DarkGray
+    Write-Host "  To force the Settings badge: Edit DNS on the adapter > Preferred DNS encryption > On (automatic template), Save." -ForegroundColor DarkGray
     Write-Host "  Snapshot restore is best-effort if adapters were renamed or removed after Apply." -ForegroundColor DarkGray
     Write-Log ("Restore-BastionDnsFromSnapshot restored={0}" -f $n) -NoConsole
     return ($n -gt 0)
