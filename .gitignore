@@ -20,3 +20,7 @@ Bastion-Session.json
 Bastion-BrowserPolicies-State.json
 BastionInstallers/
 browser-policy-backups/
+
+# Release packaging output
+dist/
+

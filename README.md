@@ -162,17 +162,18 @@ Product overview and docs on the site: [www.operationlockedin.com/bastion](https
 1. Download **`bastion-hardening-v15.7.zip`** (or the current release asset with a similar name) from the official site or GitHub Latest.
 2. Right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**  
    (reduces SmartScreen / "downloaded from the internet" friction on the extracted scripts)
-3. Extract the zip to a folder **you** control, for example:  
-   `C:\Tools\Bastion`  
-   Avoid system folders such as `C:\Windows` or Program Files.
-4. Confirm these files sit **in the same folder**:
+3. Extract the zip to a location **you** control, for example `C:\Tools\`.  
+   Official release zips expand to a **single folder** such as  
+   `bastion-hardening-v15.7\` with all product files already together inside.  
+   Avoid extracting into `C:\Windows` or Program Files.
+4. Open that folder and confirm these files sit together:
 
    | File | Required? |
    |------|-----------|
    | `Bastion-Hardening.bat` | Yes - launcher |
    | `Bastion-Hardening.ps1` | Yes - main script |
    | `Bastion-Banner.utf8.txt` | Optional (banner only) |
-   | `LICENSE`, `NOTICE`, `README.md`, `SECURITY.md` | Optional at runtime |
+   | `LICENSE`, `NOTICE`, `README.md`, `SECURITY.md`, `docs\` | Optional at runtime |
 
 5. **Do not** double-click the `.ps1` file. Use the batch launcher:
    - Right-click **`Bastion-Hardening.bat`**
@@ -448,6 +449,21 @@ Dry Run, Apply, and Recovery use the same guidance. Full detail: [docs/KNOWN-ISS
 - Maintained on a best-effort basis
 
 When reporting a bug, include Windows version (**Settings -> System -> About** or `winver`), what you ran (Dry Run / Apply / Quick Harden), and relevant lines from the Bastion log under the log directory shown at exit.
+
+---
+
+## Maintainer: pack a release zip
+
+Official assets should extract to **one folder** (not loose files at the zip root):
+
+```powershell
+# From the repo root (Windows PowerShell 5.1+ or pwsh)
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1 -Version 15.7
+# Writes dist\bastion-hardening-v15.7.zip
+# Upload that file as the GitHub Release asset (name must match bastion-hardening-v*.zip)
+```
+
+Layout inside the zip: `bastion-hardening-v15.7\Bastion-Hardening.bat` (and siblings). The site download API already allows that asset name pattern.
 
 ---
 
