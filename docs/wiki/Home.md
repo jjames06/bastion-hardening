@@ -51,7 +51,7 @@ This wiki is a short **user handbook**. Deeper technical detail ships **in the r
 - When you know what broke, use **Recovery hubs** (menu **9**) before a full Undo.  
 - System Restore remains the strongest full rollback.
 
-*This handbook aims to match product behavior around **v15.7+**. Always use the [official download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest).*
+*This handbook aims to match product behavior around **v15.8+**. Always use the [official download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest).*
 
 **License:** GNU **GPLv3**. Free to use and modify; distributed modified versions must stay GPLv3 with source (see FAQ).
 

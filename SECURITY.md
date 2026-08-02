@@ -4,12 +4,13 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.7    | Yes (current) |
-| 15.3    | Best-effort until you upgrade (older MIT-era tag; prefer 15.7) |
+| 15.8    | Yes (current) |
+| 15.7    | Best-effort until you upgrade |
+| 15.3    | Best-effort until you upgrade (older MIT-era tag; prefer 15.8) |
 | 15.2    | Best-effort until you upgrade |
 | 15.1    | Best-effort until you upgrade |
 | 15.0    | Best-effort until you upgrade |
-| 15.6    | Unpublished (removed; use 15.7) |
+| 15.6    | Unpublished (removed; use 15.8) |
 | 15.5 / 15.4 | Never published as release tags |
 | < 15.0  | No        |
 
@@ -37,6 +38,7 @@ Full inventory: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 |-------------|---------|
 | First run | Seeds config defaults; rewrites session/browser-state snapshots from **live** detection |
 | Apply history file | `Bastion-LastApply.json` only after a **real** Apply |
+| DNS / RDP undo secrets | DNS snapshot and RDP host prior are **DPAPI-encrypted** in that file; ACL SYSTEM + Administrators. Same elevating account can decrypt; full account compromise still can. See [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) |
 | Encrypted Client Hello (ECH) | Never written unless you opt in under Strict in menu **6** - see [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) |
 | Telemetry to Bastion authors | Bastion does not upload logs or config to a Bastion cloud service as part of normal operation |
 

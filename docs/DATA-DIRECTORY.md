@@ -55,7 +55,7 @@ Each candidate is **write-probed** (create folder if needed, write a short tempo
 | `Bastion-Session.json` | **Rewritten every launch** | Live browser posture vs wanted modes, whether prior config/Apply files existed, data directory path. Proves the store is real; **not** Apply history |
 | `Bastion-BrowserPolicies-State.json` | Created/updated when browser policy state is saved (every launch after init, and after menu **6** changes) | Wanted modes, live detection, last policy change summary |
 | `Bastion-Log-yyyyMMdd-HHmmss.txt` | Each session | Transcript lines for that run |
-| `Bastion-LastApply.json` | **Only after a real Apply** (Quick Harden / Apply that completes undo tracking) | Timestamp, sections run, tracked undo for services and firewall groups |
+| `Bastion-LastApply.json` | **Only after a real Apply** (Quick Harden / Apply that completes undo tracking) | Timestamp, sections run, tracked undo for services and firewall groups. **DNS snapshot** and **RDP host prior** are **DPAPI-encrypted** (`DnsSnapshotProtected`, `RdpHostPriorProtected`; no plaintext servers or prior RDP values on disk). File ACL restricted to SYSTEM + Administrators when Bastion can set it. |
 | `Bastion-Report-*.html` | Only if you export from Help and Reports | Optional HTML snapshot |
 
 ### What is **not** created on first run
@@ -119,6 +119,16 @@ Full section behavior is documented in the in-app Help (menu **11**) and the mai
 - Bastion does **not** upload your logs or config to a network service as part of normal operation.
 - Logs may include paths, hostnames of local adapters, and status lines useful for debugging.
 - When filing an Issue or Discussion, you may attach **redacted** log lines; avoid pasting secrets if you ever put them in custom paths.
+
+### Encrypted Apply undo fields (honest limits)
+
+| Mechanism | What it does | What it does **not** claim |
+|-----------|--------------|----------------------------|
+| **Windows DPAPI** (`CurrentUser` of the elevating account) + Bastion-fixed entropy | DNS snapshot and RDP host prior are unreadable as plaintext in `Bastion-LastApply.json` | Not a password manager; not remote attestation |
+| **File ACL** (SYSTEM + Administrators) | Stops standard local users from reading the undo file when ACL apply succeeds | Does not stop a full admin compromise of the same machine/account |
+| Same elevating user | Bastion can decrypt and restore (Undo / Network recovery option **4**) | A different Windows user, or a stolen offline copy without that user profile/keys, cannot decrypt |
+
+If encryption fails on save, Bastion **does not** fall back to writing plaintext DNS or RDP prior; those fields are simply not stored, and restore is unavailable until a later successful Apply.
 
 ---
 

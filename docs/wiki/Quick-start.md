@@ -10,7 +10,7 @@ Use an **official** source only:
 
 1. **Recommended:** open **https://www.operationlockedin.com/bastion/download** (the site resolves the same GitHub Latest zip), **or** open **https://github.com/jjames06/bastion-hardening/releases/latest**  
 2. Download **`bastion-hardening-v*.zip`** (the current Latest build is also noted in [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17))  
-3. Extract the zip to a location **you** control (for example `C:\Tools\`). Official zips expand to one folder such as `bastion-hardening-v15.7\` with all files already together.  
+3. Extract the zip to a location **you** control (for example `C:\Tools\`). Official zips expand to one folder such as `bastion-hardening-v15.8\` with all files already together.  
 4. Open that folder and confirm: `Bastion-Hardening.bat`, `Bastion-Hardening.ps1` (optional: `Bastion-Banner.utf8.txt`, `docs\`)
 
 **Do not** double-click the `.ps1` file. Start Bastion with the batch launcher.
@@ -36,7 +36,8 @@ A restore point is your strongest full rollback if something goes wrong. If rest
 | Dry Run | **1** | Shows Would change vs Already OK without making system changes |
 | Security audit | **2** | Optional posture sample |
 | Sections | **4** | Enable only what you understand; leave risky options off until you are ready |
-| DNS (optional) | **D** | Choose a public resolver, or leave DNS unchanged |
+| DNS (optional) | **D** | Choose a public resolver, or leave DNS unchanged (Apply snapshots prior DNS, encrypted) |
+| RDP host lock (optional) | Section **RdpHostLock** | Off by default; denies this PC as an RDP host (separate from firewall group lock) |
 | Browsers (optional) | **6** | Applies only to installed Firefox, Chrome, or Brave; ECH is **never** enabled by default |
 | Quick Harden or Apply | **7** or **8** | Restore-point gate, then type **YES** to confirm |
 

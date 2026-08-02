@@ -174,15 +174,16 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 
 **Cause (by design):** Firewall Apply disables inbound rule groups for **Remote Desktop**, **Remote Assistance**, **Windows Remote Management**, **File and Printer Sharing**, **Network Discovery**, and **mDNS**. Profile defaults stay **Inbound=Block**.
 
-**What Bastion does *not* do on Firewall Apply:** It does not rewrite `fDenyTSConnections` or force-stop **TermService** (optional under Network -> Remote access).
+**What Bastion does *not* do on Firewall Apply:** It does not rewrite `fDenyTSConnections` or force-stop **TermService**. Optional section **RdpHostLock** (off by default) can deny the OS RDP host on Apply; Recovery Network -> Remote access can reverse it without full Undo.
 
 **Recovery (preferred):** Main menu **9 -> 3 Network**
 
 | Need | Action |
 |------|--------|
-| RDP / Assistance / WinRM | Network -> **Remote access** |
+| RDP / Assistance / WinRM | Network -> **Remote access** (firewall groups + optional system allow / TermService) |
 | File shares / discovery / mDNS | Network -> **LAN / discovery** |
 | DNS back to DHCP | Network -> **Reset DNS to automatic** |
+| DNS back to pre-Bastion servers | Network -> **Restore prior DNS from last Apply snapshot** (v15.8+; encrypted snapshot required) |
 | Print / SMB service stack | Recovery -> **2 Services** (Spooler, LanmanServer, ...) |
 | Return to Bastion posture | Lock groups again from the same hubs |
 
@@ -191,6 +192,7 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 - Opening remote or LAN paths **increases attack surface**. Keep them locked when idle.  
 - Windows **Home** often cannot host full RDP the way Pro/Enterprise can.  
 - Hosting shares may need both **firewall OPEN** and **LanmanServer** enabled.  
+- DNS snapshot restore is best-effort if adapters were renamed or removed after Apply; decrypt requires the same elevating Windows user.  
 - System Restore remains the strongest full rollback.
 
 ### Related

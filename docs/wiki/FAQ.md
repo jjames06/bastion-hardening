@@ -41,7 +41,8 @@ Deleting that folder does **not** un-harden Windows or remove browser enterprise
 | Goal | Path |
 |------|------|
 | Targeted fix | Main menu **9** Recovery hubs - [Recovery cookbook](Recovery-cookbook) |
-| Last Apply tracked services/firewall | Recovery **→ 1** Undo (partial by design) |
+| Last Apply tracked services/firewall/DNS snapshot/RDP prior | Recovery **→ 1** Undo (partial by design) |
+| Prior DNS after Bastion public resolvers | Recovery **→ 3 Network → 4** Restore snapshot, or **3** DHCP reset |
 | Browser policies | Menu **6** or Recovery **→ 4** → that browser → **Default** |
 | Full rollback | System Restore (menu **13** / **R**, or Safe Mode) |
 
@@ -60,7 +61,7 @@ Firewall Apply locks remote groups on purpose. Open Recovery **→ 3 Network →
 
 ## Will Undo put everything back?
 
-**No.** Undo only restores tracked services and firewall groups from `Bastion-LastApply.json` when present. It does not reinstall Appx/OneDrive, does not restore prior DNS, and does not clear browser enterprise policies.
+**No.** Undo restores tracked services, firewall groups, an encrypted DNS snapshot (when a DNS Apply stored one), and RDP host prior (when RdpHostLock ran). It does not reinstall Appx/OneDrive and does not clear browser enterprise policies (use Recovery browser **Default**). DNS restore is best-effort if adapters changed.
 
 ## Where do I get help?
 
@@ -89,7 +90,7 @@ Handbook pages also live in this wiki and on the product site under `/bastion/do
 
 **Honest limit:** GPLv3 does **not** ban selling software. It bans taking Bastion, making closed proprietary changes, and selling that **without** releasing source under GPLv3. Closed proprietary forks of Bastion are not allowed for distributed modified works.
 
-Older release zips that still contain an MIT `LICENSE` file remain under the terms in those artifacts. Current `main` and **v15.7+** use GPLv3.
+Older release zips that still contain an MIT `LICENSE` file remain under the terms in those artifacts. Current `main` and **v15.7+** (including **v15.8**) use GPLv3.
 
 ## Can I contribute?
 

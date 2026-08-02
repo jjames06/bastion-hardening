@@ -2,7 +2,7 @@
 
 **Selective - State-aware - Safety-first Windows hardening for a personal workstation**
 
-Version **15.7**
+Version **15.8**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -68,7 +68,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.7** | GPLv3; modular Recovery hubs; StrictHandle guidance; handbook/wiki; as of 2026-07-28 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.8** | GPLv3; modular Recovery hubs; encrypted DNS/RDP undo; optional RdpHostLock; handbook/wiki; as of 2026-08-02 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions -> Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -85,7 +85,8 @@ Read these before you run anything:
 - **Create a System Restore Point** before Apply or Quick Harden
 - **ExploitProtection** enables system **StrictHandle**. That can break some programs. **World of Warcraft** is a documented *example* that broke (Bastion now auto-excepts discovered `Wow*.exe`). **CS2** tested OK. **Other titles may still break** until someone reports them and we ship an exception. Reverse properly: Recovery -> **6** -> StrictHandle -> disable system StrictHandle -> **reboot** -> confirm -> **report** game + full `.exe` path on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) or [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23). Details: [Known issues](#known-issues)
 - Disabling Xbox services / removing **Xbox Gaming Overlay** without silencing **Game DVR** can make games show *Get an app to open this ms-gamingoverlay link* - Bastion now silences Game DVR when XboxGaming or overlay removal runs (Recovery -> **5** -> Game Bar)
-- **Firewall Apply** disables remote and LAN discovery inbound groups. Re-open only if needed: Recovery -> **3 Network** (remote access, LAN/discovery, DNS reset). Opening those paths increases attack surface.
+- **Firewall Apply** disables remote and LAN discovery inbound groups. Re-open only if needed: Recovery -> **3 Network** (remote access, LAN/discovery, DNS reset or restore prior snapshot). Opening those paths increases attack surface.
+- **RdpHostLock** (optional section, **off by default**) denies this PC as an RDP host (system policy + TermService). Firewall already locks the Remote Desktop **group** by default; the host lock is separate and reversible via Recovery or Undo.
 - Can break printing (Print Spooler), network discovery, remote desktop / remote management, OneDrive sync, Xbox features, Widgets, and related functionality
 - Intended **only** for a single personal PC you fully control
 - **Not** for work, school, domain-joined, or MDM-managed devices
@@ -122,7 +123,8 @@ A guided, selective hardening assistant for Windows 10/11 that lets you:
 | **State-aware** | Detects live Windows state before changing it; menu prefs live in a durable data directory (not faked Apply history) |
 | **Safety-first** | Restore-point gate, soft failures, honest documentation |
 | **Catalog-only installs** | No free-typed package IDs; never uses `--ignore-security-hash` |
-| **Reversible where practical** | Tracked Undo plus modular Recovery hubs (Services, Network, Security mitigations, Apps/UI, browsers) - single main-menu entry |
+| **Reversible where practical** | Tracked Undo (services, firewall groups, encrypted DNS snapshot, RDP host prior) plus modular Recovery hubs - single main-menu entry |
+| **Honest on-disk state** | Sensitive Apply undo fields (DNS snapshot, RDP prior) are DPAPI-encrypted with a tight ACL; same elevating account can still decrypt (documented) |
 
 System Restore remains the strongest rollback path.
 
@@ -159,12 +161,12 @@ Best for most people. Prefer one of these **official** sources only (not random 
 
 Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). Older pinned tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain on GitHub if you need them.
 
-1. Download **`bastion-hardening-v15.7.zip`** (or the current release asset with a similar name) from the official site or GitHub Latest.
+1. Download **`bastion-hardening-v15.8.zip`** (or the current release asset with a similar name) from the official site or GitHub Latest.
 2. Right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**  
    (reduces SmartScreen / "downloaded from the internet" friction on the extracted scripts)
 3. Extract the zip to a location **you** control, for example `C:\Tools\`.  
    Official release zips expand to a **single folder** such as  
-   `bastion-hardening-v15.7\` with all product files already together inside.  
+   `bastion-hardening-v15.8\` with all product files already together inside.  
    Avoid extracting into `C:\Windows` or Program Files.
 4. Open that folder and confirm these files sit together:
 
@@ -346,7 +348,7 @@ Each candidate is **write-probed**. `%TEMP%\Bastion` can be removed by Disk Clea
 | `Bastion-Config.json` | Seeded on **first elevated run** (or after the store is wiped) | Menu choices: sections, apps, DNS, browser **wanted** modes, ECH Yes/No flags |
 | `Bastion-Session.json` | **Rewritten every launch** | Live vs wanted browser posture; whether prior config/Apply existed. Not Apply history |
 | `Bastion-BrowserPolicies-State.json` | On init and after browser policy changes | Wanted + live modes, last policy change summary |
-| `Bastion-LastApply.json` | **Only after a real Apply** | Undo tracking for services / firewall groups from that Apply |
+| `Bastion-LastApply.json` | **Only after a real Apply** | Undo tracking for services / firewall groups; **DPAPI-encrypted** DNS snapshot and RDP host prior when those sections ran; ACL SYSTEM + Administrators |
 | `Bastion-Log-*.txt` | Each session | Session transcript |
 | `Bastion-Report-*.html` | Only if you export from Help | Optional HTML snapshot |
 | `BastionInstallers/` | On path ensure | Staging for optional install work |
@@ -382,9 +384,10 @@ A connected VPN may override these settings while the tunnel is up. That is expe
 - **Print Spooler** - Disabled by default for security. Quick Harden gives a clear choice to keep it.
 - **OneDrive & BloatApps** - Hard to reverse. System Restore is the reliable recovery path.
 - **Browser policies / Encrypted Client Hello (ECH)** - BrowserPolicies section defaults off. ECH is **never** applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only and ECH can break some sites or networks. Details: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
-- **Undo** - Restores tracked services and firewall groups from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive, and does **not** restore previous DNS servers. Prefer Recovery hubs when you know what broke.
-- **Recovery hubs (menu 9)** - One main-menu entry, six hubs with live status: **1** Undo - **2** Services (Spooler / high-risk / Xbox) - **3** Network (remote access, LAN discovery, DNS reset) - **4** Browser policies - **5** Apps and UI (Copilot, Widgets, Game Bar) - **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
-- **DNS** - Optional. Choose a provider or leave DNS unchanged; VPN software may still override while connected.
+- **Undo** - Restores tracked services, firewall groups, an **encrypted DNS snapshot** (when a DNS Apply stored one), and **RDP host prior** (when **RdpHostLock** ran) from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive. Prefer Recovery hubs when you know what broke.
+- **Recovery hubs (menu 9)** - One main-menu entry, six hubs with live status: **1** Undo - **2** Services (Spooler / high-risk / Xbox) - **3** Network (remote access, LAN discovery, DNS reset to DHCP, **restore prior DNS from snapshot**) - **4** Browser policies - **5** Apps and UI (Copilot, Widgets, Game Bar) - **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
+- **DNS** - Optional. Choose a provider or leave DNS unchanged. Before Bastion changes adapter DNS, it snapshots prior IPv4 servers and stores them **DPAPI-encrypted** for Undo / Network recovery option **4**. VPN software may still override while connected.
+- **RDP triad / RdpHostLock** - Dry Run and Security Audit report firewall Remote Desktop group + system `fDenyTSConnections` + TermService. Optional section **RdpHostLock** (off by default) denies the OS host switch on Apply; prior state is encrypted for Undo.
 - **Custom install paths** - Only allowed on fixed local volumes outside system directories.
 - **Logs and config** - Live under the **data directory** shown on the main menu (prefer `C:\Temp\Bastion`; durable fallbacks; `%TEMP%\Bastion` last). Full file list: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 
@@ -458,12 +461,12 @@ Official assets should extract to **one folder** (not loose files at the zip roo
 
 ```powershell
 # From the repo root (Windows PowerShell 5.1+ or pwsh)
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1 -Version 15.7
-# Writes dist\bastion-hardening-v15.7.zip
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1 -Version 15.8
+# Writes dist\bastion-hardening-v15.8.zip
 # Upload that file as the GitHub Release asset (name must match bastion-hardening-v*.zip)
 ```
 
-Layout inside the zip: `bastion-hardening-v15.7\Bastion-Hardening.bat` (and siblings). The site download API already allows that asset name pattern.
+Layout inside the zip: `bastion-hardening-v15.8\Bastion-Hardening.bat` (and siblings). The site download API already allows that asset name pattern.
 
 ---
 

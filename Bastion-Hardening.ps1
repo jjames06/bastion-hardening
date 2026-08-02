@@ -1,13 +1,14 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.7 FINAL
+    Bastion Hardening Framework v15.8 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
 .NOTES
-    Version 15.7 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.8 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
+    v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
 #>
 
 $ErrorActionPreference = "Continue"
@@ -15,7 +16,7 @@ $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
 $script:Config = @{
-    ScriptVersion = "15.7"
+    ScriptVersion = "15.8"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     EventSource   = "BastionHardening"
@@ -234,6 +235,8 @@ $script:DefaultSections = [ordered]@{
     "BloatApps"            = $false
     "Suggestions"          = $false
     "CopilotM365"          = $false
+    # Opt-in: deny system RDP host (fDenyTSConnections + TermService). Firewall still locks the RD group by default.
+    "RdpHostLock"          = $false
 }
 
 $script:QuickSections = @(
@@ -250,9 +253,9 @@ $script:SectionDocs = [ordered]@{
     "Firewall" = @{
         Intent  = "Reduce unsolicited inbound exposure while keeping normal outbound traffic working (browsing, VPN, Windows Update)."
         Changes = "Enables the firewall on Domain, Private, and Public profiles; sets DefaultInboundAction=Block and leaves DefaultOutboundAction=Allow; disables inbound rule groups for File and Printer Sharing, Network Discovery, Remote Assistance, Remote Desktop, Windows Remote Management, and mDNS when those groups are present and enabled."
-        Impact  = "Inbound discovery, SMB sharing, RDP, and WinRM from the network are blocked unless you later re-enable specific rules. Outbound apps continue to work."
+        Impact  = "Inbound discovery, SMB sharing, RDP, and WinRM from the network are blocked unless you later re-enable specific rules. Outbound apps continue to work. Does not by itself change fDenyTSConnections or TermService (see optional RdpHostLock)."
         Revert  = "Recovery > 3 Network: Remote access (RDP/Assistance/WinRM) and LAN/discovery (File Sharing, Network Discovery, mDNS) with live OPEN/LOCKED status. Recovery > 1 Undo restores tracked groups from last Apply. Or use wf.msc / System Restore."
-        Notes   = "Verify with Get-NetFirewallProfile and Get-NetFirewallRule. This is profile hardening plus group toggles, not a full custom rule set. Enabling remote or LAN groups increases attack surface; only open what you need."
+        Notes   = "Verify with Get-NetFirewallProfile and Get-NetFirewallRule. Full RDP host needs OPEN Remote Desktop group + system allow + TermService. Dry Run and Audit report the RDP triad (firewall group, system policy, TermService)."
     }
     "HighRiskServices" = @{
         Intent  = "Turn off local services that are common attack surface or rarely needed on a single hardened workstation."
@@ -284,10 +287,17 @@ $script:SectionDocs = [ordered]@{
     }
     "DNS" = @{
         Intent  = "Optionally set eligible network adapters to a user-chosen public recursive DNS provider, or leave DNS unchanged."
-        Changes = "When a provider is selected (menu D), sets IPv4 DNS on active adapters via Set-DnsClientServerAddress. Providers: Quad9 malware-blocking, Cloudflare 1.1.1.1, Cloudflare security 1.1.1.2, Google Public DNS, Cisco OpenDNS. Choose 'Do not change DNS' to skip."
+        Changes = "When a provider is selected (menu D), sets IPv4 DNS on active adapters via Set-DnsClientServerAddress. Before changing, Bastion snapshots prior IPv4 DNS per eligible adapter and stores it DPAPI-protected in Bastion-LastApply.json. Providers: Quad9 malware-blocking, Cloudflare 1.1.1.1, Cloudflare security 1.1.1.2, Google Public DNS, Cisco OpenDNS. Choose 'Do not change DNS' to skip."
         Impact  = "Name resolution uses the chosen resolver while those adapter settings apply. A connected VPN may override DNS while the tunnel is up; that is expected."
-        Revert  = "Recovery > 3 Network > Reset DNS to automatic (DHCP) on eligible adapters. Menu D still holds Bastion intent for the next Apply. VPN apps may override while connected. Undo does not restore prior DNS servers."
-        Notes   = "Default provider is Quad9. Dry Run and Audit compare the first configured IPv4 DNS server per adapter against the selected primary."
+        Revert  = "Recovery > 3 Network: (3) Reset DNS to automatic (DHCP), or (4) Restore prior DNS from last Apply snapshot when present. Undo also restores snapshot when available. Best-effort if adapters changed. VPN may still override while connected."
+        Notes   = "Default provider is Quad9. Dry Run and Audit compare the first configured IPv4 DNS server per adapter against the selected primary. Snapshot is encrypted with Windows DPAPI (CurrentUser of the elevating account)."
+    }
+    "RdpHostLock" = @{
+        Intent  = "Optionally deny this PC as a Remote Desktop host (workstation that should not accept RDP logons)."
+        Changes = "When enabled: sets fDenyTSConnections=1 and stops TermService (Remote Desktop Services) with startup Manual. Prior system allow and TermService start type are tracked for Undo."
+        Impact  = "This PC will not accept Remote Desktop sessions until restored. Outbound RDP clients are unaffected. Windows Home may not host RDP even when unlocked."
+        Revert  = "Recovery > 3 Network > Remote access (system allow + TermService), or Undo when RdpHostPrior was saved. Firewall Remote Desktop group is separate (Firewall section)."
+        Notes   = "Off by default. Firewall Apply already locks the Remote Desktop inbound group. Use this only if you also want the OS host switch denied."
     }
     "Defender" = @{
         Intent  = "Turn on stronger Microsoft Defender workstation protections that are often left off by default."
@@ -2775,6 +2785,175 @@ function Get-AdapterDnsServers {
     }
 }
 
+# Optional entropy scopes DPAPI blobs to Bastion (not a password; Local admin can still attack CurrentUser of same account).
+$script:BastionDpapiEntropy = [System.Text.Encoding]::UTF8.GetBytes("BastionHardening.ProtectedState.v15.8")
+
+function Protect-BastionBlob {
+    param([Parameter(Mandatory)][string]$PlainText)
+    try {
+        Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue | Out-Null
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($PlainText)
+        $prot = [System.Security.Cryptography.ProtectedData]::Protect(
+            $bytes,
+            $script:BastionDpapiEntropy,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+        )
+        return [Convert]::ToBase64String($prot)
+    } catch {
+        Write-Log ("Protect-BastionBlob failed: {0}" -f $_.Exception.Message) -Level Warning
+        return $null
+    }
+}
+
+function Unprotect-BastionBlob {
+    param([Parameter(Mandatory)][string]$Base64)
+    try {
+        if ([string]::IsNullOrWhiteSpace($Base64)) { return $null }
+        Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue | Out-Null
+        $prot = [Convert]::FromBase64String($Base64)
+        $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
+            $prot,
+            $script:BastionDpapiEntropy,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+        )
+        return [System.Text.Encoding]::UTF8.GetString($bytes)
+    } catch {
+        Write-Log ("Unprotect-BastionBlob failed: {0}" -f $_.Exception.Message) -Level Warning
+        return $null
+    }
+}
+
+function Set-BastionSensitiveFileAcl {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    try {
+        # SYSTEM + Administrators only; strip inherited ACEs so local standard users cannot read undo blobs.
+        $acl = Get-Acl -LiteralPath $Path
+        $acl.SetAccessRuleProtection($true, $false)
+        $rules = @($acl.Access)
+        foreach ($r in $rules) {
+            try { [void]$acl.RemoveAccessRule($r) } catch {}
+        }
+        $system = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "NT AUTHORITY\SYSTEM", "FullControl", "Allow"
+        )
+        $admins = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "BUILTIN\Administrators", "FullControl", "Allow"
+        )
+        $acl.AddAccessRule($system)
+        $acl.AddAccessRule($admins)
+        Set-Acl -LiteralPath $Path -AclObject $acl
+    } catch {
+        Write-Log ("Set-BastionSensitiveFileAcl failed: {0}" -f $_.Exception.Message) -Level Warning
+    }
+}
+
+function Get-BastionDnsSnapshot {
+    $adapters = @()
+    foreach ($a in @(Get-BastionDnsAdapters)) {
+        try {
+            $servers = @(Get-AdapterDnsServers -InterfaceIndex $a.ifIndex)
+            $guid = ""
+            try { $guid = [string]$a.InterfaceGuid } catch { $guid = "" }
+            $adapters += [ordered]@{
+                Name           = [string]$a.Name
+                InterfaceIndex = [int]$a.ifIndex
+                InterfaceGuid  = $guid
+                Servers        = @($servers | ForEach-Object { [string]$_ })
+                WasEmpty       = ($servers.Count -eq 0)
+            }
+        } catch {}
+    }
+    return [ordered]@{
+        CapturedAt = (Get-Date -Format "o")
+        Version    = 1
+        Adapters   = $adapters
+    }
+}
+
+function Restore-BastionDnsFromSnapshot {
+    param($Snapshot)
+    if ($null -eq $Snapshot) {
+        Write-Status "No DNS snapshot available to restore" "Warn"
+        return $false
+    }
+    $list = @()
+    try {
+        if ($Snapshot.Adapters) { $list = @($Snapshot.Adapters) }
+    } catch {}
+    if ($list.Count -eq 0) {
+        Write-Status "DNS snapshot is empty" "Warn"
+        return $false
+    }
+    $now = @(Get-BastionDnsAdapters)
+    $n = 0
+    foreach ($row in $list) {
+        $name = [string]$row.Name
+        $guid = [string]$row.InterfaceGuid
+        $match = $null
+        if ($guid) {
+            $match = $now | Where-Object { [string]$_.InterfaceGuid -eq $guid } | Select-Object -First 1
+        }
+        if (-not $match -and $name) {
+            $match = $now | Where-Object { [string]$_.Name -eq $name } | Select-Object -First 1
+        }
+        if (-not $match) {
+            Write-Status ("DNS restore skipped (adapter not found): {0}" -f $name) "Warn"
+            continue
+        }
+        try {
+            $servers = @()
+            try {
+                if ($null -eq $row.Servers) { $servers = @() }
+                elseif ($row.Servers -is [string]) { $servers = @([string]$row.Servers) }
+                else { $servers = @($row.Servers | ForEach-Object { [string]$_ } | Where-Object { $_ }) }
+            } catch { $servers = @() }
+            $wasEmpty = $false
+            try { $wasEmpty = [bool]$row.WasEmpty } catch {}
+            if ($wasEmpty -or $servers.Count -eq 0) {
+                Set-DnsClientServerAddress -InterfaceIndex $match.ifIndex -ResetServerAddresses -ErrorAction Stop
+                Write-Status ("{0}: prior DNS was automatic/empty; reset to DHCP" -f $match.Name) "Applied"
+            } else {
+                Set-DnsClientServerAddress -InterfaceIndex $match.ifIndex -ServerAddresses $servers -ErrorAction Stop
+                Write-Status ("{0}: restored prior DNS ({1})" -f $match.Name, ($servers -join ", ")) "Applied"
+            }
+            $n++
+        } catch {
+            Write-Status ("DNS restore failed on {0}: {1}" -f $match.Name, $_.Exception.Message) "Failed"
+        }
+    }
+    Write-Host "  Bastion menu D provider preference is unchanged. VPN may still override DNS while connected." -ForegroundColor DarkGray
+    Write-Host "  Snapshot restore is best-effort if adapters were renamed or removed after Apply." -ForegroundColor DarkGray
+    Write-Log ("Restore-BastionDnsFromSnapshot restored={0}" -f $n) -NoConsole
+    return ($n -gt 0)
+}
+
+function Test-BastionUndoHasDnsSnapshot {
+    param($UndoData)
+    if ($null -eq $UndoData) { return $false }
+    try {
+        if ($UndoData.HasDnsSnapshot -eq $true) { return $true }
+        if ($UndoData.DnsSnapshotProtected) { return $true }
+    } catch {}
+    return $false
+}
+
+function Get-BastionDnsSnapshotFromUndo {
+    param($UndoData)
+    if ($null -eq $UndoData) { return $null }
+    try {
+        if ($UndoData.DnsSnapshotProtected) {
+            $plain = Unprotect-BastionBlob -Base64 ([string]$UndoData.DnsSnapshotProtected)
+            if ($plain) {
+                return ($plain | ConvertFrom-Json)
+            }
+            Write-Status "Could not decrypt DNS snapshot (wrong Windows user or damaged file)" "Warn"
+            return $null
+        }
+    } catch {}
+    return $null
+}
+
 function Test-AdapterDnsMatchesProvider {
     param(
         [int]$InterfaceIndex,
@@ -2925,20 +3104,73 @@ function Load-BastionConfig {
 function Save-UndoData($Data) {
     if (-not (Ensure-BastionPaths)) { return }
     try {
-        $Data | ConvertTo-Json -Depth 8 | Out-File -LiteralPath $script:undoFile -Encoding utf8 -Force
+        # Never write plaintext DNS history; store DPAPI-protected blob only.
+        if ($Data -is [hashtable] -and $Data.ContainsKey("DnsSnapshot") -and $Data["DnsSnapshot"]) {
+            $snapJson = ($Data["DnsSnapshot"] | ConvertTo-Json -Depth 8 -Compress)
+            $blob = Protect-BastionBlob -PlainText $snapJson
+            if ($blob) {
+                $Data["DnsSnapshotProtected"] = $blob
+                $Data["HasDnsSnapshot"] = $true
+            } else {
+                Write-Log "DNS snapshot encryption failed; snapshot not stored" -Level Warning
+                $Data["HasDnsSnapshot"] = $false
+            }
+            [void]$Data.Remove("DnsSnapshot")
+        }
+        # RDP host prior is low sensitivity but encrypted for the same honest on-disk story.
+        if ($Data -is [hashtable] -and $Data.ContainsKey("RdpHostPrior") -and $Data["RdpHostPrior"]) {
+            $priorJson = ($Data["RdpHostPrior"] | ConvertTo-Json -Depth 6 -Compress)
+            $priorBlob = Protect-BastionBlob -PlainText $priorJson
+            if ($priorBlob) {
+                $Data["RdpHostPriorProtected"] = $priorBlob
+            } else {
+                Write-Log "RDP host prior encryption failed; prior not stored (Undo cannot restore RDP host)" -Level Warning
+                $Data["RdpHostLocked"] = $false
+            }
+            [void]$Data.Remove("RdpHostPrior")
+        }
+        $Data | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $script:undoFile -Encoding utf8 -Force
+        Set-BastionSensitiveFileAcl -Path $script:undoFile
     } catch {
         Write-Log ("Undo save failed: {0}" -f $_.Exception.Message) -Level Warning
     }
 }
 
-function Get-LastApplyInfo {
+function Get-BastionRdpHostPriorFromUndo {
+    param($UndoData)
+    if ($null -eq $UndoData) { return $null }
+    try {
+        if ($UndoData.RdpHostPriorProtected) {
+            $plain = Unprotect-BastionBlob -Base64 ([string]$UndoData.RdpHostPriorProtected)
+            if ($plain) { return ($plain | ConvertFrom-Json) }
+            Write-Status "Could not decrypt RDP host prior (wrong Windows user or damaged file)" "Warn"
+            return $null
+        }
+        # Legacy / intermediate builds may have stored prior in plaintext.
+        if ($UndoData.RdpHostPrior) { return $UndoData.RdpHostPrior }
+    } catch {}
+    return $null
+}
+
+function Read-BastionUndoData {
     if (-not (Test-Path -LiteralPath $script:undoFile)) { return $null }
     try {
-        $d = Get-Content -LiteralPath $script:undoFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        return (Get-Content -LiteralPath $script:undoFile -Raw -ErrorAction Stop | ConvertFrom-Json)
+    } catch {
+        return $null
+    }
+}
+
+function Get-LastApplyInfo {
+    $d = Read-BastionUndoData
+    if (-not $d) { return $null }
+    try {
         return [PSCustomObject]@{
             Timestamp = $d.Timestamp
             ScriptVersion = $d.ScriptVersion
             SectionsRun = @($d.SectionsRun)
+            HasDnsSnapshot = [bool](Test-BastionUndoHasDnsSnapshot -UndoData $d)
+            RdpHostLocked = [bool]($d.RdpHostLocked)
         }
     } catch { return $null }
 }
@@ -3176,6 +3408,30 @@ function Invoke-DryRun {
                 Show-DryItem "Firewall" "Would change" "Set profiles Enabled + Inbound=Block; disable discovery/RDP/WinRM/mDNS inbound groups if enabled"
             }
         } catch { Show-DryItem "Firewall" "Would change" "Could not read profiles; Apply would set Inbound=Block" }
+        # RDP triad (informational): firewall group vs OS host switch vs TermService
+        try {
+            $rdg = Get-BastionFirewallGroupInboundStatus -DisplayGroup "Remote Desktop"
+            $rdp = Get-BastionRemoteDesktopSystemStatus
+            Show-DryItem "RDP triad (live)" "Already OK" ("Firewall group={0}; system={1}; TermService={2}/{3}" -f `
+                $rdg.Label, $rdp.SystemLabel, $rdp.ServiceStatus, $rdp.ServiceStartType)
+        } catch {
+            Show-DryItem "RDP triad (live)" "Skipped" "Could not query RDP host status"
+        }
+    }
+
+    if (-not $script:Sections["RdpHostLock"]) {
+        Show-DryItem "RdpHostLock" "Skipped" "Section off (optional OS RDP host deny; enable under option 4 if needed)"
+    } else {
+        try {
+            $rdp = Get-BastionRemoteDesktopSystemStatus
+            if ($rdp.SystemLabel -eq "DENIED" -and $rdp.ServiceStartType -ne "Automatic") {
+                Show-DryItem "RdpHostLock" "Already OK" "System RDP denied and TermService not Automatic"
+            } else {
+                Show-DryItem "RdpHostLock" "Would change" "Deny system RDP (fDenyTSConnections=1) and set TermService Manual/stopped"
+            }
+        } catch {
+            Show-DryItem "RdpHostLock" "Would change" "Deny system RDP host + TermService Manual"
+        }
     }
 
     if (-not $script:Sections["HighRiskServices"]) { Show-DryItem "HighRiskServices" "Skipped" "Section disabled" }
@@ -3232,12 +3488,12 @@ function Invoke-DryRun {
             if ($need.Count -eq 0 -and $ok.Count -gt 0) {
                 Show-DryItem "DNS" "Already OK" ("{0}-first on: {1} (VPN may still override while connected)" -f $prov.DisplayName, ($ok -join ", "))
             } elseif ($ok.Count -gt 0) {
-                Show-DryItem "DNS" "Would change" ("Need {0} on: {1}; already OK: {2}" -f $prov.DisplayName, ($need -join ", "), ($ok -join ", "))
+                Show-DryItem "DNS" "Would change" ("Snapshot prior DNS (encrypted), then set {0} on: {1}; already OK: {2}" -f $prov.DisplayName, ($need -join ", "), ($ok -join ", "))
             } else {
-                Show-DryItem "DNS" "Would change" ("Set eligible adapters to {0} ({1})" -f $prov.DisplayName, $label)
+                Show-DryItem "DNS" "Would change" ("Snapshot prior DNS (encrypted), then set eligible adapters to {0} ({1})" -f $prov.DisplayName, $label)
             }
         } catch {
-            Show-DryItem "DNS" "Would change" ("Set eligible adapters to {0} (could not fully query current DNS)" -f $prov.DisplayName)
+            Show-DryItem "DNS" "Would change" ("Snapshot prior DNS if needed; set eligible adapters to {0}" -f $prov.DisplayName)
         }
     }
 
@@ -3450,10 +3706,11 @@ function Show-ApplyPreview {
             "DNS" {
                 $p = Get-BastionDnsProvider
                 if ($script:DnsProviderId -eq "None" -or -not $p.Primary) { " [leave unchanged]" }
-                else { (" -> {0} ({1})" -f $p.DisplayName, $p.Primary) }
+                else { (" -> {0} ({1}); prior DNS snapshotted encrypted" -f $p.DisplayName, $p.Primary) }
             }
             "HighRiskServices" { " [includes Print Spooler]" }
             "Firewall" { " [locks remote/LAN groups; Recovery > 3 Network to re-open]" }
+            "RdpHostLock" { " [opt-in: deny fDenyTSConnections + TermService Manual]" }
             "Programs" {
                 if ($script:SelectedApps.Count) { (" -> {0}" -f ($script:SelectedApps -join ", ")) } else { " -> none" }
             }
@@ -3725,6 +3982,21 @@ function Invoke-SelfTest {
             Add-Warn "Sensitive listen ports" ($interesting -join ", ") "All-interface listeners" "Review services / Firewall"
         }
     } catch { Add-Warn "Sensitive listen ports" "Query failed" $_.Exception.Message }
+
+    try {
+        $rdg = Get-BastionFirewallGroupInboundStatus -DisplayGroup "Remote Desktop"
+        $rdp = Get-BastionRemoteDesktopSystemStatus
+        $detail = ("group={0}; system={1}; TermService={2}/{3}" -f $rdg.Label, $rdp.SystemLabel, $rdp.ServiceStatus, $rdp.ServiceStartType)
+        if ($rdg.Label -eq "LOCKED" -and $rdp.SystemLabel -eq "DENIED") {
+            Add-Good "RDP triad" "Firewall locked + system denied" $detail "Full host needs OPEN group + ALLOWED + TermService"
+        } elseif ($rdg.Label -eq "LOCKED") {
+            Add-Good "RDP triad" "Firewall group locked" $detail "System host may still be ALLOWED; optional RdpHostLock section"
+        } elseif ($rdp.SystemLabel -eq "ALLOWED" -and $rdg.Label -eq "OPEN") {
+            Add-Warn "RDP triad" "Host path open" $detail "Network Recovery or Firewall Apply"
+        } else {
+            Add-Warn "RDP triad" "Mixed" $detail "Recovery > 3 Network > Remote access"
+        }
+    } catch { Add-Warn "RDP triad" "Query failed" }
 
     Write-AuditCategory "Services / Tasks"
     try {
@@ -4111,6 +4383,8 @@ function Show-SectionMenu {
                     $p = Get-BastionDnsProvider
                     $suffix = ("  -> {0}" -f $p.DisplayName)
                 }
+            } elseif ($n -eq "RdpHostLock") {
+                $suffix = "  (opt-in: deny OS RDP host)"
             }
             Write-Host ("  {0,2}. {1}  {2}{3}" -f ($i + 1), $mark, $n, $suffix) `
                 -ForegroundColor $(if ($script:Sections[$n]) { "Green" } else { "DarkGray" })
@@ -4844,11 +5118,9 @@ function Invoke-UndoHardening {
     Clear-BastionScreen
     Write-Header "UNDO LAST HARDENING"
     Write-Host "  Best-effort only. System Restore is stronger for full rollback." -ForegroundColor Yellow
+    Write-Host "  Restores tracked services, firewall groups, prior DNS snapshot (if any), and RDP host prior (if locked)." -ForegroundColor DarkGray
     if (-not (Read-ConfirmYes -Prompt "  Type YES to attempt Undo")) { return }
-    $undoData = $null
-    if (Test-Path -LiteralPath $script:undoFile) {
-        try { $undoData = Get-Content -LiteralPath $script:undoFile -Raw | ConvertFrom-Json } catch {}
-    }
+    $undoData = Read-BastionUndoData
     try {
         Set-Service Spooler -StartupType Automatic -ErrorAction SilentlyContinue
         Start-Service Spooler -ErrorAction SilentlyContinue
@@ -4874,6 +5146,38 @@ function Invoke-UndoHardening {
                     Where-Object { $_.Direction -eq "Inbound" } |
                     Set-NetFirewallRule -Enabled True -Confirm:$false -ErrorAction SilentlyContinue
             } catch {}
+        }
+    }
+    if (Test-BastionUndoHasDnsSnapshot -UndoData $undoData) {
+        Write-Host "  [DNS] Restoring prior DNS from encrypted snapshot..." -ForegroundColor Cyan
+        $snap = Get-BastionDnsSnapshotFromUndo -UndoData $undoData
+        if ($snap) {
+            [void](Restore-BastionDnsFromSnapshot -Snapshot $snap)
+        }
+    }
+    if ($undoData -and $undoData.RdpHostLocked) {
+        $prior = Get-BastionRdpHostPriorFromUndo -UndoData $undoData
+        if ($prior) {
+            Write-Host "  [RDP host] Restoring prior system RDP / TermService state..." -ForegroundColor Cyan
+            try {
+                $deny = 1
+                try { $deny = [int]$prior.fDenyTSConnections } catch { $deny = 1 }
+                $path = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
+                Set-ItemProperty -Path $path -Name fDenyTSConnections -Value $deny -Type DWord -Force -ErrorAction Stop
+                Write-Status ("fDenyTSConnections restored to {0}" -f $deny) "Applied"
+                $st = "Manual"
+                try { $st = [string]$prior.ServiceStartType } catch {}
+                if ($st -notin @("Automatic","Manual","Disabled")) { $st = "Manual" }
+                Set-Service -Name TermService -StartupType $st -ErrorAction SilentlyContinue
+                if ($deny -eq 0 -and $st -eq "Automatic") {
+                    Start-Service -Name TermService -ErrorAction SilentlyContinue
+                }
+                Write-Status ("TermService start type restored to {0}" -f $st) "Applied"
+            } catch {
+                Write-Status ("RDP host restore failed: {0}" -f $_.Exception.Message) "Failed"
+            }
+        } else {
+            Write-Host "  [RDP host] Prior state unavailable (decrypt failed or not stored). Use Recovery > 3 Network > Remote access." -ForegroundColor Yellow
         }
     }
     Write-Host "  Undo finished (partial by design). Next step if issues remain: System Restore." -ForegroundColor Green
@@ -5747,6 +6051,11 @@ function Show-NetworkRecoveryMenu {
             $color = if ($st.Label -eq "OPEN") { "Yellow" } elseif ($st.Label -eq "LOCKED") { "Green" } else { "DarkGray" }
             Write-Host ("    {0,-28} {1}" -f $g, $st.Label) -ForegroundColor $color
         }
+        try {
+            $rdpLive = Get-BastionRemoteDesktopSystemStatus
+            Write-Host ("  -- RDP host (system) --  allow={0}  TermService={1}/{2}" -f `
+                $rdpLive.SystemLabel, $rdpLive.ServiceStatus, $rdpLive.ServiceStartType) -ForegroundColor DarkCyan
+        } catch {}
         Write-Host "  -- LAN / discovery groups --" -ForegroundColor DarkCyan
         foreach ($g in $script:LanDiscoveryFirewallGroups) {
             $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
@@ -5765,17 +6074,25 @@ function Show-NetworkRecoveryMenu {
             }
         }
         Write-Host ("  Bastion DNS intent: {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
+        $undoPeek = Read-BastionUndoData
+        $hasSnap = Test-BastionUndoHasDnsSnapshot -UndoData $undoPeek
+        Write-Host ("  Prior DNS snapshot (last Apply): {0}" -f $(if ($hasSnap) { "available (encrypted)" } else { "none" })) -ForegroundColor DarkGray
         Write-Host ""
         Write-Host "  What this hub is for" -ForegroundColor Cyan
         Write-Host "    Firewall Apply locks remote and LAN discovery groups. Menu D / DNS section sets resolvers." -ForegroundColor White
-        Write-Host "    Use the submenus below to open, lock, or reset without full Undo." -ForegroundColor White
+        Write-Host "    Use the submenus below to open, lock, reset, or restore without full Undo." -ForegroundColor White
         Write-Host ""
         Write-Host "  1  Remote access (RDP / Assistance / WinRM + optional system RDP)" -ForegroundColor Cyan
         Write-Host "  2  LAN / discovery (File Sharing, Network Discovery, mDNS)" -ForegroundColor White
         Write-Host "  3  Reset DNS on eligible adapters to automatic (DHCP)" -ForegroundColor Yellow
+        if ($hasSnap) {
+            Write-Host "  4  Restore prior DNS from last Apply snapshot (best-effort)" -ForegroundColor Yellow
+        } else {
+            Write-Host "  4  Restore prior DNS (unavailable - no snapshot)" -ForegroundColor DarkGray
+        }
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
-        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3")
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4")
         switch ($c) {
             "0" { return }
             "1" { Show-RemoteAccessRecoveryMenu }
@@ -5787,6 +6104,23 @@ function Show-NetworkRecoveryMenu {
                 Write-Host "  VPN clients may still override DNS while connected." -ForegroundColor DarkGray
                 if ((Read-YesNo -Prompt "  Reset adapter DNS to automatic now (Y/N)?") -eq "Y") {
                     [void](Reset-BastionDnsToAutomatic)
+                }
+                Wait-ForKey "Press any key to return to Network recovery..."
+            }
+            "4" {
+                Write-Host ""
+                if (-not $hasSnap) {
+                    Write-Host "  No encrypted DNS snapshot from a Bastion Apply was found." -ForegroundColor Yellow
+                    Write-Host "  Snapshots are taken when DNS Apply changes adapters (v15.8+)." -ForegroundColor DarkGray
+                    Wait-ForKey "Press any key to return to Network recovery..."
+                    continue
+                }
+                Write-Host "  Restores IPv4 DNS servers captured before the last Bastion DNS Apply (or DHCP if empty)." -ForegroundColor Yellow
+                Write-Host "  Best-effort if adapters were renamed or removed. Menu D preference is unchanged." -ForegroundColor DarkGray
+                Write-Host "  VPN may still override DNS while connected." -ForegroundColor DarkGray
+                if ((Read-YesNo -Prompt "  Restore prior DNS from snapshot now (Y/N)?") -eq "Y") {
+                    $snap = Get-BastionDnsSnapshotFromUndo -UndoData $undoPeek
+                    if ($snap) { [void](Restore-BastionDnsFromSnapshot -Snapshot $snap) }
                 }
                 Wait-ForKey "Press any key to return to Network recovery..."
             }
@@ -6197,9 +6531,9 @@ function Show-RecoveryMenu {
         Write-Header "RECOVERY / FIX"
         Write-Host "  Modular hubs (status + targeted reverse). Prefer these over full Undo when you know what broke." -ForegroundColor DarkGray
         Write-Host ""
-        Write-Host "  1  Undo last hardening (tracked services / firewall groups from last Apply only)"
+        Write-Host "  1  Undo last hardening (services, firewall groups, DNS snapshot, RDP host prior when saved)"
         Write-Host "  2  Services (Spooler, high-risk stack, Xbox)" -ForegroundColor White
-        Write-Host "  3  Network (remote access, LAN discovery, DNS reset)" -ForegroundColor Cyan
+        Write-Host "  3  Network (remote access, LAN discovery, DNS reset / restore)" -ForegroundColor Cyan
         Write-Host "  4  Browser policies (per browser; Default reverts Bastion policies)"
         Write-Host "  5  Apps and UI (Copilot, Widgets/Suggestions, Game Bar)" -ForegroundColor Green
         Write-Host "  6  Security mitigations (StrictHandle, Defender, LSA, policies/tasks)" -ForegroundColor Yellow
@@ -6499,22 +6833,22 @@ function Show-Help {
         "## Recovery design (option 9) - modular, not bloated",
         "Main menu still has a single Recovery entry. Inside are six hubs with live status and targeted reverse. Prefer a hub over full Undo when you know what broke.",
         "## Recovery hubs",
-        "1 Undo last hardening - services and firewall groups tracked in Bastion-LastApply.json only (partial by design).",
+        "1 Undo last hardening - services, firewall groups, encrypted DNS snapshot (when present), and RDP host prior (when RdpHostLock was applied). Partial by design.",
         "2 Services - Print Spooler, HighRiskServices stack (file share, UPnP, Remote Registry, ...), Xbox services. Enable one, all present, or re-disable Bastion-style.",
-        "3 Network - Remote access (RDP/Assistance/WinRM + optional fDenyTSConnections/TermService), LAN/discovery (File Sharing, Network Discovery, mDNS), DNS reset to automatic on eligible adapters.",
+        "3 Network - Remote access (RDP/Assistance/WinRM + optional fDenyTSConnections/TermService), LAN/discovery, DNS reset to DHCP, restore prior DNS from last Apply snapshot (encrypted).",
         "4 Browser policies - same as main menu 6 for installed Firefox/Chrome/Brave. Default reverts that browser (best-effort).",
         "5 Apps and UI - Copilot/M365 tools, Widgets/Suggestions restore, Game Bar / ms-gamingoverlay silence or reverse.",
         "6 Security mitigations - StrictHandle (disable / refresh exceptions / re-enable), Defender NP/CFA, policies/tasks (DO, PowerShell logging, LSA, CEIP tasks).",
         "## Honesty rules shared by hubs",
         "Status is live from Windows. Enabling services or OPEN firewall groups increases attack surface; LOCKED/DISABLED is the safer default after harden.",
-        "Firewall hubs only toggle named groups (not profile Inbound=Block). DNS reset clears adapter static DNS; menu D intent may re-apply on next DNS Apply. VPN may override DNS.",
-        "Full host RDP usually needs OPEN Remote Desktop + system ALLOWED + TermService. Windows Home may not host RDP like Pro.",
+        "Firewall hubs only toggle named groups (not profile Inbound=Block). DNS: option 3 = DHCP; option 4 = restore snapshot when available. Menu D intent may re-apply on next DNS Apply. VPN may override DNS.",
+        "RDP triad: firewall Remote Desktop group + system fDenyTSConnections + TermService. Optional section RdpHostLock denies the host switch on Apply (off by default). Windows Home may not host RDP like Pro.",
         "StrictHandle: World of Warcraft is one documented example (now auto-excepted). Other programs may break with no exception until reported and we ship one. Disable system StrictHandle + reboot, report, wait for update, then re-enable.",
         "Softening Defender reduces blocking strength. Appx bloat and OneDrive are not reinstallable here - System Restore or vendor installers.",
         "## System Restore",
         "Preferred full rollback. Create points from menu 13 or R. If Windows will not log on normally: hold Shift while selecting Restart, open Troubleshoot > Advanced > Startup Settings > Restart, then Safe Mode, then rstrui.exe.",
         "## Honest limits of Undo",
-        "Undo does not reinstall Appx/OneDrive, does not restore prior DNS servers, and does not clear browser enterprise policies (use Recovery > 4 Default). Hubs work even when Bastion-LastApply.json is missing."
+        "Undo does not reinstall Appx/OneDrive and does not clear browser enterprise policies (use Recovery > 4 Default). DNS snapshot restore is best-effort if adapters changed. DPAPI protects the snapshot for the elevating Windows user; a full compromise of that account can still decrypt. Hubs work even when Bastion-LastApply.json is missing."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -6527,7 +6861,8 @@ function Show-Help {
         "Bastion-Session.json - rewritten every launch: live browser posture vs wanted modes; proves the store is real. Not Apply history.",
         "Bastion-BrowserPolicies-State.json - wanted + live browser modes, ECH live/wanted, last policy change summary.",
         "browser-policy-backups/ - snapshots taken before Bastion overwrites browser policies (menu 6).",
-        "Bastion-LastApply.json - only after a real Apply: timestamp, sections run, tracked undo data. Missing = no Bastion Apply undo yet.",
+        "Bastion-LastApply.json - only after a real Apply: timestamp, sections run, tracked undo (services, firewall groups). DNS snapshot and RDP host prior are DPAPI-encrypted (DnsSnapshotProtected / RdpHostPriorProtected), not plaintext. File ACL: SYSTEM + Administrators when Bastion can set it. Missing file = no Bastion Apply undo yet.",
+        "DPAPI honesty: blobs use Windows DPAPI CurrentUser for the account that elevates Bastion, plus optional Bastion entropy. Bastion can decrypt on the same user session. A full compromise of that Windows account can still decrypt. A different user or offline copy of the file alone is not enough. This is not a password vault.",
         "Bastion-Log-*.txt - session transcript lines for support and review.",
         "Bastion-Report-*.html - optional HTML snapshot from Help and Reports.",
         "BastionInstallers/ - staging folder under the data directory for optional install work.",
@@ -6764,6 +7099,9 @@ function Invoke-ApplyHardening {
         BrowserPolicyModes = [ordered]@{}
         BrowserEchLocks = [ordered]@{}
         DnsProviderId = $script:DnsProviderId
+        HasDnsSnapshot = $false
+        RdpHostLocked = $false
+        RdpHostPrior = $null
     }
     foreach ($bk in $script:BrowserPolicyModes.Keys) {
         $undoTrack.BrowserPolicyModes[$bk] = [string]$script:BrowserPolicyModes[$bk]
@@ -6939,6 +7277,18 @@ function Invoke-ApplyHardening {
             $adapters = @(Get-BastionDnsAdapters)
             if ($adapters.Count -eq 0) {
                 Write-Status "No eligible adapters found" "Warn"
+            } else {
+                # Snapshot prior DNS once before any change (encrypted when Save-UndoData runs).
+                $needSnap = $false
+                foreach ($a in $adapters) {
+                    try {
+                        if (-not (Test-AdapterDnsMatchesProvider -InterfaceIndex $a.ifIndex)) { $needSnap = $true; break }
+                    } catch { $needSnap = $true; break }
+                }
+                if ($needSnap -and -not $undoTrack.DnsSnapshot) {
+                    $undoTrack.DnsSnapshot = Get-BastionDnsSnapshot
+                    Write-Status ("Captured DNS snapshot for {0} eligible adapter(s) (stored encrypted)" -f @($undoTrack.DnsSnapshot.Adapters).Count) "Applied"
+                }
             }
             foreach ($a in $adapters) {
                 try {
@@ -6952,6 +7302,36 @@ function Invoke-ApplyHardening {
                     Write-Status ("DNS fail on {0}: {1}" -f $a.Name, $_.Exception.Message) "Failed"
                 }
             }
+        }
+    }
+
+    if ($script:Sections["RdpHostLock"]) {
+        Write-Host "  [RdpHostLock]" -ForegroundColor Cyan
+        try {
+            $prior = Get-BastionRemoteDesktopSystemStatus
+            $undoTrack.RdpHostPrior = @{
+                fDenyTSConnections = $prior.fDenyTSConnections
+                ServiceStartType   = $prior.ServiceStartType
+                ServiceStatus      = $prior.ServiceStatus
+            }
+            if ($prior.SystemLabel -eq "DENIED" -and $prior.ServiceStartType -ne "Automatic") {
+                Write-Status "System RDP already denied / TermService not Automatic" "Already"
+                $undoTrack.RdpHostLocked = $true
+            } else {
+                $path = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
+                Set-ItemProperty -Path $path -Name fDenyTSConnections -Value 1 -Type DWord -Force -ErrorAction Stop
+                Write-Status "fDenyTSConnections=1 (system denies Remote Desktop)" "Applied"
+                try {
+                    Stop-Service -Name TermService -Force -ErrorAction SilentlyContinue
+                    Set-Service -Name TermService -StartupType Manual -ErrorAction Stop
+                    Write-Status "TermService: stopped and Manual" "Applied"
+                } catch {
+                    Write-Status ("TermService: {0}" -f $_.Exception.Message) "Warn"
+                }
+                $undoTrack.RdpHostLocked = $true
+            }
+        } catch {
+            Write-Status ("RdpHostLock failed: {0}" -f $_.Exception.Message) "Failed"
         }
     }
 
@@ -7173,7 +7553,9 @@ function Show-MainMenu {
         }
         $last = Get-LastApplyInfo
         if ($last) {
-            Write-Host ("  Last Bastion Apply: {0} (v{1})" -f $last.Timestamp, $last.ScriptVersion) -ForegroundColor DarkGray
+            $snapNote = if ($last.HasDnsSnapshot) { "; encrypted DNS snapshot available" } else { "" }
+            $rdpNote = if ($last.RdpHostLocked) { "; RDP host prior saved" } else { "" }
+            Write-Host ("  Last Bastion Apply: {0} (v{1}){2}{3}" -f $last.Timestamp, $last.ScriptVersion, $snapNote, $rdpNote) -ForegroundColor DarkGray
         } else {
             Write-Host "  No Bastion Apply recorded yet (live OS detection still drives Dry Run / Apply)." -ForegroundColor DarkGray
         }
