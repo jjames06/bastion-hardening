@@ -14,6 +14,8 @@ Use an **official** source only:
 4. Extract the zip to a location **you** control (for example `C:\Tools\`). Official zips expand to one folder such as `bastion-hardening-v15.9.7\` with the bootstrap, `src\` modules, and docs already together.  
 5. Open that folder and confirm: `Bastion-Hardening.bat`, `Bastion-Hardening.ps1`, and `src\` (optional: `Bastion-Banner.utf8.txt`, `docs\`)
 
+Current releases are **modular**: the bootstrap is thin, and implementation lives as plain-text modules under `src\` so the product is easier to **review** than the older single large script. You do not assemble modules yourself—the zip already contains them. Optional reading: [Modular source layout](Modular-source).
+
 **Always use `Bastion-Hardening.bat`.** Never double-click `Bastion-Hardening.ps1` alone under Windows **Restricted** ExecutionPolicy - the host blocks the script before Bastion runs. The bat unblocks the product tree and starts PowerShell with Process-scope Bypass.
 
 ## 2. Run elevated

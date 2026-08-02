@@ -23,7 +23,8 @@ Version **15.9.7**
 | [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In studio); Bastion product pages and download |
 | [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** - Quick start, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
 | [GitHub Wiki](https://github.com/jjames06/bastion-hardening/wiki) | Same handbook on the Wiki tab (synced from `docs/wiki/`) |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modular `src\` layout, load order, integrity MANIFEST, threat model |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modular `src\` layout, why it replaced the monolith, load order, MANIFEST, threat model |
+| [docs/wiki/Modular-source.md](docs/wiki/Modular-source.md) | Handbook: modular vs single-script packaging (review-friendly overview) |
 | [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) | What folders/files Bastion creates, where, and why |
 | [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) | Per-browser modes and Encrypted Client Hello (ECH) - never default |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting and safe usage |
@@ -126,8 +127,45 @@ A guided, selective hardening assistant for Windows 10/11 that lets you:
 | **Catalog-only installs** | No free-typed package IDs; never uses `--ignore-security-hash`; preflight does not print the full winget binary path |
 | **Reversible where practical** | Tracked Undo (services, firewall groups, encrypted DNS snapshot, RDP host prior) plus modular Recovery hubs - single main-menu entry |
 | **Honest on-disk state** | Sensitive Apply undo fields (DNS snapshot, RDP prior) are DPAPI-encrypted with a tight ACL; same elevating account can still decrypt (documented) |
+| **Reviewable source** | Plain-text modules under `src\` (never encrypted); thin bootstrap; per-module integrity MANIFEST |
 
 System Restore remains the strongest rollback path.
+
+---
+
+## Modular source layout (easier to review)
+
+Bastion used to ship as a **single large PowerShell script** (a *monolith*). That was simple to distribute, but it made careful review harder: DNS, Recovery, Apply, browsers, and menus all lived in one multi-thousand-line file.
+
+**Current releases use a modular layout** so anyone who wants to inspect the product can do so in smaller, named pieces—without changing how you install or launch Bastion.
+
+| Piece | What it is |
+|-------|------------|
+| `Bastion-Hardening.bat` | Only supported elevated launcher |
+| `Bastion-Hardening.ps1` | Thin bootstrap (integrity checks, then loads modules) |
+| `src\Bastion.*.ps1` | Implementation by domain (Init, Core, Config, DNS, Browsers, Apply, Recovery, Menus, …) |
+| `src\MANIFEST.sha256` | SHA256 of each module — **integrity**, not encryption |
+
+**Why**
+
+- Independent review of one concern (for example `Bastion.Dns.ps1` or `Bastion.Recovery.ps1`) without reading the entire product.  
+- Honest **GPLv3** posture: readers can study and share complete corresponding source.  
+- Safer maintenance: smaller, reviewable diffs when one area changes.  
+- Startup **hard-fails** if a module is missing or its hash does not match the MANIFEST.
+
+**What did not change**
+
+- You still Unblock the zip, extract one product folder, and run **`Bastion-Hardening.bat` as administrator**.  
+- Product goals (selective Apply, Dry Run, Recovery, restore-point gate) are the same class of tool.  
+- **Source is never encrypted.** DPAPI applies only to certain **Apply undo** blobs (DNS snapshot / RDP host prior), not to modular load.
+
+| Monolith era (through v15.8.x) | Modular era (v15.9.x+) |
+|--------------------------------|-------------------------|
+| One large script held most logic | Thin bootstrap + `src\` modules |
+| Review meant scrolling one file | Open the matching module |
+| Integrity mainly “file present” | Per-module `MANIFEST.sha256` |
+
+Longer handbook write-up: [docs/wiki/Modular-source.md](docs/wiki/Modular-source.md). Technical load order and threat notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
