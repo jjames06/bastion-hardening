@@ -1098,7 +1098,8 @@ function Test-WingetSecurityPreflight {
                 Detail = "No trusted winget/msstore source visible. Refusing installs. Next step: winget source reset --force"
             }
         }
-        return [PSCustomObject]@{ Ok = $true; Detail = ("winget OK; trusted source present ({0})" -f $wg.Path) }
+        # Do not echo the full winget binary path (often under a user profile).
+        return [PSCustomObject]@{ Ok = $true; Detail = "winget OK; trusted winget/msstore source present" }
     } catch {
         return [PSCustomObject]@{
             Ok = $true
