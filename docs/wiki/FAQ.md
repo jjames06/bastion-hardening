@@ -45,6 +45,14 @@ Deleting that folder does **not** un-harden Windows or remove browser enterprise
 
 The DNS menu shows **Preferred** vs **Live Windows adapters** so you can see the difference. Recovery option **4** restores the **last Apply snapshot**, not “whatever is selected in menu D.”
 
+## Recovery 9 → 3 → 4 restored the wrong DNS / snapshot felt stuck
+
+**Option 4 restores the snapshot taken before the last DNS Apply**, and shows a preview of those servers before you confirm.
+
+From **v15.8.3**, later Applies that do **not** re-capture DNS **preserve** the existing snapshot (older builds could overwrite `Bastion-LastApply.json` and drop the DNS blob when adapters already matched the provider). After upgrading, run one real DNS Apply that changes adapters (for example Quad9 → Cloudflare) so a fresh snapshot is stored, then test option **4**.
+
+Path: main menu **9** → **3 Network** → **4** (not **3** then **4**; **3** is DHCP reset only and is not required before restore).
+
 ## Why does Windows Settings say DNS is “Unencrypted” after Bastion?
 
 **Two different meanings of “encrypted”:**

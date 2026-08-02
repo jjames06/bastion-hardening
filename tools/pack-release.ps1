@@ -26,7 +26,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Version = $(if ($env:BASTION_RELEASE_VERSION) { $env:BASTION_RELEASE_VERSION } else { "15.8.2" }),
+  [string]$Version = $(if ($env:BASTION_RELEASE_VERSION) { $env:BASTION_RELEASE_VERSION } else { "15.8.3" }),
   [string]$OutputDir = ""
 )
 
