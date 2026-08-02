@@ -2,7 +2,7 @@
 
 **Selective - State-aware - Safety-first Windows hardening for a personal workstation**
 
-Version **15.8.4**
+Version **15.9.0**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -23,6 +23,7 @@ Version **15.8.4**
 | [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In studio); Bastion product pages and download |
 | [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** - Quick start, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
 | [GitHub Wiki](https://github.com/jjames06/bastion-hardening/wiki) | Same handbook on the Wiki tab (synced from `docs/wiki/`) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modular `src\` layout, load order, integrity MANIFEST, threat model |
 | [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) | What folders/files Bastion creates, where, and why |
 | [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) | Per-browser modes and Encrypted Client Hello (ECH) - never default |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting and safe usage |
@@ -68,7 +69,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.8.4** | GPLv3; modular Recovery hubs; encrypted DNS/RDP undo; Settings-matching DoH Encrypted; optional RdpHostLock; handbook/wiki; as of 2026-08-02 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.9.0** | GPLv3; modular plain-text `src\` modules + MANIFEST integrity; modular Recovery hubs; encrypted DNS/RDP undo; Settings-matching DoH Encrypted; optional RdpHostLock; handbook/wiki; as of 2026-08-02 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions -> Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -148,7 +149,7 @@ Bastion is **not** an MSI installer. You download the files, keep them together,
 1. Use a **personal** PC you fully control (not work, school, domain-joined, or MDM-managed).
 2. Prefer the **official site download**, a **GitHub release**, or this repository only - not random re-uploads.
 3. Skim [LICENSE](LICENSE), [NOTICE](NOTICE), and the warnings at the top of this README.
-4. Optionally read the script (`Bastion-Hardening.ps1`) before the first Apply.
+4. Optionally read the bootstrap (`Bastion-Hardening.ps1`) and plain-text modules under `src\` before the first Apply.
 
 ### Method A - Official site or GitHub release zip (recommended)
 
@@ -161,19 +162,20 @@ Best for most people. Prefer one of these **official** sources only (not random 
 
 Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). Older pinned tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain on GitHub if you need them.
 
-1. Download **`bastion-hardening-v15.8.4.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
+1. Download **`bastion-hardening-v15.9.0.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
 2. Right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**  
    (reduces SmartScreen / "downloaded from the internet" friction on the extracted scripts)
 3. Extract the zip to a location **you** control, for example `C:\Tools\`.  
    Official release zips expand to a **single folder** such as  
-   `bastion-hardening-v15.8.4\` with all product files already together inside.  
+   `bastion-hardening-v15.9.0\` with all product files already together inside.  
    Avoid extracting into `C:\Windows` or Program Files.
 4. Open that folder and confirm these files sit together:
 
    | File | Required? |
    |------|-----------|
    | `Bastion-Hardening.bat` | Yes - launcher |
-   | `Bastion-Hardening.ps1` | Yes - main script |
+   | `Bastion-Hardening.ps1` | Yes - elevated bootstrap |
+   | `src\` (modules + `MANIFEST.sha256`) | Yes - plain-text implementation; startup verifies hashes |
    | `Bastion-Banner.utf8.txt` | Optional (banner only) |
    | `LICENSE`, `NOTICE`, `README.md`, `SECURITY.md`, `docs\` | Optional at runtime |
 
@@ -375,7 +377,7 @@ From main menu **D** (or Sections -> **D**), choose one of:
 | **Cisco OpenDNS** | `208.67.222.222` / `208.67.220.220` | Public OpenDNS resolvers |
 | **Do not change DNS** | - | Leaves adapters on DHCP/manual settings |
 
-Public resolvers above are DoH-capable. On Apply (v15.8.4+), Bastion sets Windows DNS-over-HTTPS the same way Settings **Edit DNS** does so the **Encrypted** badge appears without a manual click. A connected VPN may override these settings while the tunnel is up. That is expected.
+Public resolvers above are DoH-capable. On Apply (v15.8.4+ / 15.9.0), Bastion sets Windows DNS-over-HTTPS the same way Settings **Edit DNS** does so the **Encrypted** badge appears without a manual click. A connected VPN may override these settings while the tunnel is up. That is expected.
 
 ---
 
@@ -462,21 +464,22 @@ Official assets should extract to **one folder** (not loose files at the zip roo
 ```powershell
 # From the repo root (Windows PowerShell 5.1+ or pwsh)
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1
-# Default version is 15.8.4 (or set -Version / BASTION_RELEASE_VERSION)
-# Writes dist\bastion-hardening-v15.8.4.zip
+# Default version is 15.9.0 (or set -Version / BASTION_RELEASE_VERSION)
+# Regenerates src\MANIFEST.sha256, then writes dist\bastion-hardening-v15.9.0.zip
 # Upload that file as the GitHub Release asset (name must match bastion-hardening-v*.zip)
 ```
 
-Layout inside the zip: `bastion-hardening-v15.8.4\Bastion-Hardening.bat` (and siblings). The site download API already allows that asset name pattern.
+Layout inside the zip: `bastion-hardening-v15.9.0\Bastion-Hardening.bat` plus `src\Bastion.*.ps1` and `src\MANIFEST.sha256`. The site download API already allows that asset name pattern.
 
 ---
 
 ## Security
 
-- Review the script before running it. Trust is earned by reading the code.
+- Review the plain-text sources under `src\` (and the thin bootstrap) before running. Trust is earned by reading the code.
+- Startup verifies `src\MANIFEST.sha256` (SHA256 of each module) and hard-fails on mismatch.
 - Prefer the [official site](https://www.operationlockedin.com/bastion/download), official GitHub releases, or clones of this repository only.
 - Do not run untrusted copies of Bastion from random downloads or chat attachments.
-- Vulnerability reporting and supported versions: see [SECURITY.md](SECURITY.md).
+- Architecture and threat model: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Vulnerability reporting: [SECURITY.md](SECURITY.md).
 
 ---
 

@@ -25,6 +25,17 @@ See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/
 
 **https://www.operationlockedin.com** - Operation Locked In studio site (Bastion product pages, download, support, donate). Bastion source and releases remain on this GitHub repository.
 
+## Where is the code?
+
+Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.Core.ps1`, `Bastion.Apply.ps1`). `Bastion-Hardening.ps1` is a thin elevated bootstrap that dot-sources those modules and verifies **`src\MANIFEST.sha256`**. Source is **never encrypted** (GPLv3 + auditability). See [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
+
+## How do I verify the download?
+
+1. Prefer the official site or GitHub **Releases** zip for a known tag.  
+2. Keep `Bastion-Hardening.ps1` next to the full **`src\`** folder from that zip.  
+3. On launch, Bastion **hard-fails** if a module is missing or a SHA256 in `MANIFEST.sha256` does not match.  
+4. For extra confidence, compare against the GitHub tree for that tag and/or re-hash with `Get-FileHash`.
+
 ## Where does Bastion store files?
 
 A **data directory** shown on the main menu (prefer durable paths such as `C:\Temp\Bastion`; not wipe-prone `%TEMP%` when possible). Logs, config, session snapshots, and Apply undo data live there.  
