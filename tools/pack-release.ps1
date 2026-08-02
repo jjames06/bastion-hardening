@@ -6,7 +6,7 @@
 .DESCRIPTION
   Layout inside the zip:
 
-    bastion-hardening-v15.8/
+    bastion-hardening-v15.8.4/
       Bastion-Hardening.bat
       Bastion-Hardening.ps1
       ...
@@ -16,13 +16,13 @@
   together (not loose files at the extract root).
 
 .PARAMETER Version
-  Version label without leading v (e.g. 15.8). Default: read from env or 15.8.
+  Version label without leading v (e.g. 15.8.4). Default: BASTION_RELEASE_VERSION env or 15.8.4.
 
 .PARAMETER OutputDir
   Where to write the zip. Default: repo root \dist
 
 .EXAMPLE
-  pwsh -File tools/pack-release.ps1 -Version 15.8
+  pwsh -File tools/pack-release.ps1 -Version 15.8.4
 #>
 [CmdletBinding()]
 param(
