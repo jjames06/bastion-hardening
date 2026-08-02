@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.9.6 FINAL
+    Bastion Hardening Framework v15.9.7 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
@@ -11,7 +11,7 @@
     Modules are dot-sourced into this runspace so $script: scope is shared.
     Encryption is data-only (DPAPI for DNS/RDP undo). MANIFEST.sha256 is integrity, not encryption.
 .NOTES
-    Version 15.9.6 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.9.7 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
@@ -25,6 +25,7 @@
     v15.9.4: Bat admin check without net session; Unblock-File + Process Bypass.
     v15.9.5: High-IL elevation SID; goto bat; tools-run-bootstrap; LanmanServer-disabled launch fixed.
     v15.9.6: Force black console theme (soft-fail) for consistent dark UI across hosts.
+    v15.9.7: Help docs color-coded headings/labels/body for readability on dark theme.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
