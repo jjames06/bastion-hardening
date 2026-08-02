@@ -39,6 +39,7 @@ Full inventory: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 | First run | Seeds config defaults; rewrites session/browser-state snapshots from **live** detection |
 | Apply history file | `Bastion-LastApply.json` only after a **real** Apply |
 | DNS / RDP undo secrets | DNS snapshot and RDP host prior are **DPAPI-encrypted** in that file; ACL SYSTEM + Administrators. Same elevating account can decrypt; full account compromise still can. See [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) |
+| Display privacy | Winget preflight / Audit do not echo the full winget executable path (often under a user profile). Data-directory path still appears on the main menu by design. |
 | Encrypted Client Hello (ECH) | Never written unless you opt in under Strict in menu **6** - see [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) |
 | Telemetry to Bastion authors | Bastion does not upload logs or config to a Bastion cloud service as part of normal operation |
 

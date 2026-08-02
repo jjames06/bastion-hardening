@@ -32,6 +32,10 @@ Full inventory: [docs/DATA-DIRECTORY.md](https://github.com/jjames06/bastion-har
 
 Deleting that folder does **not** un-harden Windows or remove browser enterprise policies.
 
+## Do logs or Audit print my full user-profile paths?
+
+**Mostly limited by design.** The main menu shows the Bastion **data directory** path (needed so you can find logs). Winget preflight and Security Audit report trusted sources **without** printing the full winget executable path under your profile. Custom install roots you choose still appear in config when you set them. When sharing logs, redact anything you do not want public.
+
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 
 **Never.** ECH is a separate Yes/No choice under browser **Strict**, and only for installed Firefox, Chrome, or Brave. For full detail, see [docs/BROWSER-POLICIES-AND-ECH.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/BROWSER-POLICIES-AND-ECH.md).

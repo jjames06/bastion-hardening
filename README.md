@@ -122,7 +122,7 @@ A guided, selective hardening assistant for Windows 10/11 that lets you:
 | **Selective** | Almost every section is optional |
 | **State-aware** | Detects live Windows state before changing it; menu prefs live in a durable data directory (not faked Apply history) |
 | **Safety-first** | Restore-point gate, soft failures, honest documentation |
-| **Catalog-only installs** | No free-typed package IDs; never uses `--ignore-security-hash` |
+| **Catalog-only installs** | No free-typed package IDs; never uses `--ignore-security-hash`; preflight does not print the full winget binary path |
 | **Reversible where practical** | Tracked Undo (services, firewall groups, encrypted DNS snapshot, RDP host prior) plus modular Recovery hubs - single main-menu entry |
 | **Honest on-disk state** | Sensitive Apply undo fields (DNS snapshot, RDP prior) are DPAPI-encrypted with a tight ACL; same elevating account can still decrypt (documented) |
 
