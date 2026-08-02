@@ -6,7 +6,7 @@
 .DESCRIPTION
   Layout inside the zip:
 
-    bastion-hardening-v15.9.2/
+    bastion-hardening-v15.9.3/
       Bastion-Hardening.bat
       Bastion-Hardening.ps1
       src\
@@ -19,7 +19,7 @@
   together (not loose files at the extract root).
 
 .PARAMETER Version
-  Version label without leading v (e.g. 15.9.2). Default: BASTION_RELEASE_VERSION env or 15.9.2.
+  Version label without leading v (e.g. 15.9.3). Default: BASTION_RELEASE_VERSION env or 15.9.3.
 
 .PARAMETER OutputDir
   Where to write the zip. Default: repo root \dist
@@ -28,11 +28,11 @@
   Do not regenerate src\MANIFEST.sha256 before packing (use existing).
 
 .EXAMPLE
-  pwsh -File tools/pack-release.ps1 -Version 15.9.2
+  pwsh -File tools/pack-release.ps1 -Version 15.9.3
 #>
 [CmdletBinding()]
 param(
-  [string]$Version = $(if ($env:BASTION_RELEASE_VERSION) { $env:BASTION_RELEASE_VERSION } else { "15.9.2" }),
+  [string]$Version = $(if ($env:BASTION_RELEASE_VERSION) { $env:BASTION_RELEASE_VERSION } else { "15.9.3" }),
   [string]$OutputDir = "",
   [switch]$SkipManifestRegen
 )
