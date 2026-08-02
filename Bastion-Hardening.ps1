@@ -21,7 +21,7 @@
     v15.9.1/15.9.0-fixed: Script-scope module load (function-scope . made menus vanish after import).
     v15.9.2: Post-load command probe; startup try/catch + pause; friendly admin check; self-elevating bat.
     v15.9.3: Banner path via BastionRoot/parent of src.
-    v15.9.4: Launcher Unblock-File (Mark-of-the-Web) + Process Bypass; do not run .ps1 alone under Restricted policy.
+    v15.9.4: Bat admin check without net session (works after Server service disabled); Unblock-File + Process Bypass; never double-click .ps1 alone.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
