@@ -14,10 +14,12 @@
 
 ## Which file do I download?
 
-Use either official channel (both resolve the same GitHub Latest zip). Prefer **v15.9.3** (current modular release with launch hardening; do not use older 15.9.0/15.9.1 zips if the elevated window flash-closed after UAC):
+Use either official channel (both resolve the same GitHub Latest zip). Prefer **v15.9.4** (current modular release: Unblock-File + Process Bypass launcher; do not use older 15.9.0/15.9.1 zips if the elevated window flash-closed after UAC; use 15.9.4+ if you see *running scripts is disabled*):
 
 - **Official site:** https://www.operationlockedin.com/bastion/download  
 - **GitHub Releases:** https://github.com/jjames06/bastion-hardening/releases/latest  
+
+**Install rule:** Unblock the zip, extract, always run **`Bastion-Hardening.bat`** as administrator. Never double-click `Bastion-Hardening.ps1` alone under Restricted policy.
 
 See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/17). Avoid re-uploads from chat or third parties.
 
