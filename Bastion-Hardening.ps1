@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.9.0 FINAL
+    Bastion Hardening Framework v15.9.1 FINAL
 .DESCRIPTION
     Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
     for reliable paste into editors and terminals.
@@ -10,7 +10,7 @@
     lives in plain-text src\*.ps1 modules (NEVER encrypted - GPLv3 + auditability).
     Modules are dot-sourced into this runspace so $script: scope is shared.
 .NOTES
-    Version 15.9.0 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
+    Version 15.9.1 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
     Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
@@ -18,6 +18,7 @@
     v15.8.3: Preserve DNS/RDP undo blobs across Applies; Network option 4 previews snapshot targets; clearer restore UX.
     v15.8.4: Match Settings Edit DNS DoH path (per-interface QWord DohFlags=17 + template) so Encrypted shows without manual click.
     v15.9.0: Modular plain-text src\ layout, MANIFEST.sha256 integrity at startup, ACL on Bastion-Config.json.
+    v15.9.1: Fix module load scope so functions remain after import (UAC flash-exit).
 #>
 param(
     [switch]$BastionSmokeLoadOnly
@@ -46,6 +47,26 @@ $script:BastionSourceModules = @(
     "Bastion.Recovery.ps1",
     "Bastion.Menus.ps1"
 )
+
+function Wait-BastionBootstrapKey {
+    <#
+    .SYNOPSIS
+      Pause so the user can read a fatal message before the console closes.
+      Available before modules load (does not depend on Wait-ForKey).
+    #>
+    param([string]$Message = "Press any key to exit...")
+    Write-Host ""
+    Write-Host ("  {0}" -f $Message) -ForegroundColor Gray
+    try {
+        [void][System.Console]::ReadKey($true)
+    } catch {
+        try {
+            [void](Read-Host "  Press Enter to exit")
+        } catch {
+            Start-Sleep -Seconds 8
+        }
+    }
+}
 
 function Test-BastionSourceIntegrity {
     <#
@@ -121,10 +142,12 @@ function Test-BastionSourceIntegrity {
     }
 }
 
-function Import-BastionSources {
+function Test-BastionSourcesReady {
     <#
     .SYNOPSIS
-      Fail-closed: required modules must exist, pass integrity, then be dot-sourced in order.
+      Fail-closed layout + integrity checks. Does NOT dot-source (caller must . at script scope).
+    .OUTPUTS
+      Source directory path on success; throws on failure.
     #>
     $srcDir = Join-Path $script:BastionRoot "src"
     if (-not (Test-Path -LiteralPath $srcDir -PathType Container)) {
@@ -144,14 +167,19 @@ function Import-BastionSources {
         throw "Bastion source integrity check failed.`n$($integrity.Message)"
     }
 
-    foreach ($name in $script:BastionSourceModules) {
-        $path = Join-Path $srcDir $name
-        . $path
-    }
+    return $srcDir
 }
 
+# CRITICAL: Dot-source modules at SCRIPT scope, not inside a function.
+# PowerShell function-scope . (dot-source) defines functions only for that function;
+# after return, Resolve-BastionLogDirectory / Show-MainMenu / etc. vanish while
+# $script:Config still looks fine (smoke load would pass, then flash-and-close).
 try {
-    Import-BastionSources
+    $bastionSrcDir = Test-BastionSourcesReady
+    foreach ($name in $script:BastionSourceModules) {
+        $path = Join-Path $bastionSrcDir $name
+        . $path
+    }
 } catch {
     Write-Host ""
     Write-Host "  FATAL: Cannot load Bastion modules." -ForegroundColor Red
@@ -159,7 +187,7 @@ try {
     Write-Host "  Expected layout: Bastion-Hardening.ps1 + src\Bastion.*.ps1 + src\MANIFEST.sha256" -ForegroundColor DarkGray
     Write-Host ""
     if (-not $BastionSmokeLoadOnly) {
-        try { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") } catch { Start-Sleep -Seconds 5 }
+        Wait-BastionBootstrapKey "Press any key to exit..."
     }
     exit 1
 }
@@ -182,6 +210,7 @@ if ($resolvedLog) {
 try {
     if (-not (Ensure-BastionPaths)) {
         Write-Host ("Cannot initialize {0}. Exiting." -f $script:Config.LogDirectory) -ForegroundColor Red
+        Wait-BastionBootstrapKey "Press any key to exit..."
         exit 1
     }
     try {
@@ -194,6 +223,7 @@ try {
     # Create/load durable store, seed defaults only when missing, rewrite live session snapshot.
     if (-not (Initialize-BastionDataStore)) {
         Write-Host ("Cannot prepare Bastion data store under {0}. Exiting." -f $script:Config.LogDirectory) -ForegroundColor Red
+        Wait-BastionBootstrapKey "Press any key to exit..."
         exit 1
     }
     Write-Log ("Bastion v{0} FINAL started | data={1}" -f $script:Config.ScriptVersion, $script:Config.LogDirectory)
@@ -203,6 +233,14 @@ try {
     try {
         Write-Log ("FATAL: {0}" -f $_.Exception.Message) -Level Error
     } catch {}
-    try { Wait-ForKey "Press any key to exit..." } catch { Start-Sleep -Seconds 5 }
+    try {
+        if (Get-Command Wait-ForKey -ErrorAction SilentlyContinue) {
+            Wait-ForKey "Press any key to exit..."
+        } else {
+            Wait-BastionBootstrapKey "Press any key to exit..."
+        }
+    } catch {
+        Wait-BastionBootstrapKey "Press any key to exit..."
+    }
     exit 1
 }

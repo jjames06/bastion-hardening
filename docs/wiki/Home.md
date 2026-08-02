@@ -2,7 +2,7 @@
 
 **Selective, state-aware, safety-first Windows hardening for a personal PC you administer.**
 
-This wiki is a short **user handbook**. Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Download only from the [official site](https://www.operationlockedin.com/bastion/download) or the [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest); avoid re-uploads from chat or third parties.
+This wiki is a short **user handbook** for **Bastion v15.9.1** (and v15.9.0+ modular builds). Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Download only from the [official site](https://www.operationlockedin.com/bastion/download) or the [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest); avoid re-uploads from chat or third parties.
 
 ## Start here
 

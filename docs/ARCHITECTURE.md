@@ -1,10 +1,10 @@
-# Bastion architecture (v15.9.0)
+# Bastion architecture (v15.9.1)
 
 ## Purpose
 
 Bastion Hardening Framework is a **menu-driven**, **state-aware** Windows workstation hardener. It runs elevated, records preferences and optional Apply undo data under a local data directory, and never invents Apply history on first launch.
 
-This document maps the **code layout** after the v15.9.0 modular restructure. Product behavior is unchanged from the prior monolith unless noted in release notes.
+This document maps the **code layout** after the v15.9.0 modular restructure (v15.9.1 fixes script-scope module load). Product behavior is unchanged from the prior monolith unless noted in release notes.
 
 ## Design principles
 
@@ -19,9 +19,9 @@ This document maps the **code layout** after the v15.9.0 modular restructure. Pr
 ## Runtime layout
 
 ```
-bastion-hardening-v15.9.0\
-  Bastion-Hardening.bat      # UAC launcher; checks for .ps1 + src\ + MANIFEST
-  Bastion-Hardening.ps1      # Thin bootstrap: integrity, Import, entry try
+bastion-hardening-v15.9.1\
+  Bastion-Hardening.bat      # UAC launcher; -Wait elevated process; checks .ps1 + src\ + MANIFEST
+  Bastion-Hardening.ps1      # Thin bootstrap: integrity, script-scope ., entry try
   Bastion-Banner.utf8.txt
   LICENSE, NOTICE, README.md, SECURITY.md
   src\
@@ -47,10 +47,10 @@ bastion-hardening-v15.9.0\
 Bootstrap (`Bastion-Hardening.ps1`) always:
 
 1. Sets `$script:BastionRoot = $PSScriptRoot`
-2. `Import-BastionSources`:
+2. `Test-BastionSourcesReady` then **dot-sources modules at script scope** (not inside a function):
    - Requires `src\` and every listed module file
    - `Test-BastionSourceIntegrity` against `src\MANIFEST.sha256` (**hard-fail** on missing/mismatch)
-   - Dot-sources modules in order:
+   - Dot-sources modules in order (must be `.` at script scope so functions survive after load; v15.9.1 hotfix):
 
 | Order | Module | Responsibility |
 |------:|--------|----------------|
@@ -103,11 +103,11 @@ Elevated:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Bastion-Hardening.ps1 -BastionSmokeLoadOnly
 ```
 
-Expected: `Bastion smoke load OK v15.9.0` and exit 0.
+Expected: `Bastion smoke load OK v15.9.1` and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source).
 
 ## Version
 
-Product-facing version is **15.9.0** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default).
+Product-facing version is **15.9.1** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default).
 
 ## Related docs
 
