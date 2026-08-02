@@ -1,10 +1,10 @@
-# Bastion architecture (v15.9.0)
+# Bastion architecture (v15.9.2)
 
 ## Purpose
 
 Bastion Hardening Framework is a **menu-driven**, **state-aware** Windows workstation hardener. It runs elevated, records preferences and optional Apply undo data under a local data directory, and never invents Apply history on first launch.
 
-This document maps the **code layout** after the v15.9.0 modular restructure (including script-scope module load so menus work after import). Product behavior is unchanged from the prior monolith unless noted in release notes.
+This document maps the **code layout** after the v15.9.x modular restructure (including script-scope module load, post-load command probe, and self-elevating bat so menus survive after import). Product behavior is unchanged from the prior monolith unless noted in release notes.
 
 ## Design principles
 
@@ -19,7 +19,7 @@ This document maps the **code layout** after the v15.9.0 modular restructure (in
 ## Runtime layout
 
 ```
-bastion-hardening-v15.9.0\
+bastion-hardening-v15.9.2\
   Bastion-Hardening.bat      # UAC launcher; -Wait elevated process; checks .ps1 + src\ + MANIFEST
   Bastion-Hardening.ps1      # Thin bootstrap: integrity, script-scope ., entry try
   Bastion-Banner.utf8.txt
@@ -103,11 +103,11 @@ Elevated:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Bastion-Hardening.ps1 -BastionSmokeLoadOnly
 ```
 
-Expected: `Bastion smoke load OK v15.9.0` and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source).
+Expected: `Bastion smoke load OK v15.9.2 (commands verified)` and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
 
 ## Version
 
-Product-facing version is **15.9.0** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). The short-lived **15.9.1** tag was retracted; the fixed modular build ships as **15.9.0**.
+Product-facing version is **15.9.2** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.2** over any 15.9.0/15.9.1 zip if elevated launch flash-closed after UAC.
 
 ## Related docs
 

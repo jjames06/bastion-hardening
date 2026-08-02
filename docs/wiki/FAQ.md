@@ -14,7 +14,7 @@
 
 ## Which file do I download?
 
-Use either official channel (both resolve the same GitHub Latest zip). Prefer **v15.9.0** (current fixed modular release; any earlier broken 15.9.0 zip and the retracted 15.9.1 tag should not be used):
+Use either official channel (both resolve the same GitHub Latest zip). Prefer **v15.9.2** (current modular release with launch hardening; do not use older 15.9.0/15.9.1 zips if the elevated window flash-closed after UAC):
 
 - **Official site:** https://www.operationlockedin.com/bastion/download  
 - **GitHub Releases:** https://github.com/jjames06/bastion-hardening/releases/latest  
