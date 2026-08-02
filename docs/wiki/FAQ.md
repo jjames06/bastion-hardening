@@ -36,16 +36,25 @@ Deleting that folder does **not** un-harden Windows or remove browser enterprise
 
 **Mostly limited by design.** The main menu shows the Bastion **data directory** path (needed so you can find logs). Winget preflight and Security Audit report trusted sources **without** printing the full winget executable path under your profile. Custom install roots you choose still appear in config when you set them. When sharing logs, redact anything you do not want public.
 
+## Why does Windows Settings still show Quad9 after I picked Cloudflare in Bastion?
+
+**Menu D only saves a preference.** It does **not** change Windows adapters until you:
+
+- press **A** on the DNS menu (**Apply preferred DNS to adapters now**), or  
+- run main menu **8 Apply** with the DNS section enabled.
+
+The DNS menu shows **Preferred** vs **Live Windows adapters** so you can see the difference. Recovery option **4** restores the **last Apply snapshot**, not “whatever is selected in menu D.”
+
 ## Why does Windows Settings say DNS is “Unencrypted” after Bastion?
 
 **Two different meanings of “encrypted”:**
 
-1. **Bastion snapshot DPAPI** - prior DNS is stored encrypted **on disk** in `Bastion-LastApply.json` so a casual file reader does not get plaintext history. That is not the Windows Settings badge.  
-2. **Windows Settings “Encrypted”** - means **DNS-over-HTTPS (DoH)** for that resolver on the wire.
+1. **Bastion snapshot DPAPI** - prior DNS is stored encrypted **on disk** in `Bastion-LastApply.json`.  
+2. **Windows Settings “Encrypted”** - **DNS-over-HTTPS (DoH)** on the wire.
 
-Bastion **v15.8.1+** sets resolver IPs **and** enables DoH (module + netsh + per-interface keys) for known templates (Quad9, Cloudflare, Google, OpenDNS). Recovery option **4** / Undo restore IPs and re-apply DoH.
+All Bastion public resolvers (Quad9, Cloudflare, Cloudflare security, Google, OpenDNS) are **DoH-capable**; Bastion **v15.8.1+** enables DoH templates on Apply. **Do not change DNS** leaves Windows as-is.
 
-**Important:** Windows Settings often still labels the IP as **Unencrypted** when DNS was set outside the Settings app, even if DoH is active on the wire. That badge is not a perfect DoH status light. To force the badge: adapter → DNS → **Edit** → Preferred DNS encryption → **On (automatic template)** → Save. Confirm you are running Bastion **v15.8.1+** (banner must not say only v15.8 without `.1`).
+Windows Settings often still labels the IP as **Unencrypted** when DNS was set outside the Settings app, even if DoH is active. To force the badge: adapter → DNS → **Edit** → Preferred DNS encryption → **On (automatic template)** → Save. Use Bastion **v15.8.2+** for the clearer DNS menu (live vs preferred, DoH labels, Apply now).
 
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 
