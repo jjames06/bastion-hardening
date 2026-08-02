@@ -2,7 +2,7 @@
 
 **Selective - State-aware - Safety-first Windows hardening for a personal workstation**
 
-Version **15.9.0**
+Version **15.9.1**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -69,7 +69,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.9.0** | GPLv3; modular plain-text `src\` modules + MANIFEST integrity; modular Recovery hubs; encrypted DNS/RDP undo; Settings-matching DoH Encrypted; optional RdpHostLock; handbook/wiki; as of 2026-08-02 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.9.1** | GPLv3; modular plain-text `src\` modules + MANIFEST integrity; modular Recovery hubs; encrypted DNS/RDP undo; Settings-matching DoH Encrypted; optional RdpHostLock; handbook/wiki; as of 2026-08-02 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions -> Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -162,12 +162,12 @@ Best for most people. Prefer one of these **official** sources only (not random 
 
 Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). Older pinned tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain on GitHub if you need them.
 
-1. Download **`bastion-hardening-v15.9.0.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
+1. Download **`bastion-hardening-v15.9.1.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
 2. Right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**  
    (reduces SmartScreen / "downloaded from the internet" friction on the extracted scripts)
 3. Extract the zip to a location **you** control, for example `C:\Tools\`.  
    Official release zips expand to a **single folder** such as  
-   `bastion-hardening-v15.9.0\` with all product files already together inside.  
+   `bastion-hardening-v15.9.1\` with all product files already together inside.  
    Avoid extracting into `C:\Windows` or Program Files.
 4. Open that folder and confirm these files sit together:
 
@@ -464,12 +464,12 @@ Official assets should extract to **one folder** (not loose files at the zip roo
 ```powershell
 # From the repo root (Windows PowerShell 5.1+ or pwsh)
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1
-# Default version is 15.9.0 (or set -Version / BASTION_RELEASE_VERSION)
-# Regenerates src\MANIFEST.sha256, then writes dist\bastion-hardening-v15.9.0.zip
+# Default version is 15.9.1 (or set -Version / BASTION_RELEASE_VERSION)
+# Regenerates src\MANIFEST.sha256, then writes dist\bastion-hardening-v15.9.1.zip
 # Upload that file as the GitHub Release asset (name must match bastion-hardening-v*.zip)
 ```
 
-Layout inside the zip: `bastion-hardening-v15.9.0\Bastion-Hardening.bat` plus `src\Bastion.*.ps1` and `src\MANIFEST.sha256`. The site download API already allows that asset name pattern.
+Layout inside the zip: `bastion-hardening-v15.9.1\Bastion-Hardening.bat` plus `src\Bastion.*.ps1` and `src\MANIFEST.sha256`. The site download API already allows that asset name pattern.
 
 ---
 
