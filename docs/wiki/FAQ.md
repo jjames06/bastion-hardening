@@ -62,7 +62,16 @@ Path: main menu **9** → **3 Network** → **4** (not **3** then **4**; **3** i
 
 All Bastion public resolvers (Quad9, Cloudflare, Cloudflare security, Google, OpenDNS) are **DoH-capable**. From **v15.8.4**, Apply writes the **same per-interface DoH keys** Settings Edit DNS uses (`DohTemplate` + `QWord DohFlags=17`, AutoUpgrade, no UDP fallback), so the **Encrypted** badge should appear **without** opening Edit DNS. **Do not change DNS** leaves Windows as-is.
 
-If you are on **v15.8.1–15.8.3** and Settings still says **Unencrypted**, upgrade to **v15.8.4+** and re-Apply DNS (or Network → restore snapshot / Apply preferred). Manual fallback (old builds only): adapter → DNS → **Edit** → DNS over HTTPS → **On (automatic template)** → Fallback off → Save. Menu **D** alone still does not change Windows until Apply (**A** or main **8**).
+**Verified path (v15.8.4):**
+
+1. Main menu **D** → pick a DoH-capable provider (for example Cloudflare) → **A** (or main menu **8** with DNS on).  
+2. Open Windows **Settings > Network > Ethernet (or Wi-Fi) > DNS**. Preferred/Alternate should show **Encrypted** (re-open the page if it was already open).  
+3. Change provider again (or apply a different one), then Recovery **9 → 3 Network → 4** to restore the prior snapshot.  
+4. Re-check Settings: servers match the snapshot and **Encrypted** remains for known resolvers.
+
+Menu **D** alone still does not change Windows until Apply (**A** or main **8**).
+
+If you are on **v15.8.1–15.8.3** and Settings still says **Unencrypted**, upgrade to **v15.8.4+** and re-Apply DNS (or Network → restore snapshot / Apply preferred). Manual fallback (old builds only): adapter → DNS → **Edit** → DNS over HTTPS → **On (automatic template)** → Fallback off → Save.
 
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 
