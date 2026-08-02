@@ -33,13 +33,21 @@ foreach ($p in $pages) {
 }
 
 Push-Location $wikiDir
-git add $pages
-git status
-if (git status --porcelain) {
-    git commit -m "Sync handbook from docs/wiki"
-    git push
-    Write-Host "Wiki published: https://github.com/jjames06/bastion-hardening/wiki"
-} else {
-    Write-Host "Wiki already up to date."
+try {
+    # Local identity for this temp clone only (does not change global git config).
+    # Avoids "Author identity unknown" on machines without user.name/email set.
+    git config user.email "Info@operationlockedin.com"
+    git config user.name "Operation Locked In"
+
+    git add $pages
+    git status
+    if (git status --porcelain) {
+        git commit -m "Sync handbook from docs/wiki"
+        git push
+        Write-Host "Wiki published: https://github.com/jjames06/bastion-hardening/wiki"
+    } else {
+        Write-Host "Wiki already up to date."
+    }
+} finally {
+    Pop-Location
 }
-Pop-Location
