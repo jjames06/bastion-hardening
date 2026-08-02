@@ -4,7 +4,7 @@
 
 Bastion Hardening Framework is a **menu-driven**, **state-aware** Windows workstation hardener. It runs elevated, records preferences and optional Apply undo data under a local data directory, and never invents Apply history on first launch.
 
-This document maps the **code layout** after the v15.9.x modular restructure (including script-scope module load, post-load command probe, self-elevating bat, and v15.9.4 Mark-of-the-Web / ExecutionPolicy launch hardening). Product behavior is unchanged from the prior monolith unless noted in release notes.
+This document maps the **code layout** after the v15.9.x modular restructure (including script-scope module load, post-load command probe, self-elevating bat, and v15.9.4 launch hardening: whoami-SID admin check instead of `net session`, `tools-elevate-self.ps1`, Mark-of-the-Web Unblock + ExecutionPolicy Process Bypass). Product behavior is unchanged from the prior monolith unless noted in release notes.
 
 ## Design principles
 
@@ -20,7 +20,8 @@ This document maps the **code layout** after the v15.9.x modular restructure (in
 
 ```
 bastion-hardening-v15.9.4\
-  Bastion-Hardening.bat      # UAC launcher; Unblock-File tree + Process Bypass; invoke & bootstrap
+  Bastion-Hardening.bat      # UAC launcher; whoami SID elev check (not net session); Unblock + Bypass; invoke &
+  tools-elevate-self.ps1     # Product-root UAC helper (-File; avoids nested ) in cmd one-liners)
   Bastion-Hardening.ps1      # Thin bootstrap: early Process Bypass; integrity; script-scope .
   Bastion-Banner.utf8.txt
   LICENSE, NOTICE, README.md, SECURITY.md
@@ -44,7 +45,11 @@ bastion-hardening-v15.9.4\
 
 ## Load order
 
-**Launcher (`Bastion-Hardening.bat`)** (preferred entry): elevates via UAC, then in the elevated console sets Process-scope ExecutionPolicy Bypass, recursively `Unblock-File`s the product tree (Mark-of-the-Web from zip downloads), and invokes `Bastion-Hardening.ps1` with the call operator (`&`) so policy and zone blocks do not stop startup.
+**Launcher (`Bastion-Hardening.bat`)** (preferred entry):
+
+1. **Elevation check without `net session`.** Bastion can disable **LanmanServer** (Server service) under HighRiskServices. After that, `net session` fails even in an already-elevated admin console, so older bats kept re-UAC-looping and flash-closed. v15.9.4 uses **whoami** group SIDs (High Mandatory Level `S-1-16-12288`, with Administrators / `openfiles` fallback) instead.
+2. **Re-UAC via `tools-elevate-self.ps1`** at product root (`powershell -File`), not a cmd one-liner with nested parentheses (those produced `. was unexpected at this time.` / exit 255).
+3. In the elevated console: Process-scope ExecutionPolicy Bypass, recursive `Unblock-File` on the product tree (Mark-of-the-Web), then invoke `Bastion-Hardening.ps1` with the call operator (`&`).
 
 Bootstrap (`Bastion-Hardening.ps1`) always:
 
@@ -110,7 +115,12 @@ Expected: `Bastion smoke load OK v15.9.4 (commands verified)` and exit 0. After 
 
 ## Version
 
-Product-facing version is **15.9.4** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.4** if zip extracts fail with *running scripts is disabled* (Mark-of-the-Web / Restricted); always start with the `.bat`, never the `.ps1` alone.
+Product-facing version is **15.9.4** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.4** if:
+
+- After Apply, the bat flash-closed or looped UAC on an already-admin console (**Server / LanmanServer disabled** — fixed by whoami SID check), or
+- Zip extracts fail with *running scripts is disabled* (Mark-of-the-Web / Restricted).
+
+Always start with the `.bat`, never the `.ps1` alone.
 
 ## Related docs
 

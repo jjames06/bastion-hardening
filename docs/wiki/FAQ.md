@@ -14,7 +14,7 @@
 
 ## Which file do I download?
 
-Use either official channel (both resolve the same GitHub Latest zip). Prefer **v15.9.4** (current modular release: Unblock-File + Process Bypass launcher; do not use older 15.9.0/15.9.1 zips if the elevated window flash-closed after UAC; use 15.9.4+ if you see *running scripts is disabled*):
+Use either official channel (both resolve the same GitHub Latest zip). Prefer **v15.9.4** (current modular release: whoami-SID bat admin check so hardened PCs with **Server**/LanmanServer disabled still re-launch; `tools-elevate-self.ps1`; Unblock-File + Process Bypass; do not use older 15.9.0–15.9.3 zips if the bat flash-closed after Apply or you see *running scripts is disabled*):
 
 - **Official site:** https://www.operationlockedin.com/bastion/download  
 - **GitHub Releases:** https://github.com/jjames06/bastion-hardening/releases/latest  

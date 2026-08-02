@@ -8,6 +8,7 @@
 
     bastion-hardening-v15.9.4/
       Bastion-Hardening.bat
+      tools-elevate-self.ps1
       Bastion-Hardening.ps1
       src\
         Bastion.*.ps1
@@ -86,9 +87,11 @@ try {
   New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
 
   # Runtime + legal + docs (handbook ships under docs/)
+  # tools-elevate-self.ps1 ships at product root (bat -File elevate helper; not under tools\).
   $paths = @(
     "Bastion-Hardening.bat",
     "Bastion-Hardening.ps1",
+    "tools-elevate-self.ps1",
     "Bastion-Banner.utf8.txt",
     "LICENSE",
     "NOTICE",
@@ -132,6 +135,7 @@ try {
     $norm = @($zip.Entries | ForEach-Object { ($_.FullName -replace '\\', '/').TrimStart('/') })
     $bat = "$FolderName/Bastion-Hardening.bat"
     $ps1 = "$FolderName/Bastion-Hardening.ps1"
+    $elevate = "$FolderName/tools-elevate-self.ps1"
     $core = "$FolderName/src/Bastion.Core.ps1"
     $manifest = "$FolderName/src/MANIFEST.sha256"
     if ($norm -notcontains $bat) {
@@ -140,6 +144,9 @@ try {
     }
     if ($norm -notcontains $ps1) {
       throw "Zip sanity failed: expected entry $ps1"
+    }
+    if ($norm -notcontains $elevate) {
+      throw "Zip sanity failed: expected entry $elevate (product-root UAC helper)"
     }
     if ($norm -notcontains $core) {
       throw "Zip sanity failed: expected entry $core (modular sources)"
