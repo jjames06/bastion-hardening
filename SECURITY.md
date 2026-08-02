@@ -4,13 +4,14 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.9.6  | Yes (current modular) - forced black console theme (Black bg + Gray fg, soft-fail); inherits 15.9.5 launch fixes; always use `.bat` |
-| 15.9.5  | Superseded - High-IL bat elevation; goto-safe launcher; tools-run-bootstrap; LanmanServer-disabled launch; prefer 15.9.6 |
-| 15.9.4  | Superseded - whoami SID + Unblock-File; still hit `. was unexpected` on some elevated re-launches; prefer 15.9.6 |
-| 15.9.3  | Superseded - banner path + MANIFEST integrity; use 15.9.6 |
-| 15.9.2  | Superseded - launch hardening; use 15.9.6 |
-| 15.9.0  | Superseded - modular plain-text `src\` + MANIFEST + script-scope load; use 15.9.6 |
-| 15.9.1  | Retracted (tag/release removed; fix folded into 15.9.0 then 15.9.6) |
+| 15.9.7  | Yes (current modular) - Help docs color-coded headings/labels/body on dark theme; inherits 15.9.6 black console + 15.9.5 launch fixes; always use `.bat` |
+| 15.9.6  | Superseded - forced black console theme (Black bg + Gray fg, soft-fail); prefer 15.9.7 |
+| 15.9.5  | Superseded - High-IL bat elevation; goto-safe launcher; tools-run-bootstrap; LanmanServer-disabled launch; prefer 15.9.7 |
+| 15.9.4  | Superseded - whoami SID + Unblock-File; still hit `. was unexpected` on some elevated re-launches; prefer 15.9.7 |
+| 15.9.3  | Superseded - banner path + MANIFEST integrity; use 15.9.7 |
+| 15.9.2  | Superseded - launch hardening; use 15.9.7 |
+| 15.9.0  | Superseded - modular plain-text `src\` + MANIFEST + script-scope load; use 15.9.7 |
+| 15.9.1  | Retracted (tag/release removed; fix folded into 15.9.0 then 15.9.7) |
 | 15.8.4  | Public Latest / site pin (monolith) until modular is promoted; best-effort |
 | 15.8.3  | Best-effort until you upgrade |
 | 15.8.2  | Best-effort until you upgrade |

@@ -724,17 +724,20 @@ function Show-UninstallMenu {
 }
 
 function Show-Help {
+    # Display lines use a one-char type prefix so headings/body stay color-coded after wrap:
+    # H=heading  L=label  S=section tag  B=body  U=url  E=empty  M=muted tip
     function Read-HelpNav {
         param([int]$Page, [int]$Total)
         while ($true) {
             try { $width = Get-BastionConsoleWidth } catch { $width = 78 }
             $rule = "-" * [Math]::Min(64, [Math]::Max(40, $width - 4))
+            Write-Host ""
             Write-Host ("  " + $rule) -ForegroundColor DarkCyan
             Write-Host ("  Documentation  |  page {0} of {1}" -f $Page, $Total) -ForegroundColor DarkGray
-            Write-Host "  How to move (Help keys only - not the main menu):" -ForegroundColor Yellow
-            Write-Host "    Enter   Next page" -ForegroundColor White
-            Write-Host "    B       Back to Help and Reports" -ForegroundColor White
-            Write-Host "    Q       Quit documentation" -ForegroundColor White
+            Write-Host "  Navigation (Help only - not the main menu):" -ForegroundColor Yellow
+            Write-Host "    Enter   Next page" -ForegroundColor Green
+            Write-Host "    B       Back to Help and Reports" -ForegroundColor Cyan
+            Write-Host "    Q       Quit documentation" -ForegroundColor DarkYellow
             try { $k = (Read-Host "  Press Enter, B, or Q").Trim() } catch { $k = "" }
             if ([string]::IsNullOrWhiteSpace($k)) { return "next" }
             if ($k -match '^[Nn]$') { return "next" }
@@ -749,6 +752,50 @@ function Show-Help {
         }
     }
 
+    function Write-HelpDisplayLine {
+        param([string]$Line)
+        if ($null -eq $Line -or $Line -eq "" -or $Line -eq "E|") {
+            Write-Host ""
+            return
+        }
+        $type = "B"
+        $text = $Line
+        if ($Line.Length -ge 2 -and $Line[1] -eq [char]'|') {
+            $type = $Line.Substring(0, 1)
+            $text = $Line.Substring(2)
+        }
+        switch ($type) {
+            "H" {
+                # Section heading (from ## in help source)
+                Write-Host ""
+                Write-Host ("  {0}" -f $text) -ForegroundColor Yellow
+            }
+            "L" {
+                # Field label: Why / Apply does / ...
+                Write-Host ("  {0}" -f $text) -ForegroundColor Cyan
+            }
+            "S" {
+                # Section name tag [Firewall]
+                Write-Host ("  {0}" -f $text) -ForegroundColor Green
+            }
+            "U" {
+                # URLs / paths
+                Write-Host ("  {0}" -f $text) -ForegroundColor DarkCyan
+            }
+            "M" {
+                # Muted tips / less important body
+                Write-Host ("  {0}" -f $text) -ForegroundColor DarkGray
+            }
+            "B" {
+                # Normal body
+                Write-Host ("  {0}" -f $text) -ForegroundColor Gray
+            }
+            default {
+                Write-Host ("  {0}" -f $text) -ForegroundColor Gray
+            }
+        }
+    }
+
     function Show-LineChunks {
         param(
             [string]$Title,
@@ -756,11 +803,10 @@ function Show-Help {
             [int]$Page,
             [int]$Total
         )
-        # Fit content to the visible window so the user always starts at the top
         $height = Get-BastionConsoleHeight
         $chunkSize = [Math]::Max(8, $height - 14)
         if ($null -eq $DisplayLines) { $DisplayLines = @() }
-        if ($DisplayLines.Count -eq 0) { $DisplayLines = @("  (No content)") }
+        if ($DisplayLines.Count -eq 0) { $DisplayLines = @("M|(No content)") }
         $offset = 0
         while ($offset -lt $DisplayLines.Count) {
             Clear-BastionScreen
@@ -768,25 +814,40 @@ function Show-Help {
             Write-Host ""
             $end = [Math]::Min($offset + $chunkSize - 1, $DisplayLines.Count - 1)
             for ($i = $offset; $i -le $end; $i++) {
-                $line = $DisplayLines[$i]
-                if ($null -eq $line) { Write-Host ""; continue }
-                if ($line -match '^\s*\[[^\]]+\]\s*$') {
-                    Write-Host $line -ForegroundColor Cyan
-                } elseif ($line -match '^\s*(Why|Apply does|You may notice|How to undo|Good to know)\s*$') {
-                    Write-Host $line -ForegroundColor DarkCyan
-                } else {
-                    Write-Host $line -ForegroundColor White
-                }
+                Write-HelpDisplayLine -Line $DisplayLines[$i]
             }
             $offset = $end + 1
             if ($offset -lt $DisplayLines.Count) {
                 Write-Host ""
-                Write-Host ("  --- more on this page ({0} lines left) ---" -f ($DisplayLines.Count - $offset)) -ForegroundColor DarkGray
-                try { [void](Read-Host "  Press Enter to continue from the top of the next section of this page") } catch {}
+                Write-Host ("  --- more on this page ({0} lines left) ---" -f ($DisplayLines.Count - $offset)) -ForegroundColor DarkYellow
+                try { [void](Read-Host "  Press Enter to continue this page") } catch {}
             }
         }
         Write-Host ""
         return (Read-HelpNav -Page $Page -Total $Total)
+    }
+
+    function Add-HelpWrapped {
+        param(
+            [System.Collections.Generic.List[string]]$List,
+            [string]$Type,
+            [string]$Text,
+            [int]$Indent = 0
+        )
+        if ([string]::IsNullOrWhiteSpace($Text)) {
+            [void]$List.Add("E|")
+            return
+        }
+        $pad = ""
+        if ($Indent -gt 0) { $pad = (" " * $Indent) }
+        foreach ($wl in @(Get-WrappedLines -Text $Text -Indent 0)) {
+            $body = $wl.TrimStart()
+            if ([string]::IsNullOrWhiteSpace($body)) {
+                [void]$List.Add("E|")
+            } else {
+                [void]$List.Add(("{0}|{1}{2}" -f $Type, $pad, $body))
+            }
+        }
     }
 
     function Show-HelpPage {
@@ -794,16 +855,20 @@ function Show-Help {
         $display = New-Object System.Collections.Generic.List[string]
         foreach ($line in $Lines) {
             if ($null -eq $line) { continue }
-            if ($line -match '^\s*$') { [void]$display.Add(""); continue }
+            if ($line -match '^\s*$') { [void]$display.Add("E|"); continue }
             if ($line -match '^\s*##\s+(.*)$') {
-                [void]$display.Add("")
-                foreach ($wl in @(Get-WrappedLines -Text $Matches[1] -Indent 2)) {
-                    [void]$display.Add($wl)
-                }
+                [void]$display.Add("E|")
+                Add-HelpWrapped -List $display -Type "H" -Text $Matches[1].Trim()
                 continue
             }
-            foreach ($wl in @(Get-WrappedLines -Text $line.TrimEnd() -Indent 2)) {
-                [void]$display.Add($wl)
+            # Numbered workflow steps stay slightly brighter body (still Gray via B)
+            $t = $line.TrimEnd()
+            if ($t -match 'https?://') {
+                Add-HelpWrapped -List $display -Type "U" -Text $t
+            } elseif ($t -match '^\s*\d+[\.\)]\s') {
+                Add-HelpWrapped -List $display -Type "B" -Text $t
+            } else {
+                Add-HelpWrapped -List $display -Type "B" -Text $t
             }
         }
         return (Show-LineChunks -Title $Title -DisplayLines @($display) -Page $Page -Total $Total)
@@ -812,12 +877,12 @@ function Show-Help {
     function Show-HelpSectionDocs {
         param([string[]]$Keys, [string]$Title, [int]$Page, [int]$Total)
         $display = New-Object System.Collections.Generic.List[string]
-        [void]$display.Add((Get-WrappedLines -Text "Each block explains why the section exists, what Apply does, what you may notice, and how to undo it." -Indent 2)[0])
-        [void]$display.Add("")
+        Add-HelpWrapped -List $display -Type "M" -Text "Each block explains why the section exists, what Apply does, what you may notice, and how to undo it."
+        [void]$display.Add("E|")
         foreach ($key in $Keys) {
             if (-not $script:SectionDocs.Contains($key)) { continue }
             $d = $script:SectionDocs[$key]
-            [void]$display.Add(("  [{0}]" -f $key))
+            [void]$display.Add(("S|[{0}]" -f $key))
             foreach ($pair in @(
                 @{ L = "Why"; B = $d.Intent },
                 @{ L = "Apply does"; B = $d.Changes },
@@ -825,12 +890,10 @@ function Show-Help {
                 @{ L = "How to undo"; B = $d.Revert },
                 @{ L = "Good to know"; B = $d.Notes }
             )) {
-                [void]$display.Add(("  {0}" -f $pair.L))
-                foreach ($wl in @(Get-WrappedLines -Text $pair.B -Indent 4)) {
-                    [void]$display.Add($wl)
-                }
+                [void]$display.Add(("L|{0}" -f $pair.L))
+                Add-HelpWrapped -List $display -Type "B" -Text $pair.B -Indent 2
             }
-            [void]$display.Add("")
+            [void]$display.Add("E|")
         }
         return (Show-LineChunks -Title $Title -DisplayLines @($display) -Page $Page -Total $Total)
     }
@@ -1081,9 +1144,10 @@ function Show-HelpReportsMenu {
         Clear-BastionScreen
         Write-Header "HELP AND REPORTS"
         Write-Host ""
-        Write-Host "  1  Full documentation (13 pages)" -ForegroundColor White
-        Write-Host "  2  Last Apply report" -ForegroundColor White
-        Write-Host "  3  Export HTML snapshot" -ForegroundColor White
+        Write-Host "  Choose a topic" -ForegroundColor Yellow
+        Write-Host "  1  Full documentation (13 pages)" -ForegroundColor Cyan
+        Write-Host "  2  Last Apply report" -ForegroundColor Cyan
+        Write-Host "  3  Export HTML snapshot" -ForegroundColor Cyan
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
         $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3")
