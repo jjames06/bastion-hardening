@@ -472,7 +472,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1
 # Upload that file as the GitHub Release asset (name must match bastion-hardening-v*.zip)
 ```
 
-Layout inside the zip: `bastion-hardening-v15.9.7\Bastion-Hardening.bat` plus helpers (`tools-elevate-self.ps1`, `tools-run-bootstrap.ps1`), `src\Bastion.*.ps1`, and `src\MANIFEST.sha256`. Modular source is plain text; only Apply undo DNS/RDP blobs use DPAPI. The site download API may still resolve GitHub **Latest** (public pin often **15.8.4**) while **15.9.7** ships as a GitHub **prerelease**.
+Layout inside the zip: `bastion-hardening-v15.9.7\Bastion-Hardening.bat` plus helpers (`tools-elevate-self.ps1`, `tools-run-bootstrap.ps1`), `src\Bastion.*.ps1`, and `src\MANIFEST.sha256`. Modular source is plain text; only Apply undo DNS/RDP blobs use DPAPI. **v15.9.7** is the public recommended build (GitHub Latest + official site).
 
 ---
 

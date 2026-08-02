@@ -2,7 +2,7 @@
 
 **Selective, state-aware, safety-first Windows hardening for a personal PC you administer.**
 
-This wiki is a short **user handbook** for **Bastion v15.9.7** (modular plain-text `src\` builds; source never encrypted; DPAPI only for Apply undo data; forced black console theme). Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Prefer the [v15.9.7 prerelease](https://github.com/jjames06/bastion-hardening/releases/tag/v15.9.7) for modular launch fixes + dark console; the [official site](https://www.operationlockedin.com/bastion/download) / [Latest](https://github.com/jjames06/bastion-hardening/releases/latest) may still pin public **15.8.4**. Always start with **`Bastion-Hardening.bat`** (Unblock the zip first; never double-click the `.ps1` alone).
+This wiki is a short **user handbook** for **Bastion v15.9.7** (modular plain-text `src\` builds; source never encrypted; DPAPI only for Apply undo data; forced black console theme; Help docs color-coded for dark UI). Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). **v15.9.7** is the public recommended build on the [official site](https://www.operationlockedin.com/bastion/download) and [GitHub Latest](https://github.com/jjames06/bastion-hardening/releases/latest). Always start with **`Bastion-Hardening.bat`** (Unblock the zip first; never double-click the `.ps1` alone).
 
 ## Start here
 
