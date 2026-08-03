@@ -107,7 +107,7 @@ All Bastion public resolvers (Quad9, Cloudflare, Cloudflare security, Google, Op
 
 Menu **D** alone still does not change Windows until Apply (**A** or main **8**).
 
-If you are on **v15.8.1-15.8.3** and Settings still says **Unencrypted**, upgrade to **v15.8.4+** and re-Apply DNS (or Network -> restore snapshot / Apply preferred). Manual fallback (old builds only): adapter -> DNS -> **Edit** -> DNS over HTTPS -> **On (automatic template)** -> Fallback off -> Save.
+If you are on **v15.8.1-15.8.3** (or any build before Settings-matching DoH) and Settings still says **Unencrypted**, prefer upgrading to **v15.9.7** modular (includes the DoH Encrypted path since **v15.8.4**) and re-Apply DNS (or Network -> restore snapshot / Apply preferred). Manual fallback (old builds only): adapter -> DNS -> **Edit** -> DNS over HTTPS -> **On (automatic template)** -> Fallback off -> Save.
 
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 
@@ -147,6 +147,7 @@ Use the path that matches your situation:
 | Situation | Where to go |
 |-----------|-------------|
 | Something broke after Apply (printing, network, games, browsers) | Site [Bastion Help](https://www.operationlockedin.com/bastion/help) (works from a phone) and [Recovery cookbook](Recovery-cookbook); in-app Recovery menu **9** when Bastion still starts |
+| Full first-Apply checklist (defaults, gates, verify) | [Hardening workflow](Hardening-workflow) (site: [hardening-workflow](https://www.operationlockedin.com/bastion/docs/hardening-workflow)) |
 | First install path | Site [Quick start](https://www.operationlockedin.com/bastion/docs/quick-start) and [Download](https://www.operationlockedin.com/bastion/download) |
 | Live paths on your machine | In-app Help (main menu **11**) |
 | Reproducible bug or crash | [GitHub Issues](https://github.com/jjames06/bastion-hardening/issues) (include Windows version, Bastion version, menu path, log lines) |

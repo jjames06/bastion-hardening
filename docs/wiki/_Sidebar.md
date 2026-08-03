@@ -1,5 +1,6 @@
 ﻿* [Home](Home)
 * [Quick start](Quick-start)
+* [Hardening workflow](Hardening-workflow)
 * [Recovery cookbook](Recovery-cookbook)
 * [Games and StrictHandle](Games-and-StrictHandle)
 * [FAQ](FAQ)

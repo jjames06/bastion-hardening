@@ -9,10 +9,11 @@ This wiki is a short **user handbook** for **Bastion v15.9.7** (modular plain-te
 ## Start here
 
 1. [Quick start](Quick-start) - install, restore point, Dry Run, Apply  
-2. [Recovery cookbook](Recovery-cookbook) - fix printing, network, games, Defender side effects  
-3. [Games and StrictHandle](Games-and-StrictHandle) - what breaks, how to reverse, how to report  
-4. [FAQ](FAQ) - common questions, honest limits  
-5. [Modular source layout](Modular-source) - why Bastion is no longer one giant script, and how to review it
+2. [Hardening workflow](Hardening-workflow) - full ordered checklist, section defaults, verify, when things break  
+3. [Recovery cookbook](Recovery-cookbook) - fix printing, network, games, Defender side effects  
+4. [Games and StrictHandle](Games-and-StrictHandle) - what breaks, how to reverse, how to report  
+5. [FAQ](FAQ) - common questions, honest limits  
+6. [Modular source layout](Modular-source) - why Bastion is no longer one giant script, and how to review it
 
 ## Official links
 
@@ -41,6 +42,7 @@ This wiki is a short **user handbook** for **Bastion v15.9.7** (modular plain-te
 | Need | Where |
 |------|--------|
 | Running Bastion right now | In-app **Help** (menu **11**) |
+| Ordered first Apply checklist | [Hardening workflow](Hardening-workflow) |
 | Handbook / FAQ / Recovery recipes | **This wiki** |
 | Data directory, ECH, known-issue detail | Release zip `docs/` ([DATA-DIRECTORY](https://github.com/jjames06/bastion-hardening/blob/main/docs/DATA-DIRECTORY.md), [BROWSER-POLICIES-AND-ECH](https://github.com/jjames06/bastion-hardening/blob/main/docs/BROWSER-POLICIES-AND-ECH.md), [KNOWN-ISSUES](https://github.com/jjames06/bastion-hardening/blob/main/docs/KNOWN-ISSUES.md)) |
 | Product site / download | [operationlockedin.com](https://www.operationlockedin.com) and [Bastion download](https://www.operationlockedin.com/bastion/download) |
@@ -56,7 +58,7 @@ This wiki is a short **user handbook** for **Bastion v15.9.7** (modular plain-te
 - When you know what broke, use **Recovery hubs** (menu **9**) before a full Undo.  
 - System Restore remains the strongest full rollback.
 
-*This handbook aims to match product behavior around **v15.8+**. Always use the [official download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest).*
+*This handbook aims to match product behavior for **v15.9.7** modular builds. Always use the [official download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest).*
 
 **License:** GNU **GPLv3**. Free to use and modify; distributed modified versions must stay GPLv3 with source (see FAQ).
 
