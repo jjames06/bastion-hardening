@@ -1,8 +1,43 @@
 # Bastion.Harden.ps1 - modular domain (v15.9.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.
+#
+# Role in modular architecture:
+#   Section helper implementations used by Apply, Dry Run, Audit, and Recovery:
+#   Game DVR silence, OneDrive removal, bloat Appx detection, Defender CFA allow paths,
+#   World of Warcraft discovery for StrictHandle exceptions, registry soft-set helpers,
+#   suggestion restore, and OS Remote Desktop host allow/deny.
+#
+# Load-order position: 8 of 11 (after Dns, before Apply).
+#   Order: Init, Core, Config, Programs, Services, Browsers, Dns, Harden, Apply, Recovery, Menus.
+#
+# Dependencies on $script: state:
+#   $script:ProgramDefs / ExtraCfaPaths     - CFA candidate paths
+#   $script:BloatAppxList                  - curated package match list
+#   $script:SuggestionRegistry             - Widgets/Suggestions keys
+#   $script:WowInstallRoots                - config override WoW roots
+#   $script:StrictHandleExceptionPaths     - explicit full EXE exception paths
+#   $script:tempDir                        - reg.exe fallback I/O
+#
+# Honesty (StrictHandle):
+#   System-wide StrictHandle hardens most processes. Some loaders (documented: WoW) break
+#   until a per-app exception. Bastion auto-excepts discovered Wow*.exe; other titles may
+#   still break until reported. Recovery > 6 is the supported reverse path. See issue #18.
 
 function Test-BastionGameDvrSilenced {
+    <#
+      Purpose:
+        True when common Game DVR / capture flags look off (user and/or policy).
+
+      When called:
+        Dry Run XboxGaming preview; Audit-style checks if needed.
+
+      Side effects:
+        Registry reads only (HKCU GameConfigStore/GameDVR, HKLM GameDVR policy).
+
+      Undo implications:
+        None (status only).
+    #>
     # True when common Game DVR / capture flags are off (games titles less likely to open ms-gamingoverlay).
     try {
         $gcs = (Get-ItemProperty "HKCU:\System\GameConfigStore" -Name GameDVR_Enabled -ErrorAction SilentlyContinue).GameDVR_Enabled
@@ -20,6 +55,24 @@ function Test-BastionGameDvrSilenced {
 }
 
 function Disable-BastionGameDvrOverlay {
+    <#
+      Purpose:
+        Silence ms-gamingoverlay prompts when Game Bar is gone but Game DVR flags still on.
+        Does not reinstall Xbox; registry/policy only.
+
+      When called:
+        Apply XboxGaming section; Apply BloatApps when overlay removed/absent.
+        Immediate during Apply (not Dry Run).
+
+      Side effects / Windows objects touched:
+        - HKCU GameDVR AppCaptureEnabled=0, GameConfigStore GameDVR_Enabled=0
+        - HKCU GameBar AutoGameMode / nexus flags to 0
+        - HKLM Policies\...\GameDVR AllowGameDVR=0 when elevated write succeeds
+
+      Undo implications:
+        Enable-BastionGameDvrOverlay (Recovery) reverses common flags. Policy key may need
+        remove; Game Bar itself is Store reinstall, not Bastion.
+    #>
     # Silence "Get an app to open this ms-gamingoverlay link" when Game Bar / XboxGamingOverlay is gone
     # but GameDVR is still enabled and games keep invoking the protocol.
     # Does not reinstall Xbox; only policy/registry so apps stop asking for the overlay.
@@ -90,6 +143,19 @@ function Disable-BastionGameDvrOverlay {
 }
 
 function Enable-BastionGameDvrOverlay {
+    <#
+      Purpose:
+        Reverse silence: re-enable Game DVR user flags and remove AllowGameDVR policy value.
+
+      When called:
+        Recovery gaming / overlay path. Immediate apply.
+
+      Side effects:
+        HKCU GameDVR flags = 1; Remove-ItemProperty AllowGameDVR if present.
+
+      Undo implications:
+        Does not install XboxGamingOverlay; user may still need Store package.
+    #>
     # Reverse of silence: re-enable Game DVR flags so Xbox Game Bar can work again if reinstalled from Store.
     try {
         if (-not (Test-Path "HKCU:\System\GameConfigStore")) {
@@ -115,6 +181,16 @@ function Enable-BastionGameDvrOverlay {
 }
 
 function Get-OneDriveStatus {
+    <#
+      Purpose:
+        Detect OneDrive client presence via process name and common install binary paths.
+
+      When called:
+        Dry Run OneDrive section, Audit, Remove-BastionOneDrive before/after.
+
+      Side effects:
+        Process and filesystem probes only.
+    #>
     $signals = [System.Collections.Generic.List[string]]::new()
     if (Get-Process -Name "OneDrive" -ErrorAction SilentlyContinue) {
         [void]$signals.Add("process")
@@ -136,6 +212,22 @@ function Get-OneDriveStatus {
 }
 
 function Remove-BastionOneDrive {
+    <#
+      Purpose:
+        Uninstall OneDrive client via OneDriveSetup.exe /uninstall /allusers after stopping process.
+
+      When called:
+        Apply OneDrive section. Not Dry Run.
+
+      Side effects / Windows objects touched:
+        - Stop-Process OneDrive
+        - OneDriveSetup.exe uninstall (machine)
+        - Cloud files may remain on disk; client sync stops when binary removed
+
+      Undo implications:
+        Hard to reverse automatically; reinstall from Microsoft. Not stored as restore blob.
+        Residual detection after uninstall reports Failed with manual next steps.
+    #>
     $before = Get-OneDriveStatus
     if (-not $before.Present) {
         Write-Status "OneDrive not present" "Already"
@@ -176,6 +268,19 @@ function Remove-BastionOneDrive {
 }
 
 function Get-BloatAppxStatus {
+    <#
+      Purpose:
+        Find curated bloat packages: current user Appx, AllUsers Appx, and provisioned packages.
+
+      When called:
+        Dry Run BloatApps; Apply BloatApps removal list.
+
+      Side effects:
+        Package queries only (read).
+
+      Undo implications:
+        Detection only. Removal is hard to reverse (Store reinstall); Apply warns accordingly.
+    #>
     $found = [System.Collections.Generic.List[object]]::new()
     foreach ($item in $script:BloatAppxList) {
         $pkgs = @()
@@ -198,6 +303,17 @@ function Get-BloatAppxStatus {
 }
 
 function Get-CfaCandidatePaths {
+    <#
+      Purpose:
+        Build Controlled Folder Access allow-list candidates from installed catalog paths
+        plus ExtraCfaPaths that exist on disk.
+
+      When called:
+        Add-CfaAllowPaths during Defender Apply.
+
+      Side effects:
+        Path existence checks only.
+    #>
     $paths = [System.Collections.Generic.List[string]]::new()
     foreach ($name in $script:ProgramDefs.Keys) {
         foreach ($p in @($script:ProgramDefs[$name].Paths)) {
@@ -215,6 +331,19 @@ function Get-CfaCandidatePaths {
 }
 
 function Add-CfaAllowPaths {
+    <#
+      Purpose:
+        Add-MpPreference ControlledFolderAccessAllowedApplications for each candidate path.
+
+      When called:
+        Apply Defender section after enabling CFA.
+
+      Side effects:
+        Defender preference mutations (allow list growth). Silent catch on individual fails.
+
+      Undo implications:
+        Bastion does not remove CFA allows on undo; user manages via Windows Security.
+    #>
     $added = 0
     foreach ($p in (Get-CfaCandidatePaths)) {
         try {
@@ -231,6 +360,16 @@ function Add-CfaAllowPaths {
 }
 
 function ConvertTo-BastionNormalizedPath {
+    <#
+      Purpose:
+        Normalize a raw path string for WoW/StrictHandle discovery (slashes, quotes, junk).
+
+      When called:
+        WoW root resolution and exception path collection.
+
+      Side effects:
+        May resolve FullName when path exists. No writes.
+    #>
     param([string]$Raw)
     if ([string]::IsNullOrWhiteSpace($Raw)) { return $null }
     $p = $Raw.Trim().Trim('"').Trim("'") -replace '/', '\'
@@ -249,6 +388,17 @@ function ConvertTo-BastionNormalizedPath {
 }
 
 function Test-BastionLooksLikeWowRoot {
+    <#
+      Purpose:
+        Heuristic: directory looks like a World of Warcraft install root (product folders,
+        Wow.exe, .battle.net under Warcraft-named leaf). Avoids lone "data" false positives.
+
+      When called:
+        Resolve-BastionWowRootFromPath and metadata scans.
+
+      Side effects:
+        Filesystem existence checks only.
+    #>
     param([string]$Dir)
     if ([string]::IsNullOrWhiteSpace($Dir) -or -not (Test-Path -LiteralPath $Dir -PathType Container)) { return $false }
     # Do NOT treat a lone "data" folder as enough (Battle.net Agent also has data\).
@@ -265,6 +415,16 @@ function Test-BastionLooksLikeWowRoot {
 }
 
 function Resolve-BastionWowRootFromPath {
+    <#
+      Purpose:
+        Map a file/folder path from Battle.net metadata or uninstall keys to a WoW install root.
+
+      When called:
+        Metadata and registry root collectors.
+
+      Side effects:
+        Path walk only (up to 6 parents).
+    #>
     # Map a file or folder path from Battle.net metadata to a WoW install root folder.
     param([string]$RawPath)
     $p = ConvertTo-BastionNormalizedPath -Raw $RawPath
@@ -302,6 +462,16 @@ function Resolve-BastionWowRootFromPath {
 }
 
 function Get-BastionAsciiPathStringsFromFile {
+    <#
+      Purpose:
+        Extract Windows path-like ASCII runs from binary/json metadata (product.db style).
+
+      When called:
+        Battle.net product.db scan for install locations.
+
+      Side effects:
+        Reads file up to MaxBytes (default 4MB). No writes.
+    #>
     # Pull Windows path-like ASCII runs from Battle.net binary/json metadata (product.db is protobuf-ish).
     param([string]$FilePath, [int]$MaxBytes = 4MB)
     $out = [System.Collections.Generic.List[string]]::new()
@@ -326,6 +496,16 @@ function Get-BastionAsciiPathStringsFromFile {
 }
 
 function Get-BastionWowRootsFromBattleNetMetadata {
+    <#
+      Purpose:
+        Discover WoW install roots from Battle.net Agent product.db / aggregate.json.
+
+      When called:
+        Get-BastionWowInstallRoots merge path for StrictHandle exceptions.
+
+      Side effects:
+        Reads under ProgramData\Battle.net\Agent. No game files modified.
+    #>
     # Battle.net Agent product.db / aggregate.json record real install locations (any drive / custom folder name nearby).
     $roots = [System.Collections.Generic.List[string]]::new()
     $metaFiles = [System.Collections.Generic.List[string]]::new()
@@ -383,6 +563,16 @@ function Get-BastionWowRootsFromBattleNetMetadata {
 }
 
 function Get-BastionWowRootsFromUninstallRegistry {
+    <#
+      Purpose:
+        Find WoW roots from Uninstall DisplayName/Publisher and InstallLocation/Icon/UninstallString.
+
+      When called:
+        Get-BastionWowInstallRoots merge.
+
+      Side effects:
+        Registry reads (HKLM/HKCU Uninstall). No writes.
+    #>
     $roots = [System.Collections.Generic.List[string]]::new()
     $hives = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -415,6 +605,17 @@ function Get-BastionWowRootsFromUninstallRegistry {
 }
 
 function Get-BastionWowInstallRoots {
+    <#
+      Purpose:
+        Merge WoW roots: config overrides, Battle.net metadata, uninstall registry,
+        well-known paths on fixed volumes.
+
+      When called:
+        Get-BastionStrictHandleExceptionPaths (Apply / Dry Run / Recovery refresh).
+
+      Side effects:
+        Discovery only. Large Data\ trees are not fully walked here (product dirs only later).
+    #>
     # Merge: config overrides + Battle.net product.db/aggregate.json + uninstall registry + well-known paths on fixed drives.
     $roots = [System.Collections.Generic.List[string]]::new()
     function Add-Root([string]$r) {
@@ -463,6 +664,23 @@ function Get-BastionWowInstallRoots {
 }
 
 function Get-BastionStrictHandleExceptionPaths {
+    <#
+      Purpose:
+        Collect full paths of EXEs that should get StrictHandle OFF: config list + Wow*.exe
+        under known product subfolders of discovered WoW roots.
+
+      When called:
+        Dry Run ExploitProtection; Apply Set-BastionStrictHandleExceptions; Recovery status;
+        Write-BastionStrictHandleGuidance Notice path count.
+
+      Side effects:
+        Filesystem scans limited to product dirs (not full Data\) for Apply performance.
+
+      Honesty (StrictHandle):
+        Exception on the EXE covers loader DLL crashes (Wow_loader.dll under issue #18).
+        Undiscovered games are NOT excepted. Full path required (bare names collide).
+        Empty list is normal when WoW is not installed.
+    #>
     # Per-app StrictHandle OFF targets. System keeps StrictHandle ON for everything else.
     # Wow_loader.dll is loaded by Wow*.exe - exception on the EXE covers the loader crash (issue #18).
     # Only scan known product subfolders (not Data\) so Apply stays fast on large installs.
@@ -505,6 +723,25 @@ function Get-BastionStrictHandleExceptionPaths {
 }
 
 function Set-BastionStrictHandleExceptions {
+    <#
+      Purpose:
+        Set-ProcessMitigation -Disable StrictHandle for each discovered exception EXE path.
+
+      When called:
+        Apply ExploitProtection after system mitigations; Recovery refresh exceptions.
+
+      Side effects / Windows objects touched:
+        Per-image process mitigation policy for each full EXE path (StrictHandle OFF for that app only).
+        System-wide StrictHandle remains ON if previously enabled.
+
+      Undo implications:
+        Recovery can disable system StrictHandle entirely or re-apply Bastion profile.
+        Exceptions are re-applied on next Apply/refresh; not a permanent OS "undo file."
+
+      Honesty (StrictHandle):
+        Per-app OFF is a deliberate security trade-off for software that breaks under system
+        StrictHandle. Not a silent failure: Info message when no paths found.
+    #>
     # Disable StrictHandle only for discovered game EXEs (full path required; bare names collide).
     $paths = @(Get-BastionStrictHandleExceptionPaths)
     if ($paths.Count -eq 0) {
@@ -526,6 +763,21 @@ function Set-BastionStrictHandleExceptions {
 }
 
 function Write-BastionStrictHandleGuidance {
+    <#
+      Purpose:
+        Single source of truth for StrictHandle honesty UI (Inline / Notice / Block styles).
+
+      When called:
+        Dry Run and Apply ExploitProtection (Inline/Notice); Recovery mitigations (Block).
+
+      Side effects:
+        Console output only. Notice style may query exception path count.
+
+      Honesty (StrictHandle):
+        Documents WoW as example (now auto-excepted), CS2 tested OK, other titles unknown.
+        Reverse: Recovery > 6 disable system StrictHandle, reboot, report game + full .exe path.
+        Prefer Recovery so Bastion status stays accurate vs ad-hoc Windows Security clicks.
+    #>
     # Single source of truth: clear reverse path + WoW as example only + report so we can add exceptions.
     param(
         [ValidateSet("Inline", "Block", "Notice")]
@@ -583,6 +835,21 @@ function Write-BastionStrictHandleGuidance {
 }
 
 function Set-RegistryValueSafe {
+    <#
+      Purpose:
+        Create registry path as needed and set a value; Soft mode warns and continues on
+        access-denied optional keys. Hard path may fall back to reg.exe.
+
+      When called:
+        Apply Suggestions section; Restore-SuggestionDefaults for non-null defaults.
+
+      Side effects / Windows objects touched:
+        New-Item / New-ItemProperty or reg.exe add under HKLM/HKCU paths from callers.
+
+      Undo implications:
+        Restore-SuggestionDefaults uses Default values or removes policy values.
+        Soft failures leave Windows defaults (not Bastion-owned).
+    #>
     param(
         $Path,
         $Name,
@@ -681,6 +948,19 @@ function Set-RegistryValueSafe {
 }
 
 function Restore-SuggestionDefaults {
+    <#
+      Purpose:
+        Walk SuggestionRegistry and restore Default values or remove policy values.
+
+      When called:
+        Recovery suggestions restore. Immediate registry changes.
+
+      Side effects:
+        HKCU/HKLM suggestion/widget related values per registry list.
+
+      Undo implications:
+        This is the reverse of Apply Suggestions. Sign-out/Explorer restart may be needed.
+    #>
     Write-Host "  Restoring Widgets / Suggestions toward defaults..." -ForegroundColor Cyan
     foreach ($item in $script:SuggestionRegistry) {
         $path = $item.Path
@@ -714,6 +994,16 @@ function Restore-SuggestionDefaults {
 }
 
 function Get-BastionRemoteDesktopSystemStatus {
+    <#
+      Purpose:
+        Read OS RDP host switch (fDenyTSConnections) and TermService status/start type.
+
+      When called:
+        Dry Run RDP triad / RdpHostLock; Audit; Apply RdpHostLock prior capture; Recovery.
+
+      Side effects:
+        Registry and service queries only.
+    #>
     $deny = $null
     try {
         $deny = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
@@ -735,6 +1025,20 @@ function Get-BastionRemoteDesktopSystemStatus {
 }
 
 function Enable-BastionRemoteDesktopSystem {
+    <#
+      Purpose:
+        Allow OS Remote Desktop (fDenyTSConnections=0) and start TermService Automatic.
+
+      When called:
+        Recovery remote access path. Immediate apply.
+
+      Side effects:
+        HKLM Terminal Server registry; TermService start type and Start-Service.
+
+      Undo implications:
+        Firewall group may still block; full RDP needs OPEN group + ALLOWED + service.
+        Reverse: Disable-BastionRemoteDesktopSystem or RdpHostLock Apply.
+    #>
     # Optional layer beyond firewall groups: Windows "allow remote connections to this computer".
     try {
         $path = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
@@ -760,6 +1064,19 @@ function Enable-BastionRemoteDesktopSystem {
 }
 
 function Disable-BastionRemoteDesktopSystem {
+    <#
+      Purpose:
+        Deny OS RDP (fDenyTSConnections=1); optionally stop TermService and set Manual.
+
+      When called:
+        Recovery or helpers; Apply RdpHostLock uses similar logic inline with undo prior.
+
+      Side effects:
+        Registry deny; optional service stop/Manual.
+
+      Undo implications:
+        Prior values should be restored from Apply undo (RdpHostPrior) when available.
+    #>
     param([switch]$StopService)
     try {
         $path = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
@@ -787,6 +1104,19 @@ function Disable-BastionRemoteDesktopSystem {
 }
 
 function Get-BastionStrictHandleSystemStatus {
+    <#
+      Purpose:
+        Snapshot system StrictHandle/DEP state and current exception path count/list.
+
+      When called:
+        Recovery mitigations menu status.
+
+      Side effects:
+        Get-ProcessMitigation -System and exception path discovery (read-only policy).
+
+      Honesty (StrictHandle):
+        UNKNOWN when query fails. ExceptionCount does not prove exceptions are already applied.
+    #>
     $strictOn = $null
     $depOn = $null
     try {

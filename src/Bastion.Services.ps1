@@ -1,8 +1,42 @@
 # Bastion.Services.ps1 - modular domain (v15.9.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.
+#
+# Role in modular architecture:
+#   Service enable/disable helpers for high-risk and Xbox service lists, plus Recovery
+#   catalog metadata used by Recovery menus. Pure helpers; no main menu loop lives here.
+#
+# Load-order position: 5 of 11 (after Programs, before Browsers).
+#   Order: Init, Core, Config, Programs, Services, Browsers, Dns, Harden, Apply, Recovery, Menus.
+#
+# Dependencies on $script: state (set in Init / mutated by Apply and Quick Harden):
+#   $script:HighRiskServiceList   - names Apply may disable when HighRiskServices is on
+#   $script:SkipSpoolerThisApply  - one-shot Quick Harden opt-out so Spooler stays printable
+#   $script:ServiceRecoveryCatalog - Name/Group/Display/PreferStart/Why for Recovery UI
+#   $script:Stats                 - ServicesDisabled counter during Apply (Write-Status paths)
+#   $script:XboxServiceList       - used from Apply/Audit, not directly in this file
 
 function Get-HighRiskServicesForApply {
+    <#
+      Purpose:
+        Return the high-risk service name list for the current Apply run, optionally
+        without Spooler when the user chose to keep printing during Quick Harden.
+
+      When called:
+        Apply (HighRiskServices section) and Dry Run (to preview what would disable).
+        Not used by Recovery (Recovery enables by catalog entry, not this filter).
+
+      Side effects:
+        None. Read-only filter over $script:HighRiskServiceList.
+
+      Undo implications:
+        None here. Disable-BastionService records original start type into Apply undo
+        when a service is actually disabled.
+
+      Honesty:
+        Skipping Spooler is a usability trade-off, not "already hardened." Print Spooler
+        remains a known attack surface (PrintNightmare-class issues) if left enabled.
+    #>
     # Spooler can be skipped for one Apply when Quick Harden user opts to keep printing.
     $list = @($script:HighRiskServiceList)
     if ($script:SkipSpoolerThisApply) {
@@ -12,10 +46,46 @@ function Get-HighRiskServicesForApply {
 }
 
 function Get-ServiceState([string]$Name) {
+    <#
+      Purpose:
+        Safe wrapper around Get-Service: return the ServiceController or $null if missing.
+
+      When called:
+        Dry Run, Apply, Audit, Recovery service rows, and any disable/enable path.
+
+      Side effects:
+        None (query only). Does not start or stop services.
+
+      Undo implications:
+        None.
+    #>
     try { return Get-Service -Name $Name -ErrorAction Stop } catch { return $null }
 }
 
 function Disable-BastionService {
+    <#
+      Purpose:
+        Stop a Windows service if running, set StartupType to Disabled, and return
+        an object with Name + Original start type for undo tracking.
+
+      When called:
+        Apply (HighRiskServices, XboxGaming). Not Dry Run (Dry Run only reads state).
+
+      Side effects / Windows objects touched:
+        - Service Control Manager: Stop-Service -Force when not already Stopped
+        - Service start type set to Disabled via Set-Service
+        - Increments $script:Stats.ServicesDisabled on success
+        - Console + log via Write-Status
+
+      Undo implications:
+        Returns @{ Name; Original } for Apply undo (Bastion-LastApply / Recovery service
+        restore). If stop fails but disable succeeds, process may keep running until reboot;
+        undo still restores the recorded start type, not a guaranteed running state.
+
+      Honesty:
+        "Disabled" means start type only when stop failed. User may need reboot for a
+        stuck process. Absent services report Already (not an error).
+    #>
     param([string]$Name)
     $svc = Get-ServiceState $Name
     if ($null -eq $svc) {
@@ -52,6 +122,20 @@ function Disable-BastionService {
 }
 
 function Get-BastionServiceCatalogEntry {
+    <#
+      Purpose:
+        Look up Recovery catalog metadata for a service name (group, display, preferred
+        start type, short why text). Fallback object if not in catalog.
+
+      When called:
+        Recovery service UI and Enable-BastionService (default PreferStart).
+
+      Side effects:
+        None. Reads $script:ServiceRecoveryCatalog only.
+
+      Undo implications:
+        None. PreferStart guides re-enable defaults; it is not a snapshot of pre-Apply state.
+    #>
     param([Parameter(Mandatory)][string]$Name)
     foreach ($e in $script:ServiceRecoveryCatalog) {
         if ($e.Name -eq $Name) { return $e }
@@ -60,6 +144,21 @@ function Get-BastionServiceCatalogEntry {
 }
 
 function Get-BastionServiceStatusRow {
+    <#
+      Purpose:
+        Build a display row for Recovery/status menus: present?, Status, StartType,
+        hardened (Disabled), and a short Label (ABSENT/DISABLED/RUNNING/STOPPED).
+
+      When called:
+        Recovery service hubs (read-only posture for each catalog service).
+
+      Side effects:
+        None beyond Get-Service query.
+
+      Undo implications:
+        None. "Hardened" here means StartType is Disabled only; it is not a claim that
+        Bastion last applied the change.
+    #>
     param([Parameter(Mandatory)][string]$Name)
     $meta = Get-BastionServiceCatalogEntry -Name $Name
     $svc = Get-ServiceState $Name
@@ -82,6 +181,29 @@ function Get-BastionServiceStatusRow {
 }
 
 function Enable-BastionService {
+    <#
+      Purpose:
+        Set a service StartupType (default from catalog PreferStart) and start it unless
+        the requested type is Disabled.
+
+      When called:
+        Recovery (re-enable Spooler, high-risk services, Xbox services, etc.).
+        Not called by Dry Run or main Apply (Apply only disables).
+
+      Side effects / Windows objects touched:
+        - Set-Service StartupType (Automatic / Manual / Disabled)
+        - Start-Service when StartupType is not Disabled
+        - Log line via Write-Log -NoConsole
+
+      Undo implications:
+        This is the reverse path for user-driven recovery. It does not rewrite Bastion
+        undo files. PreferStart may differ from the original type captured at Apply time;
+        Recovery may also restore from undo DisabledServices when that data exists.
+
+      Honesty:
+        Start failure after type change leaves start type applied but service not running;
+        user is pointed at services.msc. Absent service is Already, not Failed.
+    #>
     param(
         [Parameter(Mandatory)][string]$Name,
         [string]$StartupType = ""
@@ -115,6 +237,24 @@ function Enable-BastionService {
 }
 
 function Enable-PrintSpooler {
+    <#
+      Purpose:
+        Interactive shortcut: confirm, then set Spooler to Automatic and start it.
+
+      When called:
+        Recovery menus (printing restore). Immediate apply with Y/N; no main menu 8.
+
+      Side effects / Windows objects touched:
+        - Spooler service: StartupType Automatic, Start-Service
+        - Wait-ForKey after result
+
+      Undo implications:
+        Reverses HighRiskServices Spooler disable. Does not edit Bastion undo JSON.
+
+      Honesty:
+        Restoring Spooler restores print capability and the Spooler attack surface.
+        This is intentional for home/workstations that must print.
+    #>
     if ((Read-YesNo -Prompt "  Re-enable Print Spooler (Y/N)?") -ne "Y") { return }
     try {
         Set-Service -Name Spooler -StartupType Automatic -ErrorAction Stop

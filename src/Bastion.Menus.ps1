@@ -1,7 +1,30 @@
+# =============================================================================
 # Bastion.Menus.ps1 - modular domain (v15.9.0)
+# =============================================================================
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.
+#
+# Role of this module
+#   Interactive UI for configure / maintain / help flows. Most menus only save
+#   preferences (sections, install queue, DNS choice). Windows is hardened when
+#   the user runs main menu 8 (Apply) or certain "applies NOW" paths:
+#     - Browser policies (menu 6) write on confirm
+#     - Uninstall (menu 10) runs on confirm
+#     - DNS menu A applies DNS immediately
+#     - Recovery hubs reverse or re-open paths immediately
+#
+# Shared conventions
+#   Read-MenuChoice validates keys; Write-Header / Write-AppliesWhen label timing.
+#   Save-BastionConfig persists toggles to Bastion-Config.json under LogDirectory.
+#   Comments use ASCII punctuation only (hyphens, not em dashes).
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# Get-HardwareInventory
+#   CIM snapshot for the hardware guidance screen. Does not install drivers or
+#   touch BIOS. Filters out virtual / basic display adapters from the GPU list.
+#   Returns a PSCustomObject: GPUs, Motherboard, BIOS, CPU, ComputerSystem.
+# -----------------------------------------------------------------------------
 function Get-HardwareInventory {
     $gpu = @()
     try {
@@ -45,11 +68,16 @@ function Get-HardwareInventory {
     return [PSCustomObject]@{ GPUs = $gpu; Motherboard = $board; BIOS = $bios; CPU = $cpu; ComputerSystem = $cs }
 }
 
+# -----------------------------------------------------------------------------
+# Get-MotherboardSupportLinks
+#   Map board manufacturer/product strings to official OEM support URLs only.
+#   No third-party driver packs. Multiple vendors may match; list may be empty.
+# -----------------------------------------------------------------------------
 function Get-MotherboardSupportLinks {
     param($Manufacturer, $Product)
     $m = ("{0} {1}" -f $Manufacturer, $Product)
     $links = [System.Collections.Generic.List[object]]::new()
-    # Official vendor support only
+    # Official vendor support only (no third-party driver sites)
     if ($m -match 'Gigabyte|AORUS|Aorus') {
         [void]$links.Add([PSCustomObject]@{ Name = "Gigabyte Support"; Url = "https://www.gigabyte.com/Support" })
         [void]$links.Add([PSCustomObject]@{ Name = "Gigabyte BIOS downloads"; Url = "https://www.gigabyte.com/Support/Motherboard" })
@@ -78,6 +106,12 @@ function Get-MotherboardSupportLinks {
     return @($links)
 }
 
+# -----------------------------------------------------------------------------
+# Show-HardwareDriverGuide
+#   Main menu 3. Displays live hardware strings and opens official vendor pages
+#   in the default browser. Loop stays open until the user chooses 0 (Back).
+#   Safety messaging: AC power for BIOS, vendor images only, no auto-flash.
+# -----------------------------------------------------------------------------
 function Show-HardwareDriverGuide {
     $hw = Get-HardwareInventory
     while ($true) {
@@ -160,6 +194,14 @@ function Show-HardwareDriverGuide {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-ProgramMenu
+#   Main menu 5. Catalog install queue only (missing apps). Nothing installs
+#   here; installs run under Apply (main menu 8). Installed apps show status
+#   but cannot be queued (use menu 10 Uninstall to remove).
+#   Keys: number toggles missing app; N clear queue; L install locations for
+#   current queue; C save and back; 0 save and back. No bulk "select all".
+# -----------------------------------------------------------------------------
 function Show-ProgramMenu {
     # Prune stale queue (e.g. apps installed outside Bastion since last session).
     Sync-ProgramInstallQueue
@@ -250,6 +292,14 @@ function Show-ProgramMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-SectionMenu
+#   Main menu 4. Toggle which hardening sections run on the next Apply.
+#   Does not change Windows until main menu 8 (or Quick Harden). DNS special
+#   case: when DNS section turns on with provider "None", default to Quad9 so
+#   Apply has a real resolver; turning DNS off keeps last real provider id for
+#   easy re-enable. Keys: A all on, N all off, D open DNS provider menu, C/0 save.
+# -----------------------------------------------------------------------------
 function Show-SectionMenu {
     $names = @($script:Sections.Keys)
     while ($true) {
@@ -320,6 +370,14 @@ function Show-SectionMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-DnsProviderMenu
+#   Main menu D (and Sections > D). Two phases:
+#     1) Number keys save preferred provider only (Bastion-Config.json).
+#     2) Key A applies preferred DNS to adapters NOW (same work as Apply DNS).
+#   "None" / section off means full Apply will not touch adapter DNS.
+#   Live adapter summary is always painted so users see preference vs reality.
+# -----------------------------------------------------------------------------
 function Show-DnsProviderMenu {
     while ($true) {
         Clear-BastionScreen
@@ -402,6 +460,21 @@ function Show-DnsProviderMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-BrowserPolicyMenu
+#   Main menu 6 and Recovery hub 4. Writes browser enterprise policies NOW
+#   (no main menu 8). Only installed Firefox / Chrome / Brave appear.
+#
+#   Modes (per selected browser or all installed):
+#     Default - remove Bastion policies for that browser (best-effort; backups)
+#     Medium  - privacy baseline (telemetry / tracking / cookies)
+#     Strict  - Medium + HTTPS-Only; does NOT enable ECH by itself
+#
+#   Encrypted Client Hello (ECH) pack:
+#     Never default. Asked only after Strict, separate Y/N (default path No).
+#     enableEch stays false unless user answers Y. Passed to Invoke-BastionBrowserPolicy.
+#   After write: full browser restart required for policies to load or drop.
+# -----------------------------------------------------------------------------
 function Show-BrowserPolicyMenu {
     while ($true) {
         Clear-BastionScreen
@@ -522,6 +595,14 @@ function Show-BrowserPolicyMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-UninstallMenu
+#   Main menu 10. Catalog apps detected as installed only. Selection starts
+#   empty every visit. Uninstall runs NOW after YES (not deferred to Apply).
+#   Re-verifies install state before and after winget. ManualInstallOnly apps
+#   are guided to Settings/vendor, not winget. PowerToys often needs per-user
+#   Settings path when elevated winget fails.
+# -----------------------------------------------------------------------------
 function Show-UninstallMenu {
     Clear-BastionScreen
     Write-Header "UNINSTALL"
@@ -723,9 +804,37 @@ function Show-UninstallMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-Help
+#   Multi-page in-console handbook (13 pages). Nested helpers build typed
+#   display lines, wrap them to the console width, and page by console height.
+#   Navigation is Help-only (Enter/B/Q); main-menu number keys are rejected so
+#   users do not jump into Apply by accident while reading docs.
+#
+# ---------------------------------------------------------------------------
+# HELP DISPLAY LINE TYPE SYSTEM (color-coding after wrap)
+# ---------------------------------------------------------------------------
+# Every rendered line is stored as:  <TypeChar>|<text>
+# The type prefix is NOT shown to the user; Write-HelpDisplayLine strips it
+# and picks ForegroundColor. Wrapping (Add-HelpWrapped) copies the same type
+# onto every physical line of a long paragraph so colors stay consistent.
+#
+#   Char  Name           Color      Typical source / use
+#   ----  -------------  ---------  ------------------------------------------
+#   H     Heading        Yellow     Source lines matching "## Title"
+#   L     Label          Cyan       Field names: Why, Apply does, How to undo
+#   S     Section tag    Green      Section key banner, e.g. [Firewall]
+#   B     Body           Gray       Normal paragraphs and numbered steps
+#   U     URL / path     DarkCyan   Lines containing http(s)://
+#   M     Muted tip      DarkGray   Intro tips, less important body
+#   E     Empty          (blank)    Blank spacer; form is "E|" with no text
+#
+# Unknown type chars fall through to Gray body. Empty input or "E|" prints a
+# blank host line. Show-LineChunks splits long pages by console height and
+# prompts Enter between chunks before Read-HelpNav.
+# ---------------------------------------------------------------------------
 function Show-Help {
-    # Display lines use a one-char type prefix so headings/body stay color-coded after wrap:
-    # H=heading  L=label  S=section tag  B=body  U=url  E=empty  M=muted tip
+    # Nested: page footer navigation. Returns "next", "back", or "quit".
     function Read-HelpNav {
         param([int]$Page, [int]$Total)
         while ($true) {
@@ -744,6 +853,7 @@ function Show-Help {
             if ($k -match '^[Bb]$') { return "back" }
             if ($k -match '^[Qq]$') { return "quit" }
             if ($k -match '^\d+$') {
+                # Hard reject digits so Help never looks like the main menu.
                 Write-Host "  Those numbers are for the MAIN menu after you leave Help." -ForegroundColor Red
                 Write-Host "  In documentation use Enter, B, or Q only." -ForegroundColor Red
                 continue
@@ -752,12 +862,14 @@ function Show-Help {
         }
     }
 
+    # Nested: paint one typed display line (see type table above).
     function Write-HelpDisplayLine {
         param([string]$Line)
         if ($null -eq $Line -or $Line -eq "" -or $Line -eq "E|") {
             Write-Host ""
             return
         }
+        # Default type B if the pipe form is missing (defensive).
         $type = "B"
         $text = $Line
         if ($Line.Length -ge 2 -and $Line[1] -eq [char]'|') {
@@ -766,20 +878,20 @@ function Show-Help {
         }
         switch ($type) {
             "H" {
-                # Section heading (from ## in help source)
+                # Heading (from ## in help source) - blank line then Yellow
                 Write-Host ""
                 Write-Host ("  {0}" -f $text) -ForegroundColor Yellow
             }
             "L" {
-                # Field label: Why / Apply does / ...
+                # Field label: Why / Apply does / You may notice / How to undo / Good to know
                 Write-Host ("  {0}" -f $text) -ForegroundColor Cyan
             }
             "S" {
-                # Section name tag [Firewall]
+                # Section name tag e.g. [Firewall] from SectionDocs keys
                 Write-Host ("  {0}" -f $text) -ForegroundColor Green
             }
             "U" {
-                # URLs / paths
+                # URLs and path-like lines (detected via https?://)
                 Write-Host ("  {0}" -f $text) -ForegroundColor DarkCyan
             }
             "M" {
@@ -787,15 +899,17 @@ function Show-Help {
                 Write-Host ("  {0}" -f $text) -ForegroundColor DarkGray
             }
             "B" {
-                # Normal body
+                # Normal body paragraphs and numbered workflow steps
                 Write-Host ("  {0}" -f $text) -ForegroundColor Gray
             }
             default {
+                # Unknown type: still show text as body Gray
                 Write-Host ("  {0}" -f $text) -ForegroundColor Gray
             }
         }
     }
 
+    # Nested: page long typed arrays by console height; then Read-HelpNav.
     function Show-LineChunks {
         param(
             [string]$Title,
@@ -804,6 +918,7 @@ function Show-Help {
             [int]$Total
         )
         $height = Get-BastionConsoleHeight
+        # Leave room for header + nav chrome; floor at 8 content lines.
         $chunkSize = [Math]::Max(8, $height - 14)
         if ($null -eq $DisplayLines) { $DisplayLines = @() }
         if ($DisplayLines.Count -eq 0) { $DisplayLines = @("M|(No content)") }
@@ -827,6 +942,7 @@ function Show-Help {
         return (Read-HelpNav -Page $Page -Total $Total)
     }
 
+    # Nested: wrap Text and push Type|lines into List (preserves type across wrap).
     function Add-HelpWrapped {
         param(
             [System.Collections.Generic.List[string]]$List,
@@ -850,6 +966,7 @@ function Show-Help {
         }
     }
 
+    # Nested: convert plain source strings (## headings, body) into typed lines.
     function Show-HelpPage {
         param([string]$Title, [string[]]$Lines, [int]$Page, [int]$Total)
         $display = New-Object System.Collections.Generic.List[string]
@@ -857,11 +974,12 @@ function Show-Help {
             if ($null -eq $line) { continue }
             if ($line -match '^\s*$') { [void]$display.Add("E|"); continue }
             if ($line -match '^\s*##\s+(.*)$') {
+                # Markdown-style heading -> type H
                 [void]$display.Add("E|")
                 Add-HelpWrapped -List $display -Type "H" -Text $Matches[1].Trim()
                 continue
             }
-            # Numbered workflow steps stay slightly brighter body (still Gray via B)
+            # URLs -> U; numbered steps and other text -> B (Gray)
             $t = $line.TrimEnd()
             if ($t -match 'https?://') {
                 Add-HelpWrapped -List $display -Type "U" -Text $t
@@ -874,6 +992,7 @@ function Show-Help {
         return (Show-LineChunks -Title $Title -DisplayLines @($display) -Page $Page -Total $Total)
     }
 
+    # Nested: render SectionDocs entries as S/L/B typed blocks for pages 4-6.
     function Show-HelpSectionDocs {
         param([string[]]$Keys, [string]$Title, [int]$Page, [int]$Total)
         $display = New-Object System.Collections.Generic.List[string]
@@ -882,6 +1001,7 @@ function Show-Help {
         foreach ($key in $Keys) {
             if (-not $script:SectionDocs.Contains($key)) { continue }
             $d = $script:SectionDocs[$key]
+            # S = green section tag; L = cyan field labels; B = gray body under each label
             [void]$display.Add(("S|[{0}]" -f $key))
             foreach ($pair in @(
                 @{ L = "Why"; B = $d.Intent },
@@ -898,6 +1018,7 @@ function Show-Help {
         return (Show-LineChunks -Title $Title -DisplayLines @($display) -Page $Page -Total $Total)
     }
 
+    # Fixed page count for "page N of 13" chrome and early exit on back/quit.
     $total = 13
 
     $r = Show-HelpPage -Title "HELP 1/13 - WHAT BASTION IS" -Page 1 -Total $total -Lines @(
@@ -1139,6 +1260,12 @@ function Show-Help {
     Wait-ForKey
 }
 
+# -----------------------------------------------------------------------------
+# Show-HelpReportsMenu
+#   Main menu 11 / H. Hub for full docs, last Apply summary, and a simple HTML
+#   section-toggle snapshot under the Bastion data directory. Does not change
+#   Windows hardening state.
+# -----------------------------------------------------------------------------
 function Show-HelpReportsMenu {
     while ($true) {
         Clear-BastionScreen
@@ -1155,6 +1282,7 @@ function Show-HelpReportsMenu {
             "0" { return }
             "1" { Show-Help }
             "2" {
+                # Summarize Bastion-LastApply.json; optional open in Notepad.
                 Write-Host ""
                 $i = Get-LastApplyInfo
                 if ($i) {
@@ -1173,6 +1301,7 @@ function Show-HelpReportsMenu {
                 Wait-ForKey
             }
             "3" {
+                # Write a minimal HTML list of section On/Off for support snapshots.
                 Write-Host ""
                 if (-not (Ensure-BastionPaths)) {
                     Write-Host "  Cannot create log directory." -ForegroundColor Red
@@ -1217,6 +1346,13 @@ $rows
     }
 }
 
+# -----------------------------------------------------------------------------
+# Reset-ToDefaults
+#   Main menu 12. Resets Bastion JSON preferences only (sections, install queue,
+#   browser wanted modes, ECH flags to off, DNS provider to Quad9). Does NOT
+#   undo Windows hardening or delete enterprise browser policies already written
+#   (user must set each browser to Default in menu 6 for that).
+# -----------------------------------------------------------------------------
 function Reset-ToDefaults {
     if (-not (Read-ConfirmYes -Prompt "  Type YES to reset Bastion config only (not Windows)")) { return }
     foreach ($k in @($script:DefaultSections.Keys)) {
@@ -1227,6 +1363,7 @@ function Reset-ToDefaults {
     $script:ProgramInstallRoots = @{}
     $script:BrowserPolicyMode = "Default"
     foreach ($k in @($script:BrowserPolicyModes.Keys)) { $script:BrowserPolicyModes[$k] = "Default" }
+    # ECH wanted flags always false after reset (never default on).
     foreach ($k in @($script:BrowserEchLocks.Keys)) { $script:BrowserEchLocks[$k] = $false }
     $script:BrowserPolicyLastChange = $null
     $script:DnsProviderId = "Quad9"
@@ -1238,11 +1375,25 @@ function Reset-ToDefaults {
     Start-Sleep -Seconds 1
 }
 
+# -----------------------------------------------------------------------------
+# Show-MainMenu
+#   Primary product loop after bootstrap/elevation. Paints status (data dir,
+#   config load, last Apply, browser summary, DNS label, System Restore health)
+#   then dispatches:
+#     REVIEW 1-3   Dry Run / Audit / Hardware (no system changes except links)
+#     CONFIGURE 4-6,D  Save choices; 6 writes browser policies immediately
+#     EXECUTE 7/Q, 8/A  Quick Harden or full Apply
+#     MAINTAIN 9-10  Recovery hubs, Uninstall (now)
+#     SAFETY 13/R  System Restore Point
+#     SYSTEM 11/H, 12, 0  Help, reset Bastion config, exit
+#   Recommended flow text is painted each loop; restore status colors urgency.
+# -----------------------------------------------------------------------------
 function Show-MainMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Banner
         Write-Host ("  Data directory: {0}" -f $script:Config.LogDirectory) -ForegroundColor DarkGray
+        # First-run vs loaded config messaging (store may be missing after wipe).
         if ($script:FirstRunSeeded -and -not $script:HadPriorConfig) {
             Write-Host "  First run (or wiped store): defaults seeded. No prior Bastion config was found." -ForegroundColor Cyan
         } elseif ($script:ConfigLoaded) {
@@ -1290,6 +1441,7 @@ function Show-MainMenu {
         Write-Host "   0    Exit"
         Write-Host ""
         Write-Host "  --------------------------------------------------------------" -ForegroundColor DarkRed
+        # System Restore urgency strip (48h recent window via Get-RestorePointStatus).
         try {
             $rpStatus = Get-RestorePointStatus
         } catch {
@@ -1321,6 +1473,7 @@ function Show-MainMenu {
             "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r","D","d"
         )
 
+        # Aliases: Q=Quick Harden, A=Apply, H=Help, R=Restore point, D=DNS.
         switch ($choice.ToUpper()) {
             "1" { Invoke-DryRun }
             "2" { Invoke-SelfTest }

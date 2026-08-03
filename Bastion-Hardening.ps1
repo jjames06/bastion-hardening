@@ -2,17 +2,41 @@
 <#
 .SYNOPSIS
     Bastion Hardening Framework v15.9.7 FINAL
-.DESCRIPTION
-    Selective Windows hardening. Catalog-only winget installs. Pure ASCII source
-    for reliable paste into editors and terminals.
 
-    v15.9.x modular layout: this file is a thin elevated bootstrap. Implementation
-    lives in plain-text src\*.ps1 modules (NEVER encrypted - GPLv3 + auditability).
-    Modules are dot-sourced into this runspace so $script: scope is shared.
-    Encryption is data-only (DPAPI for DNS/RDP undo). MANIFEST.sha256 is integrity, not encryption.
+.DESCRIPTION
+    Selective Windows hardening for a personal or small-team workstation.
+    Catalog-only winget installs (no free-typed package IDs). Pure ASCII-friendly
+    source for reliable paste into editors and terminals.
+
+    ARCHITECTURE (v15.9.x modular layout)
+    ------------------------------------
+    This file is a thin elevated bootstrap only. Implementation lives in plain-text
+    src\*.ps1 modules that MUST remain unencrypted (GPLv3 + independent audit).
+    Modules are dot-sourced into THIS runspace so $script: state is shared across
+    Init, Core, Config, domain modules, Apply, Recovery, and Menus.
+
+    What encryption is (and is not):
+      - Modular source: NEVER encrypted or obfuscated.
+      - MANIFEST.sha256: integrity hashes only (detect tamper / bad zip), not encryption.
+      - DPAPI: data-only protection for DNS and RDP host prior blobs inside the undo file
+        after a real Apply (see Bastion.Config.ps1 Protect-BastionBlob).
+
+    HOW TO RUN
+    ----------
+    Prefer Bastion-Hardening.bat (self-elevates, Unblock-File, Process Bypass).
+    Direct double-click of this .ps1 often fails under Restricted ExecutionPolicy
+    before any Bastion code runs. Always run elevated for hardening changes.
+
+.PARAMETER BastionSmokeLoadOnly
+    Load modules, verify required commands exist, print OK and exit 0.
+    Used by packaging smoke tests; skips menus and data-store full UI path after load.
+
 .NOTES
-    Version 15.9.7 FINAL. System Restore is the strongest rollback. Run elevated. Save as UTF-8 (ASCII subset).
-    Licensed under GNU GPLv3 - see LICENSE and NOTICE in the project root.
+    Version 15.9.7 FINAL. System Restore is the strongest rollback. Run elevated.
+    Save as UTF-8 (ASCII subset preferred). Licensed under GNU GPLv3 - see LICENSE
+    and NOTICE in the project root.
+
+    Version history (keep for release notes; do not invent new version numbers here):
     v15.8: DPAPI-protected DNS snapshots, restore prior DNS, optional RDP host lock, RDP triad in Dry Run/Audit.
     v15.8.1: DNS Apply/restore also set Windows DNS-over-HTTPS (DoH) for known resolvers (separate from DPAPI).
     v15.8.2: DNS menu shows live vs preferred, DoH labels, and Apply DNS now (A); preference alone does not change Windows.
@@ -31,6 +55,9 @@ param(
     [switch]$BastionSmokeLoadOnly
 )
 
+# -----------------------------------------------------------------------------
+# Process defaults (before any module load)
+# -----------------------------------------------------------------------------
 # Prefer Bastion-Hardening.bat. Double-clicking this .ps1 uses the system ExecutionPolicy
 # (often Restricted) and fails with UnauthorizedAccess before any Bastion code runs.
 try {
@@ -41,6 +68,7 @@ $ErrorActionPreference = "Continue"
 $ProgressPreference    = "SilentlyContinue"
 $ConfirmPreference     = "None"
 
+# Product root: folder containing this .ps1 and the src\ directory (official layout).
 $script:BastionRoot = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($script:BastionRoot)) {
     try {
@@ -50,7 +78,11 @@ if ([string]::IsNullOrWhiteSpace($script:BastionRoot)) {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Module list and post-load command probe
+# -----------------------------------------------------------------------------
 # Load order: Init (state/catalogs) then domain modules. Dot-source only - same runspace for $script:.
+# Order matters: Init first, Core logging next, Config paths, then domain, Apply, Recovery, Menus last.
 $script:BastionSourceModules = @(
     "Bastion.Init.ps1",
     "Bastion.Core.ps1",
@@ -80,11 +112,19 @@ $script:BastionRequiredCommands = @(
     "Wait-ForKey"
 )
 
+# -----------------------------------------------------------------------------
+# Bootstrap-only helpers (available before modules load)
+# -----------------------------------------------------------------------------
+
 function Wait-BastionBootstrapKey {
     <#
     .SYNOPSIS
       Pause so the user can read a fatal message before the console closes.
       Available before modules load (does not depend on Wait-ForKey).
+    .DESCRIPTION
+      WHAT: ReadKey on ConsoleHost; Read-Host elsewhere; sleep fallback.
+      WHY: Double-click launches close the window immediately on FATAL without a pause.
+      RETURN: None.
     #>
     param([string]$Message = "Press any key to exit...")
     Write-Host ""
@@ -105,6 +145,13 @@ function Wait-BastionBootstrapKey {
 }
 
 function Exit-BastionBootstrap {
+    <#
+    .SYNOPSIS
+      Exit with code after optional key wait (skipped under smoke load).
+    .DESCRIPTION
+      WHAT: Calls Wait-BastionBootstrapKey unless BastionSmokeLoadOnly, then exit.
+      WHY: Smoke tests must not hang on interactive pause.
+    #>
     param(
         [int]$Code = 1,
         [string]$Message = "Press any key to exit..."
@@ -116,6 +163,15 @@ function Exit-BastionBootstrap {
 }
 
 function Test-BastionIsAdministrator {
+    <#
+    .SYNOPSIS
+      True when the current process token is in the Administrators role.
+    .DESCRIPTION
+      WHAT: WindowsPrincipal.IsInRole(Administrator). False on any exception.
+      WHY: Friendly admin gate instead of silent #Requires -RunAsAdministrator flash-close.
+      RETURN: [bool].
+      NOTES: Bat uses High IL SID for elevation; this catches direct .ps1 launches.
+    #>
     try {
         $id = [Security.Principal.WindowsIdentity]::GetCurrent()
         $p = New-Object Security.Principal.WindowsPrincipal($id)
@@ -129,6 +185,12 @@ function Test-BastionSourceIntegrity {
     <#
     .SYNOPSIS
       Verify SHA256 of each src file listed in src\MANIFEST.sha256 (hard-fail on mismatch).
+    .DESCRIPTION
+      WHAT: Parses hash lines (certutil / Get-FileHash style), skips comments and the
+            manifest leaf itself, compares Get-FileHash of each listed file.
+      WHY: Detect incomplete zip extract or accidental edits to release sources.
+      RETURN: PSCustomObject @{ Ok; Message; Count? }.
+      SECURITY: Integrity only - not encryption, not a code signature store.
     #>
     param(
         [Parameter(Mandatory)][string]$SrcDir,
@@ -205,6 +267,9 @@ function Test-BastionSourcesReady {
       Fail-closed layout + integrity checks. Does NOT dot-source (caller must . at script scope).
     .OUTPUTS
       Source directory path on success; throws on failure.
+    .DESCRIPTION
+      WHAT: Verifies BastionRoot, src\ folder, each BastionSourceModules leaf, then MANIFEST.
+      WHY: Clear FATAL text for incomplete extracts instead of mysterious missing commands.
     #>
     if ([string]::IsNullOrWhiteSpace($script:BastionRoot)) {
         throw "BastionRoot is empty; cannot locate src\ modules."
@@ -235,6 +300,11 @@ function Test-BastionCommandsPresent {
     <#
     .SYNOPSIS
       Hard-fail if critical commands are missing after module load (detects scope bugs).
+    .DESCRIPTION
+      WHAT: Get-Command for each BastionRequiredCommands name.
+      WHY: Function-scope dot-source left $script:Config alive but menus gone - smoke
+            must not report OK in that case.
+      RETURN: $true or throws with remediation hint (official zip / script-scope .).
     #>
     $missing = New-Object System.Collections.Generic.List[string]
     foreach ($name in $script:BastionRequiredCommands) {
@@ -248,6 +318,9 @@ function Test-BastionCommandsPresent {
     return $true
 }
 
+# -----------------------------------------------------------------------------
+# Admin gate (friendly message; bat should already elevate)
+# -----------------------------------------------------------------------------
 # Friendly admin gate (replaces silent #Requires -RunAsAdministrator flash-close).
 # Bastion-Hardening.bat self-elevates first; this catches direct .ps1 launches.
 if (-not (Test-BastionIsAdministrator)) {
@@ -279,6 +352,9 @@ trap {
     exit 1
 }
 
+# -----------------------------------------------------------------------------
+# Script-scope module import (CRITICAL - do not move into a function)
+# -----------------------------------------------------------------------------
 # CRITICAL: Dot-source modules at SCRIPT scope, not inside a function.
 # PowerShell function-scope . (dot-source) defines functions only for that function;
 # after return, Resolve-BastionLogDirectory / Show-MainMenu / etc. vanish while
@@ -301,12 +377,16 @@ try {
     Exit-BastionBootstrap -Code 1 -Message "Press any key to exit..."
 }
 
+# Smoke path: load + command probe only (packaging / CI).
 if ($BastionSmokeLoadOnly) {
     $ver = if ($script:Config -and $script:Config.ScriptVersion) { $script:Config.ScriptVersion } else { "?" }
     Write-Host ("Bastion smoke load OK v{0} (commands verified)" -f $ver)
     exit 0
 }
 
+# -----------------------------------------------------------------------------
+# Post-load startup: data paths, store, console, main menu
+# -----------------------------------------------------------------------------
 # Entire post-load startup is inside try/catch so missing commands / path failures pause.
 try {
     Test-BastionCommandsPresent | Out-Null

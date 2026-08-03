@@ -1,8 +1,38 @@
 # Bastion.Programs.ps1 - modular domain (v15.9.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.
+#
+# Role in modular architecture:
+#   Catalog-only winget install/uninstall helpers, install path safety, and install
+#   detection for the Programs section (menu 5) and Apply. Never installs arbitrary IDs.
+#
+# Load-order position: 4 of 11 (after Config, before Services).
+#   Order: Init, Core, Config, Programs, Services, Browsers, Dns, Harden, Apply, Recovery, Menus.
+#
+# Dependencies on $script: state:
+#   $script:ProgramDefs              - curated catalog (WingetId, Paths, ManualInstallOnly)
+#   $script:SelectedApps             - install queue (names still missing)
+#   $script:ProgramInstallRoots      - per-app custom roots
+#   $script:GlobalInstallRoot        - one folder for all pending installs
+#   $script:TrustedWingetSourceNames - winget/msstore names allowed by preflight
+#   $script:BlockedPathFragments     - install-root deny list (Windows, System32, ...)
+#   $script:tempDir                  - winget show/uninstall redirect files
+#   $script:Stats                    - ProgramsInstalled during Apply
 
 function Test-WingetAvailable {
+    <#
+      Purpose:
+        Detect whether winget is on PATH and return path or a user-facing error string.
+
+      When called:
+        Preflight for install/uninstall; Audit tooling check (via Test-WingetSecurityPreflight).
+
+      Side effects:
+        None (Get-Command only).
+
+      Undo implications:
+        None.
+    #>
     try {
         $cmd = Get-Command winget -ErrorAction Stop
         return [PSCustomObject]@{ Ok = $true; Path = $cmd.Source; Error = $null }
@@ -16,6 +46,27 @@ function Test-WingetAvailable {
 }
 
 function Test-WingetSecurityPreflight {
+    <#
+      Purpose:
+        Confirm winget exists and that a trusted source name (winget and/or msstore from
+        $script:TrustedWingetSourceNames) appears in `winget source list`.
+
+      When called:
+        Before every catalog install (Apply Programs section and Install-BastionCatalogApp),
+        and read-only in Security Audit tooling row.
+
+      Side effects:
+        Spawns winget source list (stdout/stderr captured). No package install.
+
+      Undo implications:
+        None.
+
+      Honesty (catalog-only / winget):
+        This is not a full supply-chain guarantee. It only refuses installs when no trusted
+        source name is visible. Source list check failures continue cautiously (Ok=true)
+        rather than hard-blocking when winget is present but list parsing failed.
+        Bastion never passes --ignore-security-hash. Installs are catalog-only (ProgramDefs).
+    #>
     $wg = Test-WingetAvailable
     if (-not $wg.Ok) {
         return [PSCustomObject]@{ Ok = $false; Detail = $wg.Error }
@@ -52,6 +103,24 @@ function Test-WingetSecurityPreflight {
 }
 
 function Test-CatalogPackageId {
+    <#
+      Purpose:
+        Fail closed if AppName is not in ProgramDefs, is ManualInstallOnly, WingetId does
+        not match catalog, or ID fails a simple format regex.
+
+      When called:
+        Immediately before winget install for a catalog app.
+
+      Side effects:
+        None.
+
+      Undo implications:
+        None.
+
+      Honesty (winget catalog-only):
+        This is Bastion's primary install safety gate: only known app names and exact
+        WingetId values from the curated catalog. User-typed package IDs are never accepted.
+    #>
     param([string]$AppName, [string]$WingetId)
     if ([string]::IsNullOrWhiteSpace($AppName) -or -not $script:ProgramDefs.Contains($AppName)) {
         return [PSCustomObject]@{ Ok = $false; Detail = ("Not in Bastion catalog: {0}" -f $AppName) }
@@ -71,6 +140,20 @@ function Test-CatalogPackageId {
 }
 
 function Invoke-WingetShow([string]$WingetId) {
+    <#
+      Purpose:
+        Run `winget show --id <id> -e` to verify the package is visible to winget before install.
+
+      When called:
+        Install-BastionCatalogApp after catalog ID and preflight checks.
+
+      Side effects:
+        Writes temp files under $script:tempDir (wg-show-out.txt / wg-show-err.txt).
+        Network/source query via winget; no install.
+
+      Undo implications:
+        None.
+    #>
     try {
         $outFile = Join-Path $script:tempDir "wg-show-out.txt"
         $errFile = Join-Path $script:tempDir "wg-show-err.txt"
@@ -88,6 +171,24 @@ function Invoke-WingetShow([string]$WingetId) {
 }
 
 function Test-AuthenticodeRelaxed([string]$Path) {
+    <#
+      Purpose:
+        Report Authenticode status of an installed binary (Valid / NotSigned / other).
+        "Relaxed" means unsigned is reported, not treated as automatic install failure.
+
+      When called:
+        After successful install detection, for informational console output.
+
+      Side effects:
+        None (signature read only).
+
+      Undo implications:
+        None.
+
+      Honesty:
+        Not all catalog apps are signed the same way. NotSigned is common and does not
+        roll back the install. HashMismatch/NotTrusted only produces a Warn status.
+    #>
     if (-not (Test-Path -LiteralPath $Path)) {
         return [PSCustomObject]@{ Status = "Missing"; Detail = "Path not found" }
     }
@@ -104,6 +205,19 @@ function Test-AuthenticodeRelaxed([string]$Path) {
 }
 
 function Get-AvailableInstallVolumes {
+    <#
+      Purpose:
+        List fixed local logical disks (DriveType 3) with free space for install-root UI.
+
+      When called:
+        Select-InstallRootFromVolumes and path validation paths during Programs menu / Apply.
+
+      Side effects:
+        CIM query only (Win32_LogicalDisk).
+
+      Undo implications:
+        None. Network/USB volumes are intentionally excluded by DriveType filter.
+    #>
     $list = [System.Collections.Generic.List[object]]::new()
     try {
         Get-CimInstance Win32_LogicalDisk -ErrorAction Stop |
@@ -122,6 +236,24 @@ function Get-AvailableInstallVolumes {
 }
 
 function Test-SafeInstallRoot {
+    <#
+      Purpose:
+        Validate a user-chosen install root: drive letter, no UNC, under an allowed fixed
+        volume, and not under blocked system path fragments.
+
+      When called:
+        Before storing custom install roots and before passing --location to winget.
+
+      Side effects:
+        None (path string checks + GetFullPath).
+
+      Undo implications:
+        None.
+
+      Honesty:
+        Safety is path-shape + local volume only. It does not prove the folder is empty
+        or owned by the user. Some winget packages ignore --location entirely.
+    #>
     param([string]$Path, [object[]]$AllowedVolumes)
     if ([string]::IsNullOrWhiteSpace($Path)) {
         return [PSCustomObject]@{ Ok = $false; Reason = "Empty path"; Path = $null }
@@ -166,6 +298,20 @@ function Test-SafeInstallRoot {
 }
 
 function Get-EffectiveInstallRoot([string]$AppName) {
+    <#
+      Purpose:
+        Resolve install root preference: per-app map first, else global root, else $null
+        (vendor default).
+
+      When called:
+        Test-Installed (search under custom root) and Apply Programs install loop.
+
+      Side effects:
+        None.
+
+      Undo implications:
+        None. Roots are preferences in Bastion-Config.json, not undo data.
+    #>
     if ($AppName -and $script:ProgramInstallRoots.ContainsKey($AppName) -and $script:ProgramInstallRoots[$AppName]) {
         return $script:ProgramInstallRoots[$AppName]
     }
@@ -174,6 +320,22 @@ function Get-EffectiveInstallRoot([string]$AppName) {
 }
 
 function Test-Installed {
+    <#
+      Purpose:
+        Heuristic install detection: catalog Paths (literal or simple wildcards), special
+        cases for Blender/PostgreSQL trees, then recursive search under effective install root.
+
+      When called:
+        Dry Run Programs section, Get-SelectedMissingApps, Sync-ProgramInstallQueue,
+        Install-BastionCatalogApp before/after install, uninstall detection lists.
+
+      Side effects:
+        Filesystem probes only.
+
+      Undo implications:
+        None. False negatives possible after winget exit 0 (installer delayed); Install
+        treats that as Warn+Applied, not automatic rollback.
+    #>
     param([string]$Name, [string[]]$Paths)
     foreach ($p in @($Paths)) {
         if ([string]::IsNullOrWhiteSpace($p)) { continue }
@@ -209,6 +371,19 @@ function Test-Installed {
 }
 
 function Get-SelectedMissingApps {
+    <#
+      Purpose:
+        List names from $script:SelectedApps that are still not detected as installed.
+
+      When called:
+        Dry Run, Apply Programs, Set-LocationsForPendingInstalls.
+
+      Side effects:
+        None beyond install detection queries.
+
+      Undo implications:
+        None.
+    #>
     $list = [System.Collections.Generic.List[string]]::new()
     foreach ($name in @($script:SelectedApps)) {
         if (-not $script:ProgramDefs.Contains($name)) { continue }
@@ -220,6 +395,21 @@ function Get-SelectedMissingApps {
 }
 
 function Sync-ProgramInstallQueue {
+    <#
+      Purpose:
+        Prune $script:SelectedApps to catalog names still missing; drop installed selections
+        so menu checkboxes stay accurate. Clears stale per-app install roots.
+
+      When called:
+        After Apply install loop, and when menus refresh the programs queue.
+
+      Side effects:
+        Mutates $script:SelectedApps and $script:ProgramInstallRoots (via Clear-StaleInstallRoots).
+        Does not install or uninstall software.
+
+      Undo implications:
+        None. Queue is preference/session state, not OS undo.
+    #>
     # Install queue = catalog apps the user opted in to install that are still missing.
     # Never keep already-installed names selected (avoids green [X] on installed rows).
     $kept = [System.Collections.Generic.List[string]]::new()
@@ -235,6 +425,19 @@ function Sync-ProgramInstallQueue {
 }
 
 function Get-CatalogProgramRows {
+    <#
+      Purpose:
+        Build menu rows for every ProgramDefs entry with Installed/Selected flags.
+
+      When called:
+        Programs menu (menu 5) rendering.
+
+      Side effects:
+        Read-only detection against disk.
+
+      Undo implications:
+        None.
+    #>
     # Live detect installed/missing for every catalog entry (order matches ProgramDefs).
     $rows = foreach ($name in $script:ProgramDefs.Keys) {
         $def = $script:ProgramDefs[$name]
@@ -252,6 +455,19 @@ function Get-CatalogProgramRows {
 }
 
 function Clear-StaleInstallRoots {
+    <#
+      Purpose:
+        Remove ProgramInstallRoots keys for apps no longer in the selected queue.
+
+      When called:
+        Sync-ProgramInstallQueue and after location picker changes.
+
+      Side effects:
+        Mutates $script:ProgramInstallRoots only.
+
+      Undo implications:
+        None.
+    #>
     foreach ($k in @($script:ProgramInstallRoots.Keys)) {
         if ($script:SelectedApps -notcontains $k) {
             $script:ProgramInstallRoots.Remove($k)
@@ -260,6 +476,33 @@ function Clear-StaleInstallRoots {
 }
 
 function Install-BastionCatalogApp {
+    <#
+      Purpose:
+        Install one curated catalog app via winget with catalog-only gates, optional
+        --location, and post-install path/signature checks.
+
+      When called:
+        Apply when Programs section is on and queue is non-empty. Not Dry Run (preview only).
+
+      Side effects / Windows objects touched:
+        - winget install process (package files under vendor or --location path)
+        - May create parent directory for custom location
+        - $script:Stats.ProgramsInstalled on success paths
+        - Console status via Write-Status
+
+      Undo implications:
+        Apply records successful names in ProgramsInstalledList for informational undo/
+        uninstall menus. Bastion does not auto-uninstall on Recovery full undo of all
+        sections; Programs menu uninstall is the intentional reverse path.
+
+      Honesty (winget catalog-only):
+        - REFUSES non-catalog names and WingetId mismatches
+        - Never uses --ignore-security-hash
+        - ManualInstallOnly apps are not winget-installed (URL hint only)
+        - winget exit 0 without binary detection is Warn, not silent success claim only:
+          still counted Applied with manual verify guidance
+        - Trusted source preflight is necessary but not sufficient for package integrity
+    #>
     param([string]$AppName, [string]$LocationPath = $null)
 
     if (-not $script:ProgramDefs.Contains($AppName)) {
@@ -356,6 +599,21 @@ function Install-BastionCatalogApp {
 }
 
 function Select-InstallRootFromVolumes {
+    <#
+      Purpose:
+        Interactive picker: system default, per-volume BastionApps folder, or custom path
+        under an allowed fixed volume.
+
+      When called:
+        Programs menu location flow (Set-LocationsForPendingInstalls). Immediate UI only.
+
+      Side effects:
+        Console prompts only; returns path string or $null. Does not create folders here
+        (Apply may create the root when installing).
+
+      Undo implications:
+        None.
+    #>
     param([string]$PromptTitle = "Select install folder")
     $vols = @(Get-AvailableInstallVolumes)
     if ($vols.Count -eq 0) {
@@ -424,6 +682,20 @@ function Select-InstallRootFromVolumes {
 }
 
 function Set-LocationsForPendingInstalls {
+    <#
+      Purpose:
+        Menu to set system default, one shared folder, or per-app install roots for
+        currently pending (selected + missing) apps; saves config.
+
+      When called:
+        Programs menu (location option). Preference only until Apply installs.
+
+      Side effects:
+        Mutates $script:GlobalInstallRoot and $script:ProgramInstallRoots; Save-BastionConfig.
+
+      Undo implications:
+        None for OS. Config file holds roots until cleared.
+    #>
     $pending = @(Get-SelectedMissingApps)
     if ($pending.Count -eq 0) {
         Write-Host "  No pending installs - location step skipped." -ForegroundColor Yellow
@@ -467,6 +739,20 @@ function Set-LocationsForPendingInstalls {
 }
 
 function Stop-BastionCatalogProcesses {
+    <#
+      Purpose:
+        Force-stop processes matching catalog EXE basenames (and PowerToys helper patterns)
+        so uninstall can unlock files.
+
+      When called:
+        Before winget/HKCU uninstall of a catalog app (Programs uninstall menu).
+
+      Side effects / Windows objects touched:
+        Stop-Process -Force on matching PIDs. Unsaved app data may be lost.
+
+      Undo implications:
+        Processes stay stopped; reinstall/relaunch is user responsibility.
+    #>
     param([string]$AppName)
     if (-not $script:ProgramDefs.Contains($AppName)) { return }
     $stopped = @{}
@@ -518,6 +804,20 @@ function Stop-BastionCatalogProcesses {
 }
 
 function Get-HkcuUninstallCommands {
+    <#
+      Purpose:
+        Collect per-user uninstall registry entries whose DisplayName matches app name /
+        WingetId / PowerToys needles.
+
+      When called:
+        Uninstall fallback when winget fails for user-scoped installs.
+
+      Side effects:
+        Registry read under HKCU Uninstall hives only.
+
+      Undo implications:
+        None (discovery only).
+    #>
     param([string]$AppName, [string]$WingetId)
     $results = New-Object System.Collections.Generic.List[object]
     $roots = @(
@@ -556,6 +856,19 @@ function Get-HkcuUninstallCommands {
 }
 
 function Invoke-HkcuUninstallString {
+    <#
+      Purpose:
+        Parse and run an UninstallString / QuietUninstallString from HKCU (quoted EXE + args).
+
+      When called:
+        Uninstall fallback after winget attempts.
+
+      Side effects:
+        Starts vendor uninstaller process; may remove app files and registry.
+
+      Undo implications:
+        Uninstall is the reverse of install; reinstall via catalog/Apply if needed.
+    #>
     param([string]$CommandLine)
     if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $false }
     try {
@@ -589,6 +902,29 @@ function Invoke-HkcuUninstallString {
 }
 
 function Invoke-WingetUninstallCatalog {
+    <#
+      Purpose:
+        Uninstall a catalog app: stop processes, try winget scopes (user/default/machine),
+        then HKCU registry, then PowerToys-specific --uninstall fallbacks.
+
+      When called:
+        Programs uninstall menu for detected catalog installs. Immediate (not via Apply).
+
+      Side effects / Windows objects touched:
+        - winget uninstall (package removal)
+        - HKCU uninstallers / PowerToys setup --uninstall
+        - May open ms-settings:appsfeatures on total failure
+        - Temp files under $script:tempDir for winget output
+
+      Undo implications:
+        Removes software Bastion may have installed. Re-queue via menu 5 + Apply to reinstall.
+        Elevated session often cannot remove pure user-scope apps; honesty messages guide
+        non-admin winget or Settings.
+
+      Honesty (catalog-only):
+        Only catalog WingetId values are used. Scope failures for per-user apps are expected
+        when Bastion runs elevated; Bastion does not claim silent success in that case.
+    #>
     param([string]$AppName, [string]$WingetId)
     $outFile = Join-Path $script:tempDir "wg-un-out.txt"
     $errFile = Join-Path $script:tempDir "wg-un-err.txt"
@@ -706,6 +1042,19 @@ function Invoke-WingetUninstallCatalog {
 }
 
 function Get-DetectedCatalogInstalls {
+    <#
+      Purpose:
+        List catalog apps whose install paths/binaries are present (for uninstall menu).
+
+      When called:
+        Programs uninstall UI.
+
+      Side effects:
+        Disk probes only.
+
+      Undo implications:
+        None.
+    #>
     # Only catalog apps whose install paths/binaries are present right now.
     $list = [System.Collections.Generic.List[object]]::new()
     foreach ($name in $script:ProgramDefs.Keys) {

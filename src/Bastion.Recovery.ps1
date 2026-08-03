@@ -1,7 +1,35 @@
+# =============================================================================
 # Bastion.Recovery.ps1 - modular domain (v15.9.0)
+# =============================================================================
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.
+#
+# Role of this module
+#   Targeted reverse / re-open / re-harden paths under main menu 9. Actions run
+#   NOW (no main menu 8). Prefer a specific hub over full Undo when the user
+#   knows what broke. Hubs paint live Windows status before offering changes.
+#
+# Hub map (Show-RecoveryMenu)
+#   1 Undo last Apply (partial: services, firewall groups, DNS snap, RDP prior)
+#   2 Services (Spooler, HighRisk stack, Xbox)
+#   3 Network (remote access, LAN discovery, DNS DHCP / snapshot restore)
+#   4 Browser policies (delegates to Show-BrowserPolicyMenu)
+#   5 Apps and UI (Copilot, Widgets/Suggestions, Game Bar)
+#   6 Security mitigations (StrictHandle, Defender NP/CFA, policies/tasks)
+#
+# Honesty rules
+#   Opening remote/LAN paths or re-enabling services increases attack surface.
+#   Appx bloat / OneDrive are not reinstallable here. System Restore is stronger
+#   than Undo. Comments use ASCII punctuation only.
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# Invoke-UndoHardening
+#   Recovery hub 1. Best-effort restore from Bastion-LastApply.json only:
+#   Spooler force-on, tracked DisabledServices, FirewallGroups re-enabled,
+#   encrypted DNS snapshot, RDP host prior when RdpHostLocked was stored.
+#   Does not reinstall Appx/OneDrive or clear browser enterprise policies.
+# -----------------------------------------------------------------------------
 function Invoke-UndoHardening {
     Clear-BastionScreen
     Write-Header "UNDO LAST HARDENING"
@@ -83,6 +111,12 @@ function Invoke-UndoHardening {
     Wait-ForKey
 }
 
+# -----------------------------------------------------------------------------
+# Get-CopilotM365Status
+#   Live detection for Copilot / Office Hub Appx, provisioned packages, policy
+#   TurnOffWindowsCopilot, taskbar ShowCopilotButton, and Office Click-to-Run.
+#   NeedsWork is true if policy off is missing, button not hidden, or Appx present.
+# -----------------------------------------------------------------------------
 function Get-CopilotM365Status {
     $pkgs = @()
     try {
@@ -122,6 +156,12 @@ function Get-CopilotM365Status {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Invoke-CopilotM365Hardening
+#   Apply path for CopilotM365 section (and Recovery "safe all"): policy keys,
+#   hide taskbar button, remove matching user Appx; optional provisioned remove.
+#   Never uninstalls full Microsoft 365 Click-to-Run (Office suite).
+# -----------------------------------------------------------------------------
 function Invoke-CopilotM365Hardening {
     param([switch]$IncludeProvisioned)
     Write-Host "  [CopilotM365]" -ForegroundColor Cyan
@@ -209,6 +249,12 @@ function Invoke-CopilotM365Hardening {
     Write-Host "    Note: Full Microsoft 365 desktop apps are unchanged unless you use Recovery > Office remover." -ForegroundColor DarkGray
 }
 
+# -----------------------------------------------------------------------------
+# Invoke-CopilotM365Removal
+#   Recovery Apps/UI > Copilot submenu. Interactive steps 1-5: policy, user Appx,
+#   provisioned packages, destructive full Office C2R uninstall (YES gate), or
+#   safe batch (1+2+3). Live status repaints each loop.
+# -----------------------------------------------------------------------------
 function Invoke-CopilotM365Removal {
     while ($true) {
         Clear-BastionScreen
@@ -323,6 +369,14 @@ function Invoke-CopilotM365Removal {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Get-BastionFirewallGroupInboundStatus
+#   Classify a Windows firewall DisplayGroup for Recovery UI:
+#     NOT PRESENT - no inbound rules in group (edition/feature missing)
+#     OPEN        - at least one inbound Allow rule is enabled
+#     LOCKED      - group present but no enabled inbound Allows (Bastion style)
+#   Does not read profile-level Inbound=Block; only named group rules.
+# -----------------------------------------------------------------------------
 function Get-BastionFirewallGroupInboundStatus {
     param([Parameter(Mandatory)][string]$DisplayGroup)
     $all = @()
@@ -347,6 +401,11 @@ function Get-BastionFirewallGroupInboundStatus {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Enable-BastionFirewallGroupInbound
+#   Recovery helper: enable all inbound rules in DisplayGroup (opens the path).
+#   Matches Undo behavior for tracked firewall groups. Increases exposure.
+# -----------------------------------------------------------------------------
 function Enable-BastionFirewallGroupInbound {
     param([Parameter(Mandatory)][string]$DisplayGroup)
     # Match Undo: re-enable inbound rules in the group so the remote path can work again.
@@ -375,6 +434,11 @@ function Enable-BastionFirewallGroupInbound {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Disable-BastionFirewallGroupInbound
+#   Bastion Apply style: disable currently enabled inbound rules in the group
+#   (LOCKED). Leaves already-disabled rules alone. Profile Inbound=Block untouched.
+# -----------------------------------------------------------------------------
 function Disable-BastionFirewallGroupInbound {
     param([Parameter(Mandatory)][string]$DisplayGroup)
     # Bastion Apply style: disable currently enabled inbound rules in the group.
@@ -407,6 +471,11 @@ function Disable-BastionFirewallGroupInbound {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Write-BastionRemoteAccessStatusBlock
+#   Paint firewall groups (Remote Desktop / Assistance / WinRM) plus system
+#   fDenyTSConnections and TermService for remote-access recovery screens.
+# -----------------------------------------------------------------------------
 function Write-BastionRemoteAccessStatusBlock {
     Write-Host "  Live status" -ForegroundColor Cyan
     foreach ($g in $script:RemoteAccessFirewallGroups) {
@@ -435,6 +504,12 @@ function Write-BastionRemoteAccessStatusBlock {
     Write-Host ("    Service   TermService               {0,-11}  StartType={1}" -f $rdp.ServiceStatus, $rdp.ServiceStartType) -ForegroundColor $svcColor
 }
 
+# -----------------------------------------------------------------------------
+# Show-RemoteDesktopRecoveryMenu
+#   Network > Remote access > RDP triad:
+#     firewall group OPEN/LOCK, system allow (fDenyTSConnections), TermService.
+#   Full host RDP usually needs all three open/running. Home edition limits apply.
+# -----------------------------------------------------------------------------
 function Show-RemoteDesktopRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -509,6 +584,11 @@ function Show-RemoteDesktopRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-RemoteFirewallGroupMenu
+#   Generic OPEN/LOCK UI for one firewall DisplayGroup (Assistance, WinRM, LAN
+#   groups). Optional Purpose text explains why the group exists. Confirms Y/N.
+# -----------------------------------------------------------------------------
 function Show-RemoteFirewallGroupMenu {
     param(
         [Parameter(Mandatory)][string]$DisplayGroup,
@@ -564,6 +644,13 @@ function Show-RemoteFirewallGroupMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-RemoteAccessRecoveryMenu
+#   Network hub entry for remote paths Bastion locks on Firewall Apply.
+#   Submenus: RDP triad, Remote Assistance group, WinRM group, bulk enable/lock
+#   for all three groups (bulk enable requires YES). Does not set system RDP
+#   except via the dedicated Remote Desktop submenu.
+# -----------------------------------------------------------------------------
 function Show-RemoteAccessRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -627,6 +714,12 @@ function Show-RemoteAccessRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Write-BastionServiceStatusBlock
+#   Print live status rows from ServiceRecoveryCatalog (optional GroupFilter).
+#   Color: DISABLED=Green (safer), RUNNING=Yellow, STOPPED=White.
+#   Returns the row array for callers that need present-service lists.
+# -----------------------------------------------------------------------------
 function Write-BastionServiceStatusBlock {
     param([string]$GroupFilter = "")
     $rows = @()
@@ -646,6 +739,11 @@ function Write-BastionServiceStatusBlock {
     return $rows
 }
 
+# -----------------------------------------------------------------------------
+# Show-BastionServiceGroupMenu
+#   Enable one present service, all present, or disable all (Bastion-style) for
+#   a catalog Group (HighRisk / Xbox). PreferStart drives re-enable startup type.
+# -----------------------------------------------------------------------------
 function Show-BastionServiceGroupMenu {
     param(
         [Parameter(Mandatory)][string]$Group,
@@ -718,6 +816,11 @@ function Show-BastionServiceGroupMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-ServicesRecoveryMenu
+#   Recovery hub 2. Quick Spooler re-enable plus HighRisk / Xbox group menus.
+#   Live status of Bastion-managed services painted every entry.
+# -----------------------------------------------------------------------------
 function Show-ServicesRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -758,6 +861,11 @@ function Show-ServicesRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-LanDiscoveryRecoveryMenu
+#   Network hub: File and Printer Sharing, Network Discovery, mDNS groups.
+#   Per-group OPEN/LOCK or bulk enable (YES) / lock. Profile block unchanged.
+# -----------------------------------------------------------------------------
 function Show-LanDiscoveryRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -831,6 +939,13 @@ function Show-LanDiscoveryRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-NetworkRecoveryMenu
+#   Recovery hub 3. Live remote + LAN group labels, RDP host snapshot, live DNS
+#   adapters, menu D preference, and encrypted prior-DNS snapshot availability.
+#   Actions: remote access, LAN discovery, DNS->DHCP, DNS->restore snapshot.
+#   Options 3 and 4 are independent; snapshot only exists after a DNS Apply.
+# -----------------------------------------------------------------------------
 function Show-NetworkRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -991,6 +1106,11 @@ function Show-NetworkRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-GameBarRecoveryMenu
+#   Silence or re-enable Game DVR / ms-gamingoverlay capture flags when games
+#   prompt for a missing Game Bar app. Does not install Xbox Game Bar itself.
+# -----------------------------------------------------------------------------
 function Show-GameBarRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -1020,6 +1140,11 @@ function Show-GameBarRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-AppsUiRecoveryMenu
+#   Recovery hub 5. Copilot tools, Widgets/Suggestions restore, Game Bar silence.
+#   Honest: Appx bloat removed by Apply is not reinstallable from this menu.
+# -----------------------------------------------------------------------------
 function Show-AppsUiRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -1048,6 +1173,13 @@ function Show-AppsUiRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-StrictHandleRecoveryMenu
+#   Security mitigations > StrictHandle. Live system ON/OFF, DEP, Wow*/config
+#   exception paths. Options: disable system StrictHandle (reboot), refresh
+#   known exceptions only, or re-enable system profile + exceptions.
+#   Honesty: only known exception EXEs are covered; other titles need reports.
+# -----------------------------------------------------------------------------
 function Show-StrictHandleRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -1117,6 +1249,12 @@ function Show-StrictHandleRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-DefenderRecoveryMenu
+#   Soften or re-harden Network Protection and Controlled Folder Access.
+#   Softening reduces ransomware/network blocking; prefer CFA allow-list first.
+#   Re-harden turns both ON and calls Add-CfaAllowPaths for catalog apps.
+# -----------------------------------------------------------------------------
 function Show-DefenderRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -1190,10 +1328,17 @@ function Show-DefenderRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-PolicyTasksRecoveryMenu
+#   Clear or re-set Delivery Optimization policy, PowerShell Script Block
+#   Logging, LSA RunAsPPL (reboot), and Bastion-listed scheduled tasks
+#   (CEIP/Appraiser style list in BastionScheduledTaskPaths).
+# -----------------------------------------------------------------------------
 function Show-PolicyTasksRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Header "POLICIES AND TASKS"
+        # Live probes for the status strip (read-only until user confirms an action).
         # Delivery Optimization
         $doVal = $null
         try {
@@ -1342,6 +1487,11 @@ function Show-PolicyTasksRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-SecurityMitigationsRecoveryMenu
+#   Recovery hub 6. Snapshot of StrictHandle + LSA; dispatches to StrictHandle,
+#   Defender NP/CFA, and Policies/tasks submenus for reverse or re-harden.
+# -----------------------------------------------------------------------------
 function Show-SecurityMitigationsRecoveryMenu {
     while ($true) {
         Clear-BastionScreen
@@ -1369,6 +1519,12 @@ function Show-SecurityMitigationsRecoveryMenu {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Show-RecoveryMenu
+#   Main menu 9 entry. Six hubs (see file header). Prefer a specific hub when
+#   the user knows what broke; full Undo remains partial by design.
+#   Option 4 reuses Show-BrowserPolicyMenu (same as main menu 6).
+# -----------------------------------------------------------------------------
 function Show-RecoveryMenu {
     while ($true) {
         Clear-BastionScreen
