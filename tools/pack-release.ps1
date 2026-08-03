@@ -42,11 +42,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# ---------------------------------------------------------------------------
+# pack-release.ps1 (body)
+#   Stage a single top-level folder bastion-hardening-vX.Y.Z\ with product
+#   files, modular src\, and docs\, then zip it for GitHub Releases.
+#   Goals: Explorer "Extract All" yields one folder; no flat zip root; no
+#   monolith archive or _legacy scratch under src\.
+# ---------------------------------------------------------------------------
+
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 if (-not $OutputDir) {
   $OutputDir = Join-Path $RepoRoot "dist"
 }
 
+# Normalize "v15.9.7" and bare "15.9.7" to the same folder/zip names.
 $Version = $Version.Trim().TrimStart("v", "V")
 if ($Version -notmatch '^\d+(\.\d+)*([A-Za-z0-9._-]+)?$') {
   throw "Invalid Version '$Version' (expected like 15.9.0)."
@@ -54,9 +63,11 @@ if ($Version -notmatch '^\d+(\.\d+)*([A-Za-z0-9._-]+)?$') {
 
 $FolderName = "bastion-hardening-v$Version"
 $ZipName = "$FolderName.zip"
+# Unique temp stage so concurrent packs do not clobber each other.
 $StageRoot = Join-Path $env:TEMP ("bastion-pack-" + [guid]::NewGuid().ToString("n"))
 $StageDir = Join-Path $StageRoot $FolderName
 
+# Copy one required path (file or directory) into the stage, preserving relative layout.
 function Copy-Required {
   param([string]$RelativePath)
   $src = Join-Path $RepoRoot $RelativePath
@@ -87,7 +98,7 @@ try {
 
   New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
 
-  # Runtime + legal + docs (handbook ships under docs/)
+  # Runtime + legal + docs (handbook ships under docs/). tools\ is not shipped.
   $paths = @(
     "Bastion-Hardening.bat",
     "Bastion-Hardening.ps1",
@@ -129,7 +140,7 @@ try {
   # Compress the folder so the zip root is bastion-hardening-vX.Y/
   Compress-Archive -Path $StageDir -DestinationPath $zipPath -CompressionLevel Optimal
 
-  # Sanity: zip should contain FolderName/Bastion-Hardening.bat and modular src
+  # Sanity: required product entry points and modular src must exist inside FolderName/
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
   try {
@@ -159,6 +170,7 @@ try {
     if ($norm -notcontains $manifest) {
       throw "Zip sanity failed: expected entry $manifest"
     }
+    # Flat root means Compress-Archive was pointed at files instead of StageDir.
     if ($norm -contains "Bastion-Hardening.bat") {
       throw "Zip sanity failed: flat root layout detected (Bastion-Hardening.bat at zip root)."
     }
@@ -178,6 +190,7 @@ try {
   Write-Host "Upload this file as the GitHub Release asset (name must match bastion-hardening-v*.zip)."
 }
 finally {
+  # Always remove temp stage, even on throw, so %TEMP% does not fill with packs.
   if (Test-Path -LiteralPath $StageRoot) {
     Remove-Item -LiteralPath $StageRoot -Recurse -Force -ErrorAction SilentlyContinue
   }

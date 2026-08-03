@@ -1,50 +1,115 @@
-# Bastion.Init.ps1 - script-scoped state, catalogs, and section docs (v15.9.7)
-# Dot-sourced by Bastion-Hardening.ps1. Do not run standalone.
-# Plain text GPLv3 source - never encrypt (MANIFEST = integrity only; DPAPI = undo data only).
+# =============================================================================
+# Bastion.Init.ps1 - script-scoped state, catalogs, and section documentation
+# =============================================================================
+#
+# PURPOSE
+#   Declares all $script: state and static catalogs used by the rest of Bastion.
+#   This is the first module loaded by Bastion-Hardening.ps1 so later modules
+#   can read and mutate the same runspace-wide variables.
+#
+# LOAD ORDER / ROLE
+#   Loaded first among src\Bastion.*.ps1 (see $script:BastionSourceModules).
+#   Dot-sourced into the bootstrap runspace. Everything here is $script: scoped
+#   so Config, Core, Apply, Recovery, Menus, etc. share one coherent state bag.
+#   No functions are defined here; only assignments and catalog tables.
+#
+# DO NOT
+#   - Run this file standalone (it will define state with no UI or Apply path).
+#   - Encrypt or obfuscate this source (GPLv3; open for audit).
+#   - Treat MANIFEST.sha256 as encryption; it is integrity only.
+#   - Assume $script:Config.LogDirectory is final; Config module re-resolves
+#     the data directory after load.
+#
+# SECURITY NOTES
+#   - Source is plain text. Reviewers should read it freely.
+#   - DPAPI (Protect-BastionBlob / Unprotect-BastionBlob in Bastion.Config.ps1)
+#     protects only sensitive undo payloads (DNS snapshot, RDP host prior),
+#     never this module and never the winget catalog or section docs.
+#   - $script:BastionDpapiEntropy is a fixed salt for CurrentUser DPAPI; it is
+#     not a secret key and does not replace OS credential isolation.
+#   - Sensitive paths and install roots are validated later (Programs module);
+#     blocked path fragments below are deny-list hints for custom install roots.
+#
+# Version string below must stay in sync with the product release version.
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# Core product identity and preferred data root
+# -----------------------------------------------------------------------------
+# LogDirectory is the preferred NEW store root only. After modules load,
+# Resolve-BastionLogDirectory may reuse a writable legacy path (flat C:\Temp)
+# or fall back to ProgramData / LOCALAPPDATA / TEMP when C:\Temp is unusable.
 $script:Config = @{
     ScriptVersion = "15.9.7"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
+    # Windows Event Log source name used by Write-Log (Application log).
     EventSource   = "BastionHardening"
 }
 
+# Per-launch stamp for log file names (Bastion-Log-yyyyMMdd-HHmmss.txt).
 $script:timestamp   = Get-Date -Format "yyyyMMdd-HHmmss"
 
+# -----------------------------------------------------------------------------
+# Data-store and first-run flags (bound/filled by Bastion.Config.ps1)
+# -----------------------------------------------------------------------------
+# Full path to Bastion-Session.json after Bind-BastionDataPaths; null until bound.
 $script:sessionFile = $null
 
+# True if Bastion-Config.json already existed when Initialize-BastionDataStore ran.
 $script:HadPriorConfig  = $false
 
+# True if Bastion-LastApply.json already existed (real Apply history, never invented).
 $script:HadPriorApply   = $false
 
+# True when this launch wrote a fresh default Bastion-Config.json (first run or wiped store).
 $script:FirstRunSeeded  = $false
 
+# True after Initialize-BastionDataStore succeeds (dirs ready, config load/seed done).
 $script:DataStoreReady  = $false
 
+# When true, Apply skips Spooler disable for this run (user chose to keep printing).
 $script:SkipSpoolerThisApply = $false
 
+# -----------------------------------------------------------------------------
+# Program install queue and optional custom roots
+# -----------------------------------------------------------------------------
+# Catalog display names the user checked for install (must exist in ProgramDefs).
+# Sync-ProgramInstallQueue drops names already present on disk.
 $script:SelectedApps = [System.Collections.Generic.List[string]]::new()
 
+# Optional shared --location root for winget installs (fixed local volume only).
 $script:GlobalInstallRoot   = $null
 
+# Per-app override install roots (key = ProgramDefs display name, value = path).
 $script:ProgramInstallRoots = @{}
 
+# -----------------------------------------------------------------------------
+# Browser policy wanted state (menu 6 / Bastion-Config.json)
+# Values: Default | Medium | Strict. Live OS posture is detected separately.
+# -----------------------------------------------------------------------------
 $script:BrowserPolicyModes  = [ordered]@{
     Firefox = "Default"
     Chrome  = "Default"
     Brave   = "Default"
 }
 
+# Encrypted Client Hello opt-in per browser. Only meaningful under Strict;
+# Load-BastionConfig never infers ECH from Strict alone.
 $script:BrowserEchLocks = [ordered]@{
     Firefox = $false
     Chrome  = $false
     Brave   = $false
 }
 
+# Legacy single-mode field kept for older config files; per-browser Modes win.
 $script:BrowserPolicyMode   = "Default"
 
+# Preferred public DNS catalog id (see DnsProviders). "None" turns DNS section off.
 $script:DnsProviderId       = "Quad9"
 
+# Registry value names Bastion writes under Chromium-family policy hives so
+# Recovery can identify and clear only Bastion-owned policy values.
 $script:ChromiumBastionValueNames = @(
     "BastionManaged",
     "BastionEchLock",
@@ -57,16 +122,28 @@ $script:ChromiumBastionValueNames = @(
     "EncryptedClientHelloEnabled"
 )
 
+# Set true by Load-BastionConfig when a file was parsed successfully.
 $script:ConfigLoaded        = $false
 
+# Human-readable failure lines accumulated during Apply for the summary screen.
 $script:ApplyFailures       = [System.Collections.Generic.List[string]]::new()
 
+# Hashtable of last browser policy menu change (timestamp, browser, modes, backup path).
+# Restored from Bastion-BrowserPolicies-State.json metadata only (not wanted modes).
 $script:BrowserPolicyLastChange = $null
 
+# Extra directories searched for WoW*.exe when building StrictHandle exceptions.
 $script:WowInstallRoots = [System.Collections.Generic.List[string]]::new()
 
+# Full paths to .exe files that must have system StrictHandle turned OFF via
+# Set-ProcessMitigation (user-trusted list from Bastion-Config.json).
 $script:StrictHandleExceptionPaths = [System.Collections.Generic.List[string]]::new()
 
+# -----------------------------------------------------------------------------
+# DNS provider catalog (IPv4 + DoH template metadata)
+# -----------------------------------------------------------------------------
+# WireDoH true means Bastion will also configure Windows DoH for that resolver
+# when the DNS section is applied. "None" leaves adapter DNS untouched.
 $script:DnsProviders = [ordered]@{
     "Quad9" = @{
         DisplayName = "Quad9 (malware blocking)"
@@ -118,6 +195,8 @@ $script:DnsProviders = [ordered]@{
     }
 }
 
+# Maps well-known resolver IPs to DoH templates so live adapter DNS can be
+# labeled Encrypted / matched even when the user did not pick a Bastion provider id.
 $script:DnsKnownDohTemplates = [ordered]@{
     "9.9.9.9"           = "https://dns.quad9.net/dns-query"
     "149.112.112.112"   = "https://dns.quad9.net/dns-query"
@@ -131,8 +210,13 @@ $script:DnsKnownDohTemplates = [ordered]@{
     "208.67.220.220"    = "https://doh.opendns.com/dns-query"
 }
 
+# Per-interface DoH registry QWord (DohFlags) matching Settings "Encrypted" path.
+# Value 17 aligns with Windows UI automatic DoH for known templates (v15.8.4+).
 $script:BastionDnsDohInterfaceFlags = 17
 
+# -----------------------------------------------------------------------------
+# Apply session counters (reset at start of Dry Run / Apply)
+# -----------------------------------------------------------------------------
 $script:Stats = @{
     AlreadyConfigured = 0
     Applied           = 0
@@ -141,6 +225,13 @@ $script:Stats = @{
     ServicesDisabled  = 0
 }
 
+# -----------------------------------------------------------------------------
+# Hardening section defaults and working copy
+# -----------------------------------------------------------------------------
+# DefaultSections is the product baseline for a first-run seed. Sections is the
+# mutable working ordered dictionary copied from defaults then overlaid by config.
+# Opt-in sections (Xbox, BrowserPolicies, BloatApps, Suggestions, Copilot, RdpHostLock)
+# stay false until the user enables them so Quick Harden stays conservative.
 $script:DefaultSections = [ordered]@{
     "Firewall"             = $true
     "HighRiskServices"     = $true
@@ -163,17 +254,24 @@ $script:DefaultSections = [ordered]@{
     "RdpHostLock"          = $false
 }
 
+# Subset used by "Quick Harden" style presets (core mitigations without opt-ins).
 $script:QuickSections = @(
     "Firewall","HighRiskServices","SMBv1","DeliveryOptimization",
     "DNS","Defender","PowerShellAuditing","LSAProtection","ScheduledTasks"
 )
 
+# Live section enable map used by menus and Apply. Starts as a full copy of defaults.
 $script:Sections = [ordered]@{}
 
 foreach ($k in $script:DefaultSections.Keys) {
     $script:Sections[$k] = [bool]$script:DefaultSections[$k]
 }
 
+# -----------------------------------------------------------------------------
+# Section documentation for Help / Dry Run explanations
+# -----------------------------------------------------------------------------
+# Each entry: Intent (why), Changes (what Bastion does), Impact (user-facing),
+# Revert (how to undo), Notes (edge cases). Keep text accurate when changing Apply.
 $script:SectionDocs = [ordered]@{
     "Firewall" = @{
         Intent  = "Reduce unsolicited inbound exposure while keeping normal outbound traffic working (browsing, VPN, Windows Update)."
@@ -303,6 +401,12 @@ $script:SectionDocs = [ordered]@{
     }
 }
 
+# -----------------------------------------------------------------------------
+# Winget program catalog (display name -> winget id + detection paths)
+# -----------------------------------------------------------------------------
+# Category is UI grouping only. Paths are used for "already installed" checks.
+# ManualInstallOnly apps have no winget package; UI offers a download URL instead.
+# Never accept free-typed package IDs outside this table (Programs security rule).
 $script:ProgramDefs = [ordered]@{
     "Firefox"        = @{ WingetId = "Mozilla.Firefox"; Paths = @("C:\Program Files\Mozilla Firefox\firefox.exe","C:\Program Files (x86)\Mozilla Firefox\firefox.exe"); Category = "Browser" }
     "Chrome"         = @{ WingetId = "Google.Chrome"; Paths = @("C:\Program Files\Google\Chrome\Application\chrome.exe"); Category = "Browser" }
@@ -354,20 +458,27 @@ $script:ProgramDefs = [ordered]@{
     "Malwarebytes"   = @{ WingetId = "Malwarebytes.Malwarebytes"; Paths = @("C:\Program Files\Malwarebytes\Anti-Malware\mbam.exe","C:\Program Files\Malwarebytes\Anti-Malware\Malwarebytes.exe"); Category = "Security" }
 }
 
+# Extra Controlled Folder Access allow paths beyond catalog app detection.
 $script:ExtraCfaPaths = @("C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
 
+# Path fragments never allowed as custom winget --location roots (system / package stores).
 $script:BlockedPathFragments = @(
     "\Windows\System32","\Windows\SysWOW64","\Windows\WinSxS",
     "\Windows\SystemApps","\Program Files\WindowsApps",
     '$Recycle.Bin',"\System Volume Information"
 )
 
+# Only these winget source names are accepted during install preflight.
 $script:TrustedWingetSourceNames = @("winget","msstore")
 
+# -----------------------------------------------------------------------------
+# Service names used by HighRiskServices and XboxGaming Apply paths
+# -----------------------------------------------------------------------------
 $script:HighRiskServiceList = @("LanmanServer","CDPSvc","SSDPSRV","upnphost","Spooler","bowser","RemoteRegistry","SharedAccess","Fax")
 
 $script:XboxServiceList = @("XblAuthManager","XblGameSave","XboxNetApiSvc","XboxGipSvc")
 
+# Recovery UI catalog: service name, group, preferred start type after re-enable, why.
 $script:ServiceRecoveryCatalog = @(
     @{ Name = "Spooler";        Group = "HighRisk"; Display = "Print Spooler";              PreferStart = "Automatic"; Why = "Local and network printing" }
     @{ Name = "LanmanServer";   Group = "HighRisk"; Display = "Server (SMB file sharing)"; PreferStart = "Automatic"; Why = "Host shared folders" }
@@ -384,12 +495,33 @@ $script:ServiceRecoveryCatalog = @(
     @{ Name = "XboxGipSvc";     Group = "Xbox";     Display = "Xbox Accessory Management"; PreferStart = "Manual";    Why = "Xbox accessories / GIP" }
 )
 
+# -----------------------------------------------------------------------------
+# Firewall group names (Apply locks; Recovery opens subsets)
+# -----------------------------------------------------------------------------
+# LAN discovery subset used by Recovery network tools (not remote admin).
 $script:LanDiscoveryFirewallGroups = @(
     "File and Printer Sharing",
     "Network Discovery",
     "mDNS"
 )
 
+# Full list Bastion disables under the Firewall section when rules exist and are on.
+$script:FirewallGroups = @(
+    "File and Printer Sharing","Network Discovery","Remote Assistance",
+    "Remote Desktop","Windows Remote Management","mDNS"
+)
+
+# Remote administration subset (RDP / Assistance / WinRM) for Recovery status UI.
+$script:RemoteAccessFirewallGroups = @(
+    "Remote Desktop",
+    "Remote Assistance",
+    "Windows Remote Management"
+)
+
+# -----------------------------------------------------------------------------
+# Scheduled tasks, Appx bloat list, suggestions registry, Copilot match
+# -----------------------------------------------------------------------------
+# Full Task Scheduler paths disabled by the ScheduledTasks section.
 $script:BastionScheduledTaskPaths = @(
     "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
     "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
@@ -397,19 +529,11 @@ $script:BastionScheduledTaskPaths = @(
     "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
 )
 
-$script:FirewallGroups = @(
-    "File and Printer Sharing","Network Discovery","Remote Assistance",
-    "Remote Desktop","Windows Remote Management","mDNS"
-)
-
-$script:RemoteAccessFirewallGroups = @(
-    "Remote Desktop",
-    "Remote Assistance",
-    "Windows Remote Management"
-)
-
+# Regex used when removing Copilot / Office Hub style user Appx packages.
 $script:CopilotM365PackageMatch = 'Copilot|MicrosoftOfficeHub|Microsoft.Copilot'
 
+# Curated consumer Appx packages for the optional BloatApps section.
+# Match is substring/package family style for Get-AppxPackage filtering.
 $script:BloatAppxList = @(
     @{ Name = "Bing News"; Match = "Microsoft.BingNews" }
     @{ Name = "Bing Weather"; Match = "Microsoft.BingWeather" }
@@ -424,6 +548,9 @@ $script:BloatAppxList = @(
     @{ Name = "Gaming App"; Match = "Microsoft.GamingApp" }
 )
 
+# Registry values for the Suggestions section.
+# Soft=$true means unauthorized/write failure is non-fatal for whole Apply.
+# Default is the value written when Recovery restores suggestion defaults.
 $script:SuggestionRegistry = @(
     @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Name = "TaskbarDa"; Value = 0; Default = 1; Type = "DWord"; Desc = "Hide Widgets button"; Soft = $false }
     @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds"; Name = "ShellFeedsTaskbarViewMode"; Value = 2; Default = 0; Type = "DWord"; Desc = "Hide News/Interests taskbar feed (HKCU)"; Soft = $true }
@@ -435,4 +562,10 @@ $script:SuggestionRegistry = @(
     @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name = "SubscribedContent-338389Enabled"; Value = 0; Default = 1; Type = "DWord"; Desc = "Settings suggestions"; Soft = $false }
 )
 
+# -----------------------------------------------------------------------------
+# DPAPI optional entropy for undo secrets (not a password; not for source files)
+# -----------------------------------------------------------------------------
+# Used only by Protect-BastionBlob / Unprotect-BastionBlob in Bastion.Config.ps1
+# for DNS snapshots and RDP host prior values inside Bastion-LastApply.json.
+# Changing this string breaks decryption of existing undo blobs for this user.
 $script:BastionDpapiEntropy = [System.Text.Encoding]::UTF8.GetBytes("BastionHardening.ProtectedState.v15.8")

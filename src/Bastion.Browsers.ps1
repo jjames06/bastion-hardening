@@ -1,7 +1,38 @@
+# =============================================================================
 # Bastion.Browsers.ps1 - modular domain (v15.9.0)
+# =============================================================================
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.
+#
+# Role of this module
+#   Detect and write enterprise privacy policies for installed Firefox, Chrome,
+#   and Brave. Called from menu 6 / Recovery hub 4 and (when enabled) Apply.
+#
+# Policy modes (per browser)
+#   Default - remove Bastion-managed policy material (best-effort; backups kept)
+#   Medium  - privacy baseline (telemetry / tracking / cookies); fewer breakages
+#   Strict  - Medium + HTTPS-Only (and Chromium transport extras); NOT ECH alone
+#
+# Encrypted Client Hello (ECH) - NEVER default
+#   EnableEch parameters default to false. Resolve-BrowserEchChoice returns true
+#   only when Mode is Strict AND the caller passes EnableEch true (user said Yes
+#   to the separate ECH pack prompt under Strict). First-run seed, Medium, and
+#   Strict without Yes never write ECH locks. Clear-BrowserEchLocksAll / reset
+#   force all wanted ECH flags false.
+#
+# Engine differences
+#   Firefox: distribution\policies.json preference locks for ECH prefs.
+#   Chrome/Brave: HKLM policy keys; BastionEchLock intent marker + best-effort
+#   EncryptedClientHelloEnabled (not identical to Firefox prefs).
+#   Comments use ASCII punctuation only.
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# Get-FirefoxPoliciesPath
+#   Prefer an existing Firefox install root (64-bit then 32-bit). Returns the
+#   policies.json path under distribution\, even if the file does not exist yet
+#   (write path for Set-FirefoxPolicyMode).
+# -----------------------------------------------------------------------------
 function Get-FirefoxPoliciesPath {
     foreach ($c in @(
         "C:\Program Files\Mozilla Firefox\distribution\policies.json",
@@ -13,6 +44,12 @@ function Get-FirefoxPoliciesPath {
     return "C:\Program Files\Mozilla Firefox\distribution\policies.json"
 }
 
+# -----------------------------------------------------------------------------
+# Test-FirefoxEchLocksPresent
+#   Live ECH detection: true if policies.json Preferences contain ECH-related
+#   names (echconfig / EncryptedClientHello / network.dns.ech). False if file
+#   missing or unreadable. Used for Dry Run / Audit / UI "ECH live".
+# -----------------------------------------------------------------------------
 function Test-FirefoxEchLocksPresent {
     $path = Get-FirefoxPoliciesPath
     if (-not (Test-Path -LiteralPath $path)) { return $false }
@@ -27,6 +64,12 @@ function Test-FirefoxEchLocksPresent {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Get-FirefoxPolicyModeFromFile
+#   Classify live policies.json for UI: Default (no file), Medium (telemetry
+#   baseline), Strict (HTTPS-Only / locked tracking / ECH prefs), else Custom
+#   (foreign or DisableEncryptedClientHello). Heuristic, not a full parser.
+# -----------------------------------------------------------------------------
 function Get-FirefoxPolicyModeFromFile {
     # Classify Bastion-written (or compatible) policies.json for UI display.
     $path = Get-FirefoxPoliciesPath
@@ -51,6 +94,13 @@ function Get-FirefoxPolicyModeFromFile {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Set-FirefoxPolicyMode
+#   Write or remove Firefox policies.json for Default / Medium / Strict.
+#   EnableEch defaults false; gated again via Resolve-BrowserEchChoice so ECH
+#   preference locks are written only for Strict + explicit true. Never sets
+#   DisableEncryptedClientHello (that would force ECH off). Backs up first.
+# -----------------------------------------------------------------------------
 function Set-FirefoxPolicyMode {
     param(
         [ValidateSet("Default","Medium","Strict")][string]$Mode,
@@ -146,6 +196,10 @@ function Set-FirefoxPolicyMode {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Get-BrowserPolicyBackupDir
+#   Ensure browser-policy-backups under LogDirectory exists; return path.
+# -----------------------------------------------------------------------------
 function Get-BrowserPolicyBackupDir {
     $dir = Join-Path $script:Config.LogDirectory "browser-policy-backups"
     try {
@@ -156,10 +210,19 @@ function Get-BrowserPolicyBackupDir {
     return $dir
 }
 
+# -----------------------------------------------------------------------------
+# Get-BrowserPolicyStatePath
+#   Path to Bastion-BrowserPolicies-State.json (wanted + live summary file).
+# -----------------------------------------------------------------------------
 function Get-BrowserPolicyStatePath {
     return (Join-Path $script:Config.LogDirectory "Bastion-BrowserPolicies-State.json")
 }
 
+# -----------------------------------------------------------------------------
+# Write-BrowserStrictDisclaimer
+#   User-facing Strict / ECH honesty block. Compact=true for menu overview;
+#   full text before confirming Strict. ECH described as optional, never default.
+# -----------------------------------------------------------------------------
 function Write-BrowserStrictDisclaimer {
     param([switch]$Compact)
     Write-Host ""
@@ -185,12 +248,25 @@ function Write-BrowserStrictDisclaimer {
     Write-Host ""
 }
 
+# -----------------------------------------------------------------------------
+# Clear-BrowserEchLocksAll
+#   Force every BrowserEchLocks entry to false (wanted ECH off). Used by reset
+#   paths so ECH never remains "wanted" after config wipe.
+# -----------------------------------------------------------------------------
 function Clear-BrowserEchLocksAll {
     foreach ($k in @($script:BrowserEchLocks.Keys)) {
         $script:BrowserEchLocks[$k] = $false
     }
 }
 
+# -----------------------------------------------------------------------------
+# Resolve-BrowserEchChoice
+#   Single gate for ECH pack application:
+#     - Mode must be Strict
+#     - EnableEch must be explicitly true (user Yes under Strict)
+#   Any other combination returns false. Callers re-assign EnableEch to result
+#   so Medium/Default never write ECH even if a stale true flag is passed.
+# -----------------------------------------------------------------------------
 function Resolve-BrowserEchChoice {
     # Single gate: ECH only when caller passes explicit true AND mode is Strict.
     param(
@@ -201,6 +277,11 @@ function Resolve-BrowserEchChoice {
     return [bool]$EnableEch
 }
 
+# -----------------------------------------------------------------------------
+# Get-BrowserPolicyModesSummary
+#   Compact "Firefox=Strict+ECH, Chrome=Medium, ..." for main menu status line.
+#   +ECH only when wanted ECH is true AND saved mode is Strict.
+# -----------------------------------------------------------------------------
 function Get-BrowserPolicyModesSummary {
     $parts = foreach ($k in @($script:BrowserPolicyModes.Keys)) {
         $mode = $script:BrowserPolicyModes[$k]
@@ -214,6 +295,11 @@ function Get-BrowserPolicyModesSummary {
     return ($parts -join ", ")
 }
 
+# -----------------------------------------------------------------------------
+# Get-BrowserPolicyWantedEch
+#   True only if saved mode is Strict and BrowserEchLocks[name] is true.
+#   Defaults false when keys missing (ECH never assumed on).
+# -----------------------------------------------------------------------------
 function Get-BrowserPolicyWantedEch {
     param([string]$BrowserName)
     if (-not $script:BrowserPolicyModes.Contains($BrowserName)) { return $false }
@@ -222,6 +308,10 @@ function Get-BrowserPolicyWantedEch {
     return [bool]$script:BrowserEchLocks[$BrowserName]
 }
 
+# -----------------------------------------------------------------------------
+# Format-BrowserPolicyStatusLine
+#   Compact readable line for Dry Run / Audit / logs (live vs want, ECH Yes/No).
+# -----------------------------------------------------------------------------
 function Format-BrowserPolicyStatusLine {
     # Compact readable line for Dry Run / Audit / logs.
     param(
@@ -236,6 +326,12 @@ function Format-BrowserPolicyStatusLine {
     return ("{0}: live {1} (ECH {2}) -> want {3} (ECH {4})" -f $Name, $LiveMode, $echL, $WantMode, $echW)
 }
 
+# -----------------------------------------------------------------------------
+# Get-LiveBrowserPostureSnapshot
+#   Live OS/file detection for Firefox/Chrome/Brave: installed flag, mode class,
+#   ECH live on/off. Never invents Bastion Apply history. NotInstalled when paths
+#   fail Test-Installed.
+# -----------------------------------------------------------------------------
 function Get-LiveBrowserPostureSnapshot {
     # Live OS/file detection only - never invents Bastion Apply history.
     $modes = [ordered]@{}
@@ -263,6 +359,11 @@ function Get-LiveBrowserPostureSnapshot {
     return @{ Modes = $modes; Ech = $ech; Installed = $installed }
 }
 
+# -----------------------------------------------------------------------------
+# Record-BrowserPolicyChange
+#   Update in-memory last-change record, session log, and state JSON after a
+#   successful (or attempted) policy write/remove.
+# -----------------------------------------------------------------------------
 function Record-BrowserPolicyChange {
     param(
         [string]$Browser,
@@ -284,6 +385,11 @@ function Record-BrowserPolicyChange {
     Save-BrowserPolicyStateFile
 }
 
+# -----------------------------------------------------------------------------
+# Backup-FirefoxPoliciesFile
+#   Copy existing policies.json into browser-policy-backups with timestamp.
+#   Returns dest path or empty string if missing/fail (non-fatal).
+# -----------------------------------------------------------------------------
 function Backup-FirefoxPoliciesFile {
     $path = Get-FirefoxPoliciesPath
     if (-not (Test-Path -LiteralPath $path)) { return "" }
@@ -299,6 +405,10 @@ function Backup-FirefoxPoliciesFile {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Get-ChromiumPolicyBase
+#   HKLM enterprise policy root for Chrome or Brave (Bastion-managed values).
+# -----------------------------------------------------------------------------
 function Get-ChromiumPolicyBase {
     param([ValidateSet("Chrome","Brave")][string]$Browser)
     if ($Browser -eq "Brave") {
@@ -307,6 +417,11 @@ function Get-ChromiumPolicyBase {
     return "HKLM:\SOFTWARE\Policies\Google\Chrome"
 }
 
+# -----------------------------------------------------------------------------
+# Backup-ChromiumPolicyValues
+#   Snapshot Bastion-named values under the Chromium policy key to JSON backup.
+#   Uses ChromiumBastionValueNames allow-list; foreign values left alone later.
+# -----------------------------------------------------------------------------
 function Backup-ChromiumPolicyValues {
     param([ValidateSet("Chrome","Brave")][string]$Browser)
     $base = Get-ChromiumPolicyBase -Browser $Browser
@@ -334,6 +449,12 @@ function Backup-ChromiumPolicyValues {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Get-ChromiumPolicyMode
+#   Classify live HKLM policy for UI: Default (no key), Strict (HTTPS-Only /
+#   BastionEchLock / cookie force), Medium (BastionManaged or telemetry markers),
+#   Custom (foreign key without Bastion markers).
+# -----------------------------------------------------------------------------
 function Get-ChromiumPolicyMode {
     param([ValidateSet("Chrome","Brave")][string]$Browser)
     $base = Get-ChromiumPolicyBase -Browser $Browser
@@ -352,6 +473,11 @@ function Get-ChromiumPolicyMode {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Test-ChromiumEchLockPresent
+#   Live ECH intent: BastionEchLock DWORD == 1 under the browser policy key.
+#   This is Bastion's marker; Chromium ECH support still varies by build.
+# -----------------------------------------------------------------------------
 function Test-ChromiumEchLockPresent {
     param([ValidateSet("Chrome","Brave")][string]$Browser)
     $base = Get-ChromiumPolicyBase -Browser $Browser
@@ -364,6 +490,10 @@ function Test-ChromiumEchLockPresent {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Test-BrowserEchLockLive
+#   Dispatch live ECH detection to Firefox prefs or Chromium BastionEchLock.
+# -----------------------------------------------------------------------------
 function Test-BrowserEchLockLive {
     param([ValidateSet("Firefox","Chrome","Brave")][string]$Browser)
     switch ($Browser) {
@@ -374,6 +504,11 @@ function Test-BrowserEchLockLive {
     return $false
 }
 
+# -----------------------------------------------------------------------------
+# Remove-ChromiumBastionValues
+#   Default mode helper: remove only ChromiumBastionValueNames entries. Leaves
+#   non-Bastion enterprise values in place. Drops empty policy key if vacant.
+# -----------------------------------------------------------------------------
 function Remove-ChromiumBastionValues {
     param([ValidateSet("Chrome","Brave")][string]$Browser)
     $base = Get-ChromiumPolicyBase -Browser $Browser
@@ -410,6 +545,13 @@ function Remove-ChromiumBastionValues {
     return $true
 }
 
+# -----------------------------------------------------------------------------
+# Set-ChromiumPolicyMode
+#   Write Chrome or Brave HKLM policies for Default / Medium / Strict.
+#   EnableEch defaults false; Resolve-BrowserEchChoice re-gates so ECH pack
+#   (BastionEchLock + optional EncryptedClientHelloEnabled) is only for
+#   Strict + explicit true. Medium sets telemetry/cookie baseline without ECH.
+# -----------------------------------------------------------------------------
 function Set-ChromiumPolicyMode {
     param(
         [ValidateSet("Chrome","Brave")][string]$Browser,
@@ -491,6 +633,10 @@ function Set-ChromiumPolicyMode {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Set-ChromePolicyMode / Set-BravePolicyMode
+#   Thin wrappers around Set-ChromiumPolicyMode. EnableEch still defaults false.
+# -----------------------------------------------------------------------------
 function Set-ChromePolicyMode {
     param(
         [ValidateSet("Default","Medium","Strict")][string]$Mode,
@@ -507,6 +653,12 @@ function Set-BravePolicyMode {
     return (Set-ChromiumPolicyMode -Browser Brave -Mode $Mode -EnableEch:$EnableEch)
 }
 
+# -----------------------------------------------------------------------------
+# Get-InstalledBastionBrowsers
+#   Menu 6 list builder: only engines that pass path detect. Never lists missing
+#   browsers. Each row: live Mode, SavedMode, EchLive, EchSaved (wanted ECH only
+#   when saved Strict and lock true), Key for Invoke-BastionBrowserPolicy.
+# -----------------------------------------------------------------------------
 function Get-InstalledBastionBrowsers {
     # Only supported browsers that are actually installed (path detect). Never list missing engines.
     $list = [System.Collections.Generic.List[object]]::new()
@@ -542,6 +694,12 @@ function Get-InstalledBastionBrowsers {
     return @($list)
 }
 
+# -----------------------------------------------------------------------------
+# Invoke-BastionBrowserPolicy
+#   Public entry from menus / Apply for one browser. Refuses missing engines.
+#   Re-gates EnableEch through Resolve-BrowserEchChoice (never default ECH).
+#   Dispatches to Set-FirefoxPolicyMode or Set-Chrome/BravePolicyMode.
+# -----------------------------------------------------------------------------
 function Invoke-BastionBrowserPolicy {
     param(
         [Parameter(Mandatory)][ValidateSet("Firefox","Chrome","Brave")][string]$Browser,
@@ -557,6 +715,7 @@ function Invoke-BastionBrowserPolicy {
         Write-Status ("{0} is not installed; skipping policy change" -f $Browser) "Skip"
         return $false
     }
+    # Final ECH gate: Medium/Default and Strict-without-Yes never enable the pack.
     $EnableEch = Resolve-BrowserEchChoice -Mode $Mode -EnableEch:$EnableEch
     switch ($Browser) {
         "Firefox" { return (Set-FirefoxPolicyMode -Mode $Mode -EnableEch:$EnableEch) }

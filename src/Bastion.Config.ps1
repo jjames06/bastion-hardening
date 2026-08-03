@@ -1,8 +1,53 @@
-# Bastion.Config.ps1 - modular domain (v15.9.0)
-# Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
-# Plain text GPLv3 source - never encrypt. Do not run standalone.
+# =============================================================================
+# Bastion.Config.ps1 - data directory, durable config, and protected undo I/O
+# =============================================================================
+#
+# PURPOSE
+#   Resolve a writable Bastion data directory, bind log/config/undo paths,
+#   load and save Bastion-Config.json preferences, maintain session/browser
+#   state snapshots, and read/write Bastion-LastApply.json with DPAPI for
+#   sensitive DNS and RDP host prior payloads only.
+#
+# LOAD ORDER / ROLE
+#   Loaded after Bastion.Init.ps1 (state/catalogs) and Bastion.Core.ps1 (Write-Log).
+#   Dot-sourced by Bastion-Hardening.ps1 into the same $script: runspace.
+#   Bootstrap calls Resolve/Bind/Ensure/Initialize after all modules load.
+#
+# DO NOT
+#   - Run this file standalone (depends on Init catalogs and Core logging).
+#   - Encrypt modular source; only undo blobs use DPAPI CurrentUser protection.
+#   - Invent Bastion-LastApply.json without a completed Apply.
+#   - Treat MANIFEST.sha256 as encryption (integrity hashes only).
+#
+# SECURITY NOTES
+#   - Plain-text GPLv3 source. Preferences and session JSON are readable by
+#     design after ACL lockdown (SYSTEM + Administrators preferred).
+#   - Protect-BastionBlob / Unprotect-BastionBlob use DataProtectionScope.CurrentUser
+#     plus $script:BastionDpapiEntropy. Wrong Windows user or damaged base64 fails soft.
+#   - Save-UndoData never writes plaintext DnsSnapshot / RdpHostPrior to disk.
+#   - Deleting the data directory forces a clean seed next run; it does not
+#     invent prior hardening or fake Apply history.
+#
+# ELEVATION
+#   Expected elevated. ACL writes and some data roots (ProgramData) need admin.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Data directory discovery and path binding
+# -----------------------------------------------------------------------------
 
 function Get-BastionDataDirCandidates {
+    <#
+    .SYNOPSIS
+      Ordered list of possible Bastion data roots (existing-state discovery).
+    .DESCRIPTION
+      WHAT: Builds unique paths: C:\Temp\Bastion, legacy flat C:\Temp,
+            ProgramData\Bastion, LOCALAPPDATA\Bastion, TEMP\Bastion.
+      WHY: Resolve-BastionLogDirectory reuses writable dirs that already hold state
+            before creating a brand-new store.
+      RETURN: [string[]] of candidate absolute paths (may not exist yet).
+      NOTES: %TEMP%\Bastion is last because wipe-prone (user temp cleanup).
+    #>
     # Discovery order for existing state + durable fallbacks. %TEMP%\Bastion is last (wipe-prone).
     $raw = @(
         (Join-Path "C:\Temp" "Bastion"),
@@ -20,6 +65,14 @@ function Get-BastionDataDirCandidates {
 }
 
 function Test-BastionDirWritable {
+    <#
+    .SYNOPSIS
+      True if Path exists or can be created and accepts a write probe file.
+    .DESCRIPTION
+      WHAT: Creates directory if missing, writes then deletes a unique .tmp probe.
+      WHY: Prefer durable roots that actually work under the current token.
+      RETURN: [bool]. Never throws; catch returns $false.
+    #>
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
     try {
@@ -36,6 +89,14 @@ function Test-BastionDirWritable {
 }
 
 function Test-BastionStatePresent {
+    <#
+    .SYNOPSIS
+      True if Dir already contains any Bastion durable state file.
+    .DESCRIPTION
+      WHAT: Looks for Config, LastApply, BrowserPolicies-State, or Session JSON.
+      WHY: Prefer reusing a store that has real user history over a fresh empty path.
+      RETURN: [bool].
+    #>
     param([string]$Dir)
     if ([string]::IsNullOrWhiteSpace($Dir)) { return $false }
     if (-not (Test-Path -LiteralPath $Dir)) { return $false }
@@ -46,6 +107,17 @@ function Test-BastionStatePresent {
 }
 
 function Resolve-BastionLogDirectory {
+    <#
+    .SYNOPSIS
+      Choose the data directory for this launch (reuse state, else durable new).
+    .DESCRIPTION
+      WHAT: (1) Among candidates with Bastion state, pick writable with newest
+            Bastion-Config.json mtime. (2) Else first writable preferredNew path.
+      WHY: Users moving between versions should keep undo/config; new installs
+            prefer C:\Temp\Bastion over wipeable %TEMP%.
+      RETURN: [string] path, or $null if nothing is writable.
+      SIDE EFFECTS: May create directories via Test-BastionDirWritable.
+    #>
     # 1) Reuse a writable dir that already has Bastion state (prefer newest config).
     # 2) Else create the first durable writable path (never invent Apply history).
     $candidates = @(Get-BastionDataDirCandidates)
@@ -82,6 +154,14 @@ function Resolve-BastionLogDirectory {
 }
 
 function Bind-BastionDataPaths {
+    <#
+    .SYNOPSIS
+      Point $script: log/config/undo/session/temp paths at LogDirectory.
+    .DESCRIPTION
+      WHAT: Sets Config.LogDirectory and derived file paths for this session stamp.
+      WHY: All I/O helpers share one bound root after resolve.
+      RETURN: None. Does not create directories (see Ensure-BastionPaths).
+    #>
     param([string]$LogDirectory)
     $script:Config.LogDirectory = $LogDirectory
     $script:logFile    = Join-Path $LogDirectory ("Bastion-Log-{0}.txt" -f $script:timestamp)
@@ -92,6 +172,16 @@ function Bind-BastionDataPaths {
 }
 
 function Ensure-BastionPaths {
+    <#
+    .SYNOPSIS
+      Ensure data dirs exist and re-bind if the preferred root became unusable.
+    .DESCRIPTION
+      WHAT: Re-resolves if LogDirectory missing/unwritable; creates LogDirectory,
+            tempDir, and browser-policy-backups; fills sessionFile if empty.
+      WHY: Mid-session path loss (USB unplug, ACL change) should recover quietly.
+      RETURN: $true on success; $false after console ERROR (caller may exit).
+      ELEVATION: Creating under ProgramData typically needs admin.
+    #>
     try {
         # Re-resolve if preferred path became unusable mid-session
         if (-not (Test-Path -LiteralPath $script:Config.LogDirectory) -or -not (Test-BastionDirWritable -Path $script:Config.LogDirectory)) {
@@ -116,7 +206,21 @@ function Ensure-BastionPaths {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Browser policy state file and per-launch session snapshot
+# -----------------------------------------------------------------------------
+
 function Save-BrowserPolicyStateFile {
+    <#
+    .SYNOPSIS
+      Write Bastion-BrowserPolicies-State.json (wanted + live posture + last change).
+    .DESCRIPTION
+      WHAT: Merges menu wanted modes/ECH, live snapshot from Get-LiveBrowserPostureSnapshot,
+            and BrowserPolicyLastChange metadata.
+      WHY: Operators can see wanted vs live without inventing Apply history.
+      SIDE EFFECTS: Overwrites state file; logs path on success.
+      NOTES: Deleting this file does not fake Apply history (documented in Note field).
+    #>
     if (-not (Ensure-BastionPaths)) { return }
     try {
         $path = Get-BrowserPolicyStatePath
@@ -147,6 +251,14 @@ function Save-BrowserPolicyStateFile {
 }
 
 function Load-BrowserPolicyStateFile {
+    <#
+    .SYNOPSIS
+      Restore BrowserPolicyLastChange metadata from the state file only.
+    .DESCRIPTION
+      WHAT: Does NOT reload wanted modes (those live in Bastion-Config.json).
+      WHY: Separate last-change audit trail from durable preferences.
+      RETURN: None. Missing file is a quiet no-op.
+    #>
     # Restore last-change metadata only. Wanted modes live in Bastion-Config.json.
     $path = Get-BrowserPolicyStatePath
     if (-not (Test-Path -LiteralPath $path)) { return }
@@ -170,6 +282,16 @@ function Load-BrowserPolicyStateFile {
 }
 
 function Write-BastionSessionSnapshot {
+    <#
+    .SYNOPSIS
+      Rewrite Bastion-Session.json with live OS detection vs Bastion wants/files.
+    .DESCRIPTION
+      WHAT: Records data dir flags, section map, wanted browser modes/ECH, live
+            browser posture, and presence of config/last-apply files.
+      WHY: Proves the store is real every launch; helps support without claiming
+            Apply ran when only files were deleted.
+      SIDE EFFECTS: Overwrites session file each call.
+    #>
     # Rewritten every launch: proves the store is real and records live detection vs Bastion files.
     if (-not (Ensure-BastionPaths)) { return }
     try {
@@ -210,6 +332,17 @@ function Write-BastionSessionSnapshot {
 }
 
 function Initialize-BastionDataStore {
+    <#
+    .SYNOPSIS
+      First/later-run store bootstrap: paths, load real files, seed only if missing.
+    .DESCRIPTION
+      WHAT: Ensure paths; set HadPriorConfig/Apply flags; Load-BastionConfig;
+            Load-BrowserPolicyStateFile; seed Save-BastionConfig only when no prior
+            config; always refresh browser state + session snapshot.
+      WHY: Empty theater is bad UX; inventing LastApply would be dishonest.
+      RETURN: $true when DataStoreReady; $false if paths cannot be prepared.
+      SIDE EFFECTS: May create Bastion-Config.json defaults; never creates LastApply.
+    #>
     # First bat/ps1 run (and every later run): ensure dirs exist, load real files if present,
     # seed defaults only when missing, rewrite session/browser state from live detection.
     # Never invent Bastion-LastApply.json without a completed Apply.
@@ -242,7 +375,20 @@ function Initialize-BastionDataStore {
     return $true
 }
 
+# -----------------------------------------------------------------------------
+# DPAPI helpers and ACL lockdown for sensitive on-disk state
+# -----------------------------------------------------------------------------
+
 function Protect-BastionBlob {
+    <#
+    .SYNOPSIS
+      DPAPI-protect a UTF-8 string for the current Windows user; return base64.
+    .DESCRIPTION
+      WHAT: ProtectedData.Protect with CurrentUser scope and BastionDpapiEntropy.
+      WHY: DNS snapshots and RDP host prior must not sit as plaintext JSON on disk.
+      RETURN: Base64 string, or $null on failure (logged Warning).
+      SECURITY: Only for undo secrets. Never encrypt source modules.
+    #>
     param([Parameter(Mandatory)][string]$PlainText)
     try {
         Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue | Out-Null
@@ -260,6 +406,14 @@ function Protect-BastionBlob {
 }
 
 function Unprotect-BastionBlob {
+    <#
+    .SYNOPSIS
+      Reverse Protect-BastionBlob for the same Windows user and entropy.
+    .DESCRIPTION
+      WHAT: Base64 decode then ProtectedData.Unprotect CurrentUser + entropy.
+      WHY: Undo / Recovery must restore prior DNS and RDP host settings.
+      RETURN: Plain UTF-8 string, or $null (wrong user, empty input, damage).
+    #>
     param([Parameter(Mandatory)][string]$Base64)
     try {
         if ([string]::IsNullOrWhiteSpace($Base64)) { return $null }
@@ -278,6 +432,17 @@ function Unprotect-BastionBlob {
 }
 
 function Set-BastionSensitiveFileAcl {
+    <#
+    .SYNOPSIS
+      Restrict a file ACL to SYSTEM + Administrators only (no inheritance).
+    .DESCRIPTION
+      WHAT: SetAccessRuleProtection(true,false), strip existing ACEs, add FullControl
+            for NT AUTHORITY\SYSTEM and BUILTIN\Administrators.
+      WHY: Local standard users should not casually read undo blobs or custom paths
+            stored in Bastion-Config.json.
+      RETURN: None. Failures log Warning and leave prior ACL.
+      ELEVATION: Typically requires admin to rewrite ACLs under shared data roots.
+    #>
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return }
     try {
@@ -302,7 +467,17 @@ function Set-BastionSensitiveFileAcl {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Undo file: DNS / RDP protected fields, save, read, previews
+# -----------------------------------------------------------------------------
+
 function Test-BastionUndoHasDnsSnapshot {
+    <#
+    .SYNOPSIS
+      True if undo object carries a DNS snapshot (flag or protected blob).
+    .RETURN
+      [bool]. Null UndoData is false.
+    #>
     param($UndoData)
     if ($null -eq $UndoData) { return $false }
     try {
@@ -313,6 +488,14 @@ function Test-BastionUndoHasDnsSnapshot {
 }
 
 function Get-BastionDnsSnapshotFromUndo {
+    <#
+    .SYNOPSIS
+      Decrypt and parse the DNS adapter snapshot from undo data.
+    .DESCRIPTION
+      WHAT: Unprotect DnsSnapshotProtected base64, ConvertFrom-Json.
+      WHY: Recovery restore and preview need structured prior DNS.
+      RETURN: PS object snapshot, or $null (missing/wrong user). Warns on decrypt fail.
+    #>
     param($UndoData)
     if ($null -eq $UndoData) { return $null }
     try {
@@ -329,6 +512,16 @@ function Get-BastionDnsSnapshotFromUndo {
 }
 
 function Save-BastionConfig {
+    <#
+    .SYNOPSIS
+      Persist user preferences to Bastion-Config.json and tighten ACL.
+    .DESCRIPTION
+      WHAT: Serializes sections, selected apps, install roots, browser modes/ECH,
+            DNS provider id, WoW roots, StrictHandle exception paths.
+      WHY: Menus should restore last choices across launches.
+      SIDE EFFECTS: Out-File force; Set-BastionSensitiveFileAcl on the config path.
+      NOTES: Preferences are not secret; ACL is defense-in-depth for path choices.
+    #>
     if (-not (Ensure-BastionPaths)) { return }
     try {
         $data = @{
@@ -359,6 +552,18 @@ function Save-BastionConfig {
 }
 
 function Load-BastionConfig {
+    <#
+    .SYNOPSIS
+      Overlay Bastion-Config.json onto live $script: preference state.
+    .DESCRIPTION
+      WHAT: Loads sections, SelectedApps (then Sync-ProgramInstallQueue), browser
+            modes (with legacy single-mode migration), ECH only when Strict,
+            DNS provider, validated install roots, WoW roots, StrictHandle paths.
+      WHY: Restore durable UI choices without trusting unknown keys or paths.
+      SIDE EFFECTS: Mutates many $script: fields; sets ConfigLoaded on success.
+      SECURITY: Install roots validated via Test-SafeInstallRoot; EXE exceptions
+            must exist as Leaf .exe paths; unknown section keys ignored.
+    #>
     if (-not (Test-Path -LiteralPath $script:configFile)) { return }
     try {
         $data = Get-Content -LiteralPath $script:configFile -Raw -ErrorAction Stop | ConvertFrom-Json
@@ -455,6 +660,18 @@ function Load-BastionConfig {
 }
 
 function Save-UndoData($Data) {
+    <#
+    .SYNOPSIS
+      Write Bastion-LastApply.json after a real Apply, with DPAPI for secrets.
+    .DESCRIPTION
+      WHAT: Expects a hashtable. Converts DnsSnapshot and RdpHostPrior to protected
+            blobs, removes plaintext keys, preserves prior blobs when this Apply did
+            not re-capture them, then JSON Out-File + sensitive ACL.
+      WHY: Later Applies that skip DNS/RDP must not wipe the only recovery secrets.
+      SIDE EFFECTS: Overwrites undo file. Never invents file without caller Apply.
+      SECURITY: Plaintext DNS/RDP priors never written; encryption failure falls back
+            to preserving existing blob when possible.
+    #>
     if (-not (Ensure-BastionPaths)) { return }
     try {
         if ($Data -isnot [hashtable]) {
@@ -531,6 +748,14 @@ function Save-UndoData($Data) {
 }
 
 function Get-BastionDnsSnapshotPreviewText {
+    <#
+    .SYNOPSIS
+      Human-readable one-line preview of adapters in the encrypted DNS snapshot.
+    .DESCRIPTION
+      WHAT: Decrypts via Get-BastionDnsSnapshotFromUndo; formats Name=servers or DHCP.
+      WHY: Recovery Network option 4 shows what will be restored before YES.
+      RETURN: [string] summary, or unavailable/empty messages.
+    #>
     param($UndoData)
     $snap = Get-BastionDnsSnapshotFromUndo -UndoData $UndoData
     if (-not $snap) { return "unavailable (cannot decrypt or missing)" }
@@ -557,6 +782,14 @@ function Get-BastionDnsSnapshotPreviewText {
 }
 
 function Get-BastionRdpHostPriorFromUndo {
+    <#
+    .SYNOPSIS
+      Decrypt RDP host prior from undo, with legacy plaintext fallback.
+    .DESCRIPTION
+      WHAT: Prefers RdpHostPriorProtected; else returns legacy RdpHostPrior object.
+      WHY: Intermediate builds may have stored prior in plaintext.
+      RETURN: Prior object/JSON object, or $null with Warn on decrypt failure.
+    #>
     param($UndoData)
     if ($null -eq $UndoData) { return $null }
     try {
@@ -573,6 +806,14 @@ function Get-BastionRdpHostPriorFromUndo {
 }
 
 function Read-BastionUndoData {
+    <#
+    .SYNOPSIS
+      Load Bastion-LastApply.json as a PSCustomObject, or $null if missing/bad.
+    .DESCRIPTION
+      WHAT: Raw Get-Content + ConvertFrom-Json. Does not decrypt nested blobs.
+      WHY: Undo, Get-LastApplyInfo, and Recovery all share one read path.
+      RETURN: Object or $null (never throws).
+    #>
     if (-not (Test-Path -LiteralPath $script:undoFile)) { return $null }
     try {
         return (Get-Content -LiteralPath $script:undoFile -Raw -ErrorAction Stop | ConvertFrom-Json)
@@ -582,6 +823,14 @@ function Read-BastionUndoData {
 }
 
 function Get-LastApplyInfo {
+    <#
+    .SYNOPSIS
+      Lightweight summary of last Apply for menus (no full undo body).
+    .DESCRIPTION
+      WHAT: Timestamp, ScriptVersion, SectionsRun, HasDnsSnapshot, RdpHostLocked.
+      WHY: Main menu / Recovery can show "last apply" without decrypting secrets.
+      RETURN: PSCustomObject or $null if no undo file.
+    #>
     $d = Read-BastionUndoData
     if (-not $d) { return $null }
     try {

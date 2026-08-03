@@ -1,15 +1,33 @@
-﻿# Publish docs/wiki to the GitHub Wiki remote.
-# Prerequisite: Wiki enabled on the repo, and the wiki has been created at least once
-# (GitHub creates owner/repo.wiki.git only after the first page exists in the web UI).
-# Usage (from repo root, with network + credentials):
+﻿# =============================================================================
+# publish-wiki.ps1
+# =============================================================================
+# Publish docs/wiki Markdown pages to the GitHub Wiki remote (*.wiki.git).
+#
+# Prerequisite:
+#   - Wiki enabled on the GitHub repository settings
+#   - Wiki has been created at least once in the web UI
+#     (GitHub creates owner/repo.wiki.git only after the first page exists)
+#   - Network access and credentials that can push to that remote
+#
+# Usage (from repo root):
 #   powershell -File tools/publish-wiki.ps1
+#
+# Flow:
+#   1) Resolve repo root (parent of tools\)
+#   2) Fresh clone of the wiki remote into %TEMP%
+#   3) Overwrite the known handbook page set from docs\wiki\
+#   4) Commit and push only when the working tree has changes
+# =============================================================================
 
 $ErrorActionPreference = "Stop"
+
+# tools\ -> repo root (two parents from this script path).
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 if (-not (Test-Path (Join-Path $root "docs\wiki\Home.md"))) {
     throw "docs/wiki/Home.md not found. Run from bastion-hardening repo."
 }
 
+# Disposable clone directory; wipe any prior publish attempt for a clean tree.
 $wikiDir = Join-Path $env:TEMP "bastion-hardening.wiki-publish"
 if (Test-Path $wikiDir) { Remove-Item $wikiDir -Recurse -Force }
 
@@ -17,6 +35,7 @@ $remote = "https://github.com/jjames06/bastion-hardening.wiki.git"
 try {
     git clone $remote $wikiDir
 } catch {
+    # First-time wiki remote is often missing until a page is saved in the UI.
     throw @"
 Could not clone the wiki remote.
 Open https://github.com/jjames06/bastion-hardening/wiki and click Create the first page
@@ -24,6 +43,7 @@ Open https://github.com/jjames06/bastion-hardening/wiki and click Create the fir
 "@
 }
 
+# Keep this list in sync with docs/wiki sources you want on the public wiki.
 $pages = @(
     "Home.md", "Quick-start.md", "Recovery-cookbook.md",
     "Games-and-StrictHandle.md", "FAQ.md", "Modular-source.md",
@@ -43,6 +63,7 @@ try {
     git add $pages
     git status
     if (git status --porcelain) {
+        # Only commit/push when handbook content actually changed.
         git commit -m "Sync handbook from docs/wiki"
         git push
         Write-Host "Wiki published: https://github.com/jjames06/bastion-hardening/wiki"

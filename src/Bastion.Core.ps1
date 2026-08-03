@@ -1,8 +1,51 @@
-# Bastion.Core.ps1 - modular domain (v15.9.0)
-# Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
-# Plain text GPLv3 source - never encrypt. Do not run standalone.
+# =============================================================================
+# Bastion.Core.ps1 - console UX primitives, logging, and input helpers
+# =============================================================================
+#
+# PURPOSE
+#   Shared presentation and logging layer used by menus, Apply, Recovery, and
+#   domain modules. No hardening mutations live here; this module only writes
+#   to console, log file, and optional Application event log.
+#
+# LOAD ORDER / ROLE
+#   Loaded second (after Bastion.Init.ps1) so $script:Config, Stats, and paths
+#   exist. Dot-sourced by Bastion-Hardening.ps1 into the same runspace.
+#   Later modules call Write-Log / Write-Status / menu helpers freely.
+#
+# DO NOT
+#   - Run this file standalone (depends on Init state and Config path helpers).
+#   - Encrypt or obfuscate this source (GPLv3; open for audit).
+#   - Treat logging as a security boundary; logs are plain text on disk.
+#
+# SECURITY NOTES
+#   - Source is plain text. MANIFEST.sha256 integrity only.
+#   - DPAPI is never used here; undo encryption lives in Bastion.Config.ps1.
+#   - Write-Log may create the Event Log source when elevated; failures are soft.
+#   - Open-UrlSafe only starts a process for the given URL string; callers must
+#     pass fixed product URLs, not untrusted free text.
+#
+# ELEVATION
+#   Expected to run elevated after the bat/bootstrap admin gate. Console theme
+#   and maximize soft-fail on constrained hosts (ISE, remoting, locked tokens).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Logging and status lines
+# -----------------------------------------------------------------------------
 
 function Write-Log {
+    <#
+    .SYNOPSIS
+      Append a timestamped line to the Bastion log file and optionally the console
+      and Windows Application event log.
+    .DESCRIPTION
+      WHAT: Formats [HH:mm:ss] Message, writes Host unless -NoConsole, ensures
+            data paths, appends to $script:logFile, and best-effort Write-EventLog.
+      WHY: Single channel so Apply/menus do not diverge between console and file.
+      SIDE EFFECTS: May create Event Log source BastionHardening; may call
+            Ensure-BastionPaths (creates dirs). Event log failures are silent.
+      RETURN: None (void). Does not throw to callers.
+    #>
     param(
         [string]$Message,
         [string]$Color = "White",
@@ -24,6 +67,16 @@ function Write-Log {
 }
 
 function Write-Status {
+    <#
+    .SYNOPSIS
+      Emit a colored status line for Dry Run / Apply steps and update $script:Stats.
+    .DESCRIPTION
+      WHAT: Prints an indented message by Type (Already/Applied/Failed/Info/Skip/Warn)
+            and mirrors to Write-Log with -NoConsole to avoid duplicate console lines.
+      WHY: Consistent step accounting and color language across all hardening sections.
+      SIDE EFFECTS: Increments Stats counters; Failed also appends to ApplyFailures.
+      RETURN: None.
+    #>
     param(
         [string]$Message,
         [ValidateSet("Already","Applied","Failed","Info","Skip","Warn")][string]$Type = "Info"
@@ -62,12 +115,34 @@ function Write-Status {
 }
 
 function Wait-ForKey([string]$Message = "Press any key to return...") {
+    <#
+    .SYNOPSIS
+      Pause until the user presses a key (or Enter as fallback).
+    .DESCRIPTION
+      WHAT: Shows a gray prompt then ReadKey, falling back to Read-Host.
+      WHY: Menus and fatal paths need a pause so double-click consoles do not flash-close.
+      RETURN: None. Does not exit the process.
+    #>
     Write-Host ""
     Write-Host ("  {0}" -f $Message) -ForegroundColor Gray
     try { [void][System.Console]::ReadKey($true) } catch { [void](Read-Host "  Press Enter") }
 }
 
+# -----------------------------------------------------------------------------
+# Banner and console chrome
+# -----------------------------------------------------------------------------
+
 function Write-Banner {
+    <#
+    .SYNOPSIS
+      Draw the product banner, version frame, and restore-point reminder.
+    .DESCRIPTION
+      WHAT: Loads Bastion-Banner.utf8.txt from product root when present; else
+            prints a fixed ASCII logo. Then draws a fixed-width info box.
+      WHY: Consistent branding and a hard-to-miss System Restore reminder before Apply.
+      SIDE EFFECTS: Console output only. Nested helper Write-BastionBoxLine is local.
+      PATHS: Prefers $script:BastionRoot; if Core is under src\, parent is product root.
+    #>
     # External Bastion-Banner.utf8.txt (UTF-8) next to product root (not src\). Prefer $script:BastionRoot.
     Write-Host ""
     $bannerFile = $null
@@ -129,6 +204,14 @@ function Write-Banner {
 }
 
 function Get-BastionConsoleWidth {
+    <#
+    .SYNOPSIS
+      Safe console width for word-wrap (clamped 60-120, default 78).
+    .DESCRIPTION
+      WHAT: Reads Host.UI.RawUI.WindowSize.Width with margin and floors.
+      WHY: Menus/help wrap cleanly without touching the window border.
+      RETURN: [int] column count.
+    #>
     try {
         $w = [int]$Host.UI.RawUI.WindowSize.Width
         if ($w -lt 50) { return 78 }
@@ -140,6 +223,12 @@ function Get-BastionConsoleWidth {
 }
 
 function Get-BastionConsoleHeight {
+    <#
+    .SYNOPSIS
+      Safe console height for layout hints (minimum 16, default 30).
+    .RETURN
+      [int] row count from host or 30 on failure.
+    #>
     try {
         $h = [int]$Host.UI.RawUI.WindowSize.Height
         if ($h -lt 16) { return 30 }
@@ -150,6 +239,16 @@ function Get-BastionConsoleHeight {
 }
 
 function Set-BastionConsoleTheme {
+    <#
+    .SYNOPSIS
+      Force black background / gray foreground and repaint the buffer.
+    .DESCRIPTION
+      WHAT: Sets RawUI colors and fills the visible buffer with black cells.
+      WHY: Classic conhost and many Terminal profiles flash host-default blue;
+           menus look inconsistent without a dark theme.
+      SIDE EFFECTS: Soft-fail on ISE / remoting / locked hosts (returns $false).
+      RETURN: $true if theme applied enough to continue; $false on hard failure.
+    #>
     # Consistent dark UI for almost all hosts (classic conhost + many Terminal profiles).
     # Soft-fail: ISE / remoting / locked hosts keep their own theme.
     try {
@@ -181,6 +280,14 @@ function Set-BastionConsoleTheme {
 }
 
 function Clear-BastionScreen {
+    <#
+    .SYNOPSIS
+      Re-apply dark theme, Clear-Host, and home the cursor.
+    .DESCRIPTION
+      WHAT: Theme then clear so host-default blue does not reappear between menus.
+      WHY: Every major menu entry should look the same after redraw.
+      RETURN: None. Soft-fail per step.
+    #>
     # Re-apply dark theme then clear so menus stay black (not host-default blue).
     try { [void](Set-BastionConsoleTheme) } catch {}
     try { Clear-Host } catch {}
@@ -192,6 +299,16 @@ function Clear-BastionScreen {
 }
 
 function Maximize-BastionConsole {
+    <#
+    .SYNOPSIS
+      Dark theme, maximize the console window, grow buffer for scrollback.
+    .DESCRIPTION
+      WHAT: P/Invoke ShowWindow(SW_MAXIMIZE=3), expand BufferSize/WindowSize,
+            re-paint theme after resize.
+      WHY: Help text and Dry Run need a readable full-screen width when allowed.
+      SIDE EFFECTS: Soft-fail entirely on constrained hosts; never throws to caller.
+      ELEVATION: Works best in a real elevated conhost; not required for function to return.
+    #>
     # Dark theme first, then maximize for readability. Soft-fail on constrained hosts.
     try { [void](Set-BastionConsoleTheme) } catch {}
 
@@ -227,7 +344,19 @@ function Maximize-BastionConsole {
     } catch { }
 }
 
+# -----------------------------------------------------------------------------
+# Text wrapping helpers
+# -----------------------------------------------------------------------------
+
 function Get-WrappedLines {
+    <#
+    .SYNOPSIS
+      Word-wrap text into an array of indented lines without printing.
+    .DESCRIPTION
+      WHAT: Splits on whitespace, hard-breaks overlong tokens (paths/URLs).
+      WHY: Callers that need line counts or custom emission (not Write-Host).
+      RETURN: [string[]] of wrapped lines (may include empty string for blank input).
+    #>
     param(
         [string]$Text,
         [int]$Indent = 2,
@@ -266,6 +395,14 @@ function Get-WrappedLines {
 }
 
 function Write-Wrapped {
+    <#
+    .SYNOPSIS
+      Word-wrap and Write-Host a paragraph with indent and color.
+    .DESCRIPTION
+      WHAT: Same wrap rules as Get-WrappedLines but emits each line immediately.
+      WHY: Help body text and long status notes on variable-width consoles.
+      RETURN: None.
+    #>
     param(
         [string]$Text,
         [ConsoleColor]$ForegroundColor = [ConsoleColor]::White,
@@ -316,6 +453,14 @@ function Write-Wrapped {
 }
 
 function Write-WrappedBlock {
+    <#
+    .SYNOPSIS
+      Print a label line then a wrapped body (help section pattern).
+    .DESCRIPTION
+      WHAT: Skips empty bodies. Label at indent 2, body at indent 4.
+      WHY: SectionDocs-style Intent/Changes/Impact blocks stay scannable.
+      RETURN: None.
+    #>
     param(
         [string]$Label,
         [string]$Body,
@@ -327,7 +472,17 @@ function Write-WrappedBlock {
     Write-Wrapped -Text $Body -Indent 4 -ForegroundColor $BodyColor
 }
 
+# -----------------------------------------------------------------------------
+# Menu chrome and "when does this take effect" cues
+# -----------------------------------------------------------------------------
+
 function Write-Header([string]$Title) {
+    <#
+    .SYNOPSIS
+      Standard menu header bar with title, version, and timestamp.
+    .RETURN
+      None. Console output only.
+    #>
     Write-Host ""
     Write-Host "  ==============================================================" -ForegroundColor DarkCyan
     Write-Host ("  {0}" -f $Title.ToUpper()) -ForegroundColor Cyan
@@ -336,15 +491,33 @@ function Write-Header([string]$Title) {
 }
 
 function Write-MenuGroup([string]$Label) {
+    <#
+    .SYNOPSIS
+      Small subsection label inside a menu (e.g. "-- Network --").
+    #>
     Write-Host ""
     Write-Host ("  -- {0} --" -f $Label) -ForegroundColor DarkCyan
 }
 
 function Write-UxDivider {
+    <#
+    .SYNOPSIS
+      Horizontal dashed rule for visual separation in menus.
+    #>
     Write-Host "  ------------------------------------------------------------" -ForegroundColor DarkGray
 }
 
 function Write-AppliesWhen {
+    <#
+    .SYNOPSIS
+      Tell the user whether a menu action is live now or needs main menu Apply.
+    .DESCRIPTION
+      WHAT: Prints standardized "Takes effect" lines for Now / MainMenu8 /
+            PreferenceOrApply modes, plus optional Extra gray note.
+      WHY: DNS and section toggles confused users when preference alone did not
+            change Windows; this cue is intentional product UX.
+      RETURN: None.
+    #>
     param(
         [Parameter(Mandatory)]
         [ValidateSet("Now", "MainMenu8", "PreferenceOrApply")]
@@ -369,6 +542,13 @@ function Write-AppliesWhen {
 }
 
 function Write-UxBullets {
+    <#
+    .SYNOPSIS
+      Print a simple indented bullet list.
+    .DESCRIPTION
+      WHAT: Skips blank items. Bullet character defaults to "-".
+      RETURN: None.
+    #>
     param(
         [string[]]$Items,
         [ConsoleColor]$ForegroundColor = [ConsoleColor]::White,
@@ -380,7 +560,19 @@ function Write-UxBullets {
     }
 }
 
+# -----------------------------------------------------------------------------
+# Validated interactive input
+# -----------------------------------------------------------------------------
+
 function Read-YesNo([string]$Prompt) {
+    <#
+    .SYNOPSIS
+      Read Y/N only; after too many bad inputs default to N.
+    .DESCRIPTION
+      WHAT: Loop until Y/y or N/n; max 12 tries then returns "N".
+      WHY: Prevents stuck menus on garbage input; fail-safe is cancel (N).
+      RETURN: "Y" or "N" (uppercase strings).
+    #>
     $tries = 0
     while ($true) {
         $tries++
@@ -402,6 +594,14 @@ function Read-YesNo([string]$Prompt) {
 }
 
 function Read-ConfirmYes([string]$Prompt = "  Type YES to proceed") {
+    <#
+    .SYNOPSIS
+      Require exact YES (all caps) for destructive confirms; NO or N cancels.
+    .DESCRIPTION
+      WHAT: After 12 invalid tries returns $false (cancel).
+      WHY: Apply / BloatApps / Undo paths need intentional confirmation.
+      RETURN: $true only for YES; $false for NO/N or give-up.
+    #>
     $tries = 0
     while ($true) {
         $tries++
@@ -423,6 +623,15 @@ function Read-ConfirmYes([string]$Prompt = "  Type YES to proceed") {
 }
 
 function Read-MenuChoice {
+    <#
+    .SYNOPSIS
+      Read a menu selection constrained to an explicit Valid set.
+    .DESCRIPTION
+      WHAT: Trims input, rejects empty/long/control chars, case-insensitive match
+            against Valid. After 20 failures returns "0" if present else Valid[0].
+      WHY: Stops garbage keys from falling through into unintended branches.
+      RETURN: Matched string from Valid (original casing of the Valid entry).
+    #>
     param([string]$Prompt = "  Select", [string[]]$Valid)
     if (-not $Valid -or @($Valid).Count -eq 0) {
         Write-Host "  Internal error: no valid choices configured." -ForegroundColor Red
@@ -471,6 +680,15 @@ function Read-MenuChoice {
 }
 
 function Open-UrlSafe([string]$Url) {
+    <#
+    .SYNOPSIS
+      Open a URL in the default browser/handler, with a manual fallback line.
+    .DESCRIPTION
+      WHAT: Start-Process on the URL string; on failure print the URL in cyan.
+      WHY: Help links and manual install pages without crashing the menu loop.
+      SECURITY: Callers must pass fixed product URLs only (not user-controlled).
+      RETURN: None.
+    #>
     if ([string]::IsNullOrWhiteSpace($Url)) {
         Write-Host "  No URL to open." -ForegroundColor Yellow
         return

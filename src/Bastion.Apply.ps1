@@ -1,8 +1,37 @@
 # Bastion.Apply.ps1 - modular domain (v15.9.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.
+#
+# Role in modular architecture:
+#   Orchestration for Dry Run (preview), Security Audit (live posture), Apply (make
+#   changes real), Quick Harden (safe preset then Apply), and System Restore Point
+#   create/check flows. Calls helpers in Services, Dns, Harden, Programs, Browsers.
+#
+# Load-order position: 9 of 11 (after Harden, before Recovery).
+#   Order: Init, Core, Config, Programs, Services, Browsers, Dns, Harden, Apply, Recovery, Menus.
+#
+# Dependencies on $script: state (non-exhaustive):
+#   $script:Sections / QuickSections / Config.ScriptVersion
+#   $script:FirewallGroups / HighRiskServiceList / XboxServiceList / BastionScheduledTaskPaths
+#   $script:DnsProviderId / DnsProviders / SelectedApps / BrowserPolicyModes / BrowserEchLocks
+#   $script:SuggestionRegistry / SkipSpoolerThisApply
+#   $script:Stats / ApplyFailures / dryWould / dryAlready / drySkip (counters)
+#   Undo via Save-UndoData after Apply (disabled services, firewall groups, DNS snapshot, RDP prior)
 
 function Convert-RestorePointTime {
+    <#
+      Purpose:
+        Normalize System Restore CreationTime (WMI string or DateTime) to [datetime] or $null.
+
+      When called:
+        Get-RestorePointStatus when enriching Get-ComputerRestorePoint results.
+
+      Side effects:
+        None (parse only).
+
+      Undo implications:
+        None.
+    #>
     param($CreationTime)
     if ($null -eq $CreationTime) { return $null }
     if ($CreationTime -is [datetime]) { return $CreationTime }
@@ -15,6 +44,19 @@ function Convert-RestorePointTime {
 }
 
 function Get-RestorePointStatus {
+    <#
+      Purpose:
+        Query System Restore points and flag recent (48h) or Bastion-named coverage.
+
+      When called:
+        Restore point menu, Confirm-RestorePointBeforeApply, Security Audit tooling row.
+
+      Side effects:
+        Get-ComputerRestorePoint (read). Does not create points.
+
+      Undo implications:
+        None. Absence of points is a safety warning, not a Bastion failure.
+    #>
     $status = [ordered]@{
         Ok = $false
         HasAny = $false
@@ -52,6 +94,19 @@ function Get-RestorePointStatus {
 }
 
 function Show-RestorePointMenu {
+    <#
+      Purpose:
+        Interactive menu to view restore point status and create a named point.
+
+      When called:
+        Main menu restore point option (e.g. 13 / R). Immediate create on choice 1.
+
+      Side effects:
+        Console UI; New-BastionRestorePoint may create a real restore point.
+
+      Undo implications:
+        Creating a point is the safety net for later Apply; Bastion does not delete points.
+    #>
     while ($true) {
         Clear-BastionScreen
         Write-Header "SYSTEM RESTORE POINT"
@@ -98,6 +153,20 @@ function Show-RestorePointMenu {
 }
 
 function Confirm-RestorePointBeforeApply {
+    <#
+      Purpose:
+        Gate Apply / Quick Harden / DNS Apply: require recent restore coverage or explicit YES.
+
+      When called:
+        Invoke-ApplyHardening (unless SkipRestorePrompt), Invoke-QuickHardening,
+        Invoke-BastionDnsSectionApply.
+
+      Side effects:
+        May call New-BastionRestorePoint; interactive prompts only otherwise.
+
+      Undo implications:
+        Does not change hardening state. Returning $false cancels the parent action.
+    #>
     param([string]$ActionLabel = "Apply")
     Write-Host ""
     Write-Host "  ================================================================" -ForegroundColor DarkRed
@@ -164,6 +233,20 @@ function Confirm-RestorePointBeforeApply {
 }
 
 function New-BastionRestorePoint {
+    <#
+      Purpose:
+        Create a Checkpoint-Computer restore point with suggested or custom name.
+
+      When called:
+        Restore menu and pre-Apply confirmation flows.
+
+      Side effects / Windows objects touched:
+        System Restore: Checkpoint-Computer -RestorePointType MODIFY_SETTINGS.
+        Requires System Protection enabled on OS drive.
+
+      Undo implications:
+        New point is the rollback vehicle via Windows System Restore UI, not Bastion undo JSON.
+    #>
     param([string]$SuggestedName = "")
     if ([string]::IsNullOrWhiteSpace($SuggestedName)) {
         $SuggestedName = ("Bastion v{0} - {1}" -f $script:Config.ScriptVersion, (Get-Date -Format "yyyy-MM-dd HH:mm"))
@@ -193,6 +276,27 @@ function New-BastionRestorePoint {
 }
 
 function Invoke-DryRun {
+    <#
+      Purpose:
+        Preview what Apply would change for currently enabled sections; never mutates Windows.
+
+      When called:
+        Main menu Dry Run (option 1). Read-only queries + console report.
+
+      Side effects:
+        Sets $script:dryWould / dryAlready / drySkip counters for summary only.
+        Nested Show-DryItem is local to this function.
+
+      Undo implications:
+        None (no changes). User must run Apply (8) or Quick Harden (7) to execute.
+
+      Honesty:
+        - ExploitProtection path reports StrictHandle and WoW exception counts; prints guidance
+        - DNS notes VPN may override; snapshots only happen on real Apply
+        - BloatApps / OneDrive hard-to-reverse called out in verdict text
+        - Programs lists winget catalog installs only
+        - Soft suggestion keys do not force "Would change"
+    #>
     Clear-BastionScreen
     Write-Header "DRY RUN (NO CHANGES)"
     Write-Host "  Preview only - nothing is changed on Windows." -ForegroundColor Cyan
@@ -515,6 +619,19 @@ function Invoke-DryRun {
 }
 
 function Show-ExploitProtectionGameNotice {
+    <#
+      Purpose:
+        Surface StrictHandle / games honesty before Apply (wrapper over shared guidance).
+
+      When called:
+        Show-ApplyPreview when ExploitProtection section is enabled.
+
+      Side effects:
+        Console only (Inline or Notice style).
+
+      Honesty (StrictHandle):
+        Pre-Apply notice so users are not surprised by game breakage. WoW is example only.
+    #>
     # Pre-Apply honesty: shared guidance (WoW is an example; others may break until reported).
     param([switch]$Compact)
     if ($Compact) {
@@ -525,6 +642,19 @@ function Show-ExploitProtectionGameNotice {
 }
 
 function Show-ApplyPreview {
+    <#
+      Purpose:
+        List enabled sections with short risk/intent annotations before YES confirm.
+
+      When called:
+        Start of Invoke-ApplyHardening (after sections non-empty check).
+
+      Side effects:
+        Console only; may call Show-ExploitProtectionGameNotice.
+
+      Undo implications:
+        None (preview).
+    #>
     Write-Host ""
     Write-Host "  Enabled sections:" -ForegroundColor Cyan
     foreach ($k in $script:Sections.Keys) {
@@ -557,6 +687,16 @@ function Show-ApplyPreview {
 }
 
 function Write-AuditRow {
+    <#
+      Purpose:
+        Format one Security Audit line (Name, Status, optional Detail/Hint, color by Level).
+
+      When called:
+        Invoke-SelfTest via nested Add-Good/Warn/Bad helpers.
+
+      Side effects:
+        Console only.
+    #>
     param(
         [string]$Name,
         [string]$Status,
@@ -571,11 +711,39 @@ function Write-AuditRow {
 }
 
 function Write-AuditCategory([string]$Title) {
+    <#
+      Purpose:
+        Print an Audit section header separator.
+
+      When called:
+        Invoke-SelfTest between category blocks.
+    #>
     Write-Host ""
     Write-Host ("  -- {0} --" -f $Title) -ForegroundColor Cyan
 }
 
 function Invoke-SelfTest {
+    <#
+      Purpose:
+        Live, read-only security posture audit independent of section toggles; score Good/Warn/Bad.
+
+      When called:
+        Main menu Audit; optional post-Apply offer. Never changes Windows.
+
+      Side effects:
+        Queries firewall, services, Defender, DNS adapters, ports, browsers, restore points, winget.
+        Counters $script:_ag / _aw / _ab for score only.
+
+      Undo implications:
+        None.
+
+      Honesty:
+        - Good does not mean "Bastion applied it" (could be default or other tool)
+        - DNS leave-unchanged is Good by user choice, not hardened DNS
+        - StrictHandle/DEP sample is partial; full games notice lives under ExploitProtection Apply
+        - ECH never treated as default; Warn when Strict/ECH live or intended
+        - winget preflight is tooling readiness, not an install action
+    #>
     Clear-BastionScreen
     Write-Header "SECURITY AUDIT"
     Write-Host "  Live posture check (read-only). Independent of section toggles." -ForegroundColor DarkGray
@@ -837,6 +1005,22 @@ function Invoke-SelfTest {
 }
 
 function Invoke-QuickHardening {
+    <#
+      Purpose:
+        Guided preset: enable QuickSections, optional DNS + Spooler keep, then Apply with confirms.
+
+      When called:
+        Main menu Quick Harden (option 7). Ends in Invoke-ApplyHardening -SkipRestorePrompt
+        only after restore-point and YES gates in this function.
+
+      Side effects:
+        Mutates $script:Sections, DnsProviderId, SkipSpoolerThisApply; Save-BastionConfig;
+        then full Apply side effects. Finally block clears SkipSpoolerThisApply.
+
+      Undo implications:
+        Same as Apply (Bastion-LastApply undo + System Restore). Spooler skip means Spooler
+        may remain enabled even when HighRiskServices runs.
+    #>
     Clear-BastionScreen
     Write-Header "QUICK HARDEN"
     Write-AppliesWhen -Mode Now -Extra "This guided path sets a safe preset and then runs Apply in this flow (you will still confirm YES)."
@@ -913,6 +1097,37 @@ function Invoke-QuickHardening {
 }
 
 function Invoke-ApplyHardening {
+    <#
+      Purpose:
+        Execute enabled sections for real: firewall, services, SMBv1, OneDrive, Xbox, LSA,
+        tasks, DO, DNS+DoH, RdpHostLock, Defender/CFA, PS auditing, ExploitProtection
+        (including system StrictHandle + exceptions), browser policies, bloat Appx,
+        suggestions, Copilot/M365, catalog Programs. Write undo + config; optional audit.
+
+      When called:
+        Main menu Apply (8); Quick Harden after YES; not Dry Run.
+
+      Side effects / Windows objects touched (by enabled section):
+        - Firewall profiles and inbound groups; high-risk/Xbox services
+        - Optional Windows features (SMB1); OneDriveSetup uninstall
+        - Registry: LSA RunAsPPL, DO, PS ScriptBlockLogging, Terminal Server, suggestions
+        - Scheduled tasks disabled; Defender NP/CFA; Process mitigations system + per-EXE
+        - DNS client addresses + DoH (DohFlags=17 path); Appx/provisioned removals
+        - Browser policy files; winget installs; Bastion undo + config files
+
+      Undo implications:
+        Save-UndoData records DisabledServices, FirewallGroups, DnsSnapshot (DPAPI),
+        RdpHostPrior, ProgramsInstalledList, browser modes, sections run.
+        Recovery hubs reverse many items; BloatApps/OneDrive/LSA are harder or reboot-bound.
+        System Restore point (if created) is the broadest OS rollback.
+
+      Honesty:
+        - StrictHandle ON system-wide with known EXE exceptions only; other apps may break
+        - DoH Flags 17 = Settings Encrypted compatibility; VPN may override DNS
+        - Programs: catalog-only winget; never --ignore-security-hash
+        - ECH only when saved Yes under Strict (never assumed from Strict alone)
+        - BloatApps hard to reverse; Copilot section does not remove Office Click-to-Run suite
+    #>
     param([switch]$SkipRestorePrompt)
 
     $script:Stats = @{
@@ -974,6 +1189,8 @@ function Invoke-ApplyHardening {
     Write-Header "APPLYING"
     Write-Log "Apply start"
 
+    # --- Firewall: profiles Inbound=Block; disable discovery/RDP/WinRM/mDNS inbound groups ---
+    # Undo: FirewallGroups list for Recovery Network re-open. Does not change OS RDP host alone.
     if ($script:Sections["Firewall"]) {
         Write-Host "  [Firewall]" -ForegroundColor Cyan
         try {
@@ -1101,6 +1318,9 @@ function Invoke-ApplyHardening {
         }
     }
 
+    # --- DNS: eligible adapters only; snapshot prior servers/DoH (DPAPI on save); set IPs + DoH ---
+    # Honesty: DohFlags=17 path in Bastion.Dns; Settings Encrypted = wire DoH, not Bastion DPAPI.
+    # VPN may still override while connected. Undo: Restore-BastionDnsFromSnapshot.
     if ($script:Sections["DNS"] -and $script:DnsProviderId -ne "None") {
         $prov = Get-BastionDnsProvider
         Write-Host ("  [DNS] {0}" -f $prov.DisplayName) -ForegroundColor Cyan
@@ -1210,6 +1430,10 @@ function Invoke-ApplyHardening {
         }
     }
 
+    # --- ExploitProtection: mild system mitigations + system StrictHandle ON ---
+    # Honesty (StrictHandle): per-app OFF only for discovered/config exception EXEs (issue #18).
+    # Other software may break until Recovery > 6 or a shipped exception. Reboot may be needed
+    # for some mitigation changes to fully take effect depending on Windows build.
     if ($script:Sections["ExploitProtection"]) {
         Write-Host "  [ExploitProtection]" -ForegroundColor Cyan
         Write-Host "    StrictHandle ON system-wide. Known exception EXEs (e.g. discovered Wow*.exe) get per-app OFF." -ForegroundColor DarkGray
@@ -1325,6 +1549,9 @@ function Invoke-ApplyHardening {
         }
     }
 
+    # --- Programs: catalog-only winget installs (Install-BastionCatalogApp gates) ---
+    # Honesty: trusted source preflight + exact WingetId; never --ignore-security-hash.
+    # Undo list is informational; uninstall via Programs menu, not full automatic reverse.
     if ($script:Sections["Programs"]) {
         Write-Host "  [Programs]" -ForegroundColor Cyan
         Sync-ProgramInstallQueue
