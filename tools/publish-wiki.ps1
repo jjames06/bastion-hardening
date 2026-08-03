@@ -45,9 +45,9 @@ Open https://github.com/jjames06/bastion-hardening/wiki and click Create the fir
 
 # Keep this list in sync with docs/wiki sources you want on the public wiki.
 $pages = @(
-    "Home.md", "Quick-start.md", "Recovery-cookbook.md",
-    "Games-and-StrictHandle.md", "FAQ.md", "Modular-source.md",
-    "_Sidebar.md", "_Footer.md"
+    "Home.md", "Quick-start.md", "Hardening-workflow.md",
+    "Recovery-cookbook.md", "Games-and-StrictHandle.md", "FAQ.md",
+    "Modular-source.md", "_Sidebar.md", "_Footer.md"
 )
 foreach ($p in $pages) {
     Copy-Item (Join-Path $root "docs\wiki\$p") (Join-Path $wikiDir $p) -Force

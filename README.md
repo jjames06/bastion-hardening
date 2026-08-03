@@ -21,7 +21,8 @@ Version **15.9.7**
 | Document | Topic |
 |----------|--------|
 | [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In studio); Bastion product pages and download |
-| [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** - Quick start, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
+| [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** - Quick start, Hardening workflow, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
+| [docs/wiki/Hardening-workflow.md](docs/wiki/Hardening-workflow.md) | Handbook: ordered first Apply checklist, section defaults, verify, recovery links |
 | [GitHub Wiki](https://github.com/jjames06/bastion-hardening/wiki) | Same handbook on the Wiki tab (synced from `docs/wiki/`) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modular `src\` layout, why it replaced the monolith, load order, MANIFEST, threat model |
 | [docs/wiki/Modular-source.md](docs/wiki/Modular-source.md) | Handbook: modular vs single-script packaging (review-friendly overview) |

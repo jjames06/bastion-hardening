@@ -1,6 +1,6 @@
 # Recovery cookbook
 
-Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know what broke, use the matching hub instead of a full **Undo**.
+Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know what broke, use the matching hub instead of a full **Undo**. For the recommended pre-Apply path (right build, restore point, Dry Run, section defaults), see [Hardening workflow](Hardening-workflow).
 
 ## Hub map
 
