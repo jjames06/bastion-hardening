@@ -86,7 +86,7 @@ Read these before you run anything:
 - **Requires Administrator privileges**
 - Makes real system changes (services, firewall, registry, AppX packages, DNS, Defender, and more)
 - **Create a System Restore Point** before Apply or Quick Harden
-- **ExploitProtection** enables system **StrictHandle**. That can break some programs. **World of Warcraft** is a documented *example* that broke (Bastion now auto-excepts discovered `Wow*.exe`). **CS2** tested OK. **Other titles may still break** until someone reports them and we ship an exception. Reverse properly: Recovery -> **6** -> StrictHandle -> disable system StrictHandle -> **reboot** -> confirm -> **report** game + full `.exe` path on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) or [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23). Details: [Known issues](#known-issues)
+- **ExploitProtection** enables system **StrictHandle**. That can break some programs. **World of Warcraft** retail and **Classic Era** are documented *examples* that broke (Eidolon / `INVALID_HANDLE` in `Wow_loader.dll` or `WowClassic_loader.dll`; Bastion now auto-excepts discovered `Wow*.exe`). **CS2** tested OK. **Other titles may still break** until someone reports them and we ship an exception. Installing Classic after Apply needs Recovery -> **6** -> refresh. Reverse properly: Recovery -> **6** -> StrictHandle -> disable system StrictHandle -> **reboot** -> confirm -> **report** game + full `.exe` path on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) or [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23). Details: [Known issues](#known-issues)
 - Disabling Xbox services / removing **Xbox Gaming Overlay** without silencing **Game DVR** can make games show *Get an app to open this ms-gamingoverlay link* - Bastion now silences Game DVR when XboxGaming or overlay removal runs (Recovery -> **5** -> Game Bar)
 - **Firewall Apply** disables remote and LAN discovery inbound groups. Re-open only if needed: Recovery -> **3 Network** (remote access, LAN/discovery, DNS reset or restore prior snapshot). Opening those paths increases attack surface.
 - **RdpHostLock** (optional section, **off by default**) denies this PC as an RDP host (system policy + TermService). Firewall already locks the Remote Desktop **group** by default; the host lock is separate and reversible via Recovery or Undo.
@@ -447,12 +447,12 @@ Tracked on GitHub. Full write-up: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
 
 **Why software can break:** StrictHandle makes certain invalid or short-lived handle uses **fatal**. Some loaders and multi-process games do that during early startup and are fine under default Windows policy. With system StrictHandle **ON** and **no per-app exception**, the process can exit immediately.
 
-**Example (not the only case): World of Warcraft.** Battle.net worked; **Play** / `Wow.exe` failed with **Eidolon** and Crash.txt **`INVALID_HANDLE`** in **`Wow_loader.dll`**. That is a **mitigation compatibility** issue - not a claim about Blizzard product intent. Bastion now **auto-excepts** discovered `Wow*.exe`. **CS2** was tested OK. **Any other title may still break** until it has an exception in Bastion.
+**Example (not the only case): World of Warcraft.** Battle.net worked; **Play** / `Wow.exe` or Classic Era `WowClassic.exe` failed with **Eidolon** (`BlizzardError.exe` crash reporter) and Crash.txt **`INVALID_HANDLE`** in **`Wow_loader.dll`** or **`WowClassic_loader.dll`**. That is a **mitigation compatibility** issue - not a claim about Blizzard product intent. Bastion now **auto-excepts** discovered `Wow*.exe`. **CS2** was tested OK. **Any other title may still break** until it has an exception in Bastion. Installing Classic after Apply does not inherit the retail exception - refresh.
 
 **What Bastion does**
 
 - **StrictHandle ON** for the system (security).
-- **StrictHandle OFF** only for **known exception EXEs** (today: discovered `Wow*.exe`, plus any full paths you list in `StrictHandleExceptionPaths`).
+- **StrictHandle OFF** only for **known exception EXEs** (today: discovered `Wow*.exe` including `Wow.exe` and `WowClassic.exe`, plus any full paths you list in `StrictHandleExceptionPaths`).
 - Everything else stays under system StrictHandle.
 
 **If a program breaks after Apply**
@@ -490,7 +490,7 @@ Dry Run, Apply, and Recovery use the same guidance. Full detail: [docs/KNOWN-ISS
 ## Feedback and contributions
 
 - **Testing feedback / "I ran this on ...":** [GitHub Discussions](https://github.com/jjames06/bastion-hardening/discussions) (see the **Testing feedback** thread)
-- **Program/game broken after StrictHandle?** First reverse via Recovery -> **6** -> StrictHandle (disable system StrictHandle + reboot). Then comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) or [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23) with **game name + full `.exe` path** so we can add an exception. WoW is only one known example; others may need the same treatment.
+- **Program/game broken after StrictHandle?** First reverse via Recovery -> **6** -> StrictHandle (disable system StrictHandle + reboot). Then comment on [issue #18](https://github.com/jjames06/bastion-hardening/issues/18) or [Discussions #23](https://github.com/jjames06/bastion-hardening/discussions/23) with **game name + full `.exe` path** so we can add an exception. WoW retail and Classic Era are documented examples (auto-excepted when found; refresh after installing Classic); others may need the same treatment.
 - **Bugs and feature requests:** open a [GitHub Issue](https://github.com/jjames06/bastion-hardening/issues)
 - **Pull requests:** welcome for clear fixes and documentation improvements
 - Maintained on a best-effort basis

@@ -125,7 +125,7 @@ If you are on **v15.8.1-15.8.3** (or any build before Settings-matching DoH) and
 
 ## My game broke after Apply. Is Bastion broken?
 
-Not necessarily. **StrictHandle** can break some programs that do not yet have an exception. **World of Warcraft** is a documented example (now auto-excepted). **Other titles may still break.**  
+Not necessarily. **StrictHandle** can break some programs that do not yet have an exception. **World of Warcraft** retail and **Classic Era** are documented examples (now auto-excepted when `Wow.exe` / `WowClassic.exe` are found). Installing Classic after Apply needs Recovery → **6** → StrictHandle → refresh. **Other titles may still break.**  
 Follow [Games and StrictHandle](Games-and-StrictHandle): reverse → reboot → report full `.exe` path → wait for a shipped exception.
 
 ## Printing stopped
