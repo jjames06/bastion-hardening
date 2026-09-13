@@ -1201,7 +1201,7 @@ function Show-StrictHandleRecoveryMenu {
         Write-BastionStrictHandleGuidance -Style Block
         Write-Host ""
         Write-Host "  1  Disable system StrictHandle (whole PC; reboot recommended)" -ForegroundColor Yellow
-        Write-Host "  2  Refresh known exception EXEs only (Wow*.exe + config paths; system stays ON)" -ForegroundColor Cyan
+        Write-Host "  2  Refresh known exception EXEs only (Wow.exe / WowClassic.exe + config; system stays ON)" -ForegroundColor Cyan
         Write-Host "  3  Re-enable system StrictHandle + refresh exceptions (after you can run your apps)" -ForegroundColor Green
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
@@ -1224,7 +1224,7 @@ function Show-StrictHandleRecoveryMenu {
             }
             "2" {
                 Write-Host ""
-                Write-Host "  Discovers known exception EXEs (Wow*.exe + StrictHandleExceptionPaths) and sets StrictHandle OFF for those only." -ForegroundColor White
+                Write-Host "  Discovers known exception EXEs (Wow.exe, WowClassic.exe, other Wow*.exe + StrictHandleExceptionPaths) and sets StrictHandle OFF for those only." -ForegroundColor White
                 Write-Host "  Does not create exceptions for other games until you add paths or we ship them after a report." -ForegroundColor DarkGray
                 [void](Set-BastionStrictHandleExceptions)
                 Wait-ForKey "Press any key to return to StrictHandle recovery..."

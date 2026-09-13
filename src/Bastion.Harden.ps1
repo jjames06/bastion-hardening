@@ -20,9 +20,11 @@
 #   $script:tempDir                        - reg.exe fallback I/O
 #
 # Honesty (StrictHandle):
-#   System-wide StrictHandle hardens most processes. Some loaders (documented: WoW) break
-#   until a per-app exception. Bastion auto-excepts discovered Wow*.exe; other titles may
-#   still break until reported. Recovery > 6 is the supported reverse path. See issue #18.
+#   System-wide StrictHandle hardens most processes. Some loaders (documented: WoW retail
+#   and Classic Era) break until a per-app exception. Bastion auto-excepts discovered
+#   Wow*.exe (Wow.exe, WowClassic.exe, ...) plus any EXE sitting next to *_loader.dll.
+#   Other titles may still break until reported. Recovery > 6 is the supported reverse
+#   path. Installing Classic after Apply requires refresh. See issue #18.
 
 function Test-BastionGameDvrSilenced {
     <#
@@ -407,6 +409,7 @@ function Test-BastionLooksLikeWowRoot {
         if (Test-Path -LiteralPath (Join-Path $Dir $m)) { return $true }
     }
     if (Test-Path -LiteralPath (Join-Path $Dir "Wow.exe")) { return $true }
+    if (Test-Path -LiteralPath (Join-Path $Dir "WowClassic.exe")) { return $true }
     # .battle.net beside product dirs is a Blizzard game install marker when under a Warcraft-named folder
     $leaf = Split-Path -Leaf $Dir
     if ($leaf -match 'Warcraft|WoW' -and (Test-Path -LiteralPath (Join-Path $Dir ".battle.net"))) { return $true }
@@ -667,7 +670,8 @@ function Get-BastionStrictHandleExceptionPaths {
     <#
       Purpose:
         Collect full paths of EXEs that should get StrictHandle OFF: config list + Wow*.exe
-        under known product subfolders of discovered WoW roots.
+        under known product subfolders of discovered WoW roots, plus any EXE that sits next
+        to a *_loader.dll (retail Wow_loader.dll, Classic Era WowClassic_loader.dll).
 
       When called:
         Dry Run ExploitProtection; Apply Set-BastionStrictHandleExceptions; Recovery status;
@@ -677,13 +681,16 @@ function Get-BastionStrictHandleExceptionPaths {
         Filesystem scans limited to product dirs (not full Data\) for Apply performance.
 
       Honesty (StrictHandle):
-        Exception on the EXE covers loader DLL crashes (Wow_loader.dll under issue #18).
+        Exception on the EXE covers loader DLL crashes (issue #18: Eidolon / INVALID_HANDLE
+        in Wow_loader.dll or WowClassic_loader.dll). Eidolon is BlizzardError.exe - the crash
+        reporter window, not the process that needs the exception.
         Undiscovered games are NOT excepted. Full path required (bare names collide).
-        Empty list is normal when WoW is not installed.
+        Empty list is normal when WoW is not installed. Installing Classic after Apply does
+        not inherit the retail Wow.exe exception - refresh / re-Apply.
     #>
     # Per-app StrictHandle OFF targets. System keeps StrictHandle ON for everything else.
-    # Wow_loader.dll is loaded by Wow*.exe - exception on the EXE covers the loader crash (issue #18).
-    # Only scan known product subfolders (not Data\) so Apply stays fast on large installs.
+    # Loader DLLs (Wow_loader.dll, WowClassic_loader.dll) are loaded by the sibling EXE;
+    # the exception must be on that EXE. Only scan known product subfolders (not Data\).
     $paths = [System.Collections.Generic.List[string]]::new()
     function Add-Exe([string]$e) {
         $n = ConvertTo-BastionNormalizedPath -Raw $e
@@ -691,6 +698,20 @@ function Get-BastionStrictHandleExceptionPaths {
         if (-not (Test-Path -LiteralPath $n -PathType Leaf)) { return }
         if ($n -notmatch '\.exe$') { return }
         if (-not $paths.Contains($n)) { [void]$paths.Add($n) }
+    }
+    function Add-WowDirExes([string]$dir) {
+        if (-not (Test-Path -LiteralPath $dir -PathType Container)) { return }
+        Get-ChildItem -LiteralPath $dir -Filter "Wow*.exe" -File -ErrorAction SilentlyContinue |
+            ForEach-Object { Add-Exe $_.FullName }
+        # Eidolon / INVALID_HANDLE is raised from *_loader.dll; except the sibling EXE
+        # (Wow.exe next to Wow_loader.dll, WowClassic.exe next to WowClassic_loader.dll).
+        Get-ChildItem -LiteralPath $dir -Filter "*_loader.dll" -File -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                $stem = $_.BaseName
+                if ($stem -match '^(.*)_loader$') {
+                    Add-Exe (Join-Path $dir ($Matches[1] + ".exe"))
+                }
+            }
     }
 
     # Explicit full EXE paths from config (any game or custom Wow path)
@@ -700,6 +721,7 @@ function Get-BastionStrictHandleExceptionPaths {
 
     $productDirs = @(
         "_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_",
+        "_classic_era_ptr_", "_classic_era_beta_",
         "_ptr_", "_beta_", "_xptr_", "UTILS", "Utils"
     )
     foreach ($root in @(Get-BastionWowInstallRoots)) {
@@ -707,16 +729,11 @@ function Get-BastionStrictHandleExceptionPaths {
             foreach ($rel in $productDirs) {
                 $dir = Join-Path $root $rel
                 if (-not (Test-Path -LiteralPath $dir)) { continue }
-                Get-ChildItem -LiteralPath $dir -Filter "Wow*.exe" -File -ErrorAction SilentlyContinue |
-                    ForEach-Object { Add-Exe $_.FullName }
+                Add-WowDirExes $dir
                 Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue |
-                    ForEach-Object {
-                        Get-ChildItem -LiteralPath $_.FullName -Filter "Wow*.exe" -File -ErrorAction SilentlyContinue |
-                            ForEach-Object { Add-Exe $_.FullName }
-                    }
+                    ForEach-Object { Add-WowDirExes $_.FullName }
             }
-            Get-ChildItem -LiteralPath $root -Filter "Wow*.exe" -File -ErrorAction SilentlyContinue |
-                ForEach-Object { Add-Exe $_.FullName }
+            Add-WowDirExes $root
         } catch {}
     }
     return @($paths)
@@ -785,7 +802,7 @@ function Write-BastionStrictHandleGuidance {
         [ConsoleColor]$Color = [ConsoleColor]::DarkYellow
     )
     if ($Style -eq "Inline") {
-        Write-Host "      Example: World of Warcraft broke under system StrictHandle; Bastion auto-excepts discovered Wow*.exe now. CS2 tested OK." -ForegroundColor $Color
+        Write-Host "      Example: WoW retail and Classic Era broke under system StrictHandle; Bastion auto-excepts discovered Wow*.exe (Wow.exe, WowClassic.exe) now. CS2 tested OK." -ForegroundColor $Color
         Write-Host "      Other programs may break until we ship an exception for them. That is expected and not a silent failure." -ForegroundColor $Color
         Write-Host "      If something breaks: Recovery > 6 > StrictHandle > disable system StrictHandle, reboot, confirm it works." -ForegroundColor $Color
         Write-Host "      Then report game name + full .exe path on GitHub #18 or Discussions #23 so we can add an exception." -ForegroundColor $Color
@@ -798,13 +815,14 @@ function Write-BastionStrictHandleGuidance {
         Write-Host "  What: system-wide StrictHandle (stricter process handle checks)." -ForegroundColor White
         Write-Host "  Why it can break software: some loaders and multi-process games use handles in ways that" -ForegroundColor DarkGray
         Write-Host "  are fine under default Windows policy but fatal under StrictHandle." -ForegroundColor DarkGray
-        Write-Host "  Example (not the only case): World of Warcraft - Play/Wow.exe failed (Eidolon / INVALID_HANDLE" -ForegroundColor DarkGray
-        Write-Host "  in Wow_loader.dll) until a per-app exception. Bastion now auto-excepts discovered Wow*.exe." -ForegroundColor DarkGray
+        Write-Host "  Example (not the only case): WoW retail Play/Wow.exe and Classic Era WowClassic.exe failed" -ForegroundColor DarkGray
+        Write-Host "  (Eidolon crash reporter / INVALID_HANDLE in Wow_loader.dll or WowClassic_loader.dll) until" -ForegroundColor DarkGray
+        Write-Host "  a per-app exception. Bastion auto-excepts discovered Wow*.exe. Install Classic after Apply? Refresh." -ForegroundColor DarkGray
         Write-Host "  CS2 was tested OK. Other titles: unknown. No exception means it may still break." -ForegroundColor DarkGray
         $wowEx = @()
         try { $wowEx = @(Get-BastionStrictHandleExceptionPaths) } catch { $wowEx = @() }
         if ($wowEx.Count -gt 0) {
-            Write-Host ("  This PC: {0} exception path(s) will be applied/refreshed (mostly Wow*.exe / config)." -f $wowEx.Count) -ForegroundColor Green
+            Write-Host ("  This PC: {0} exception path(s) will be applied/refreshed (Wow.exe / WowClassic.exe / config)." -f $wowEx.Count) -ForegroundColor Green
         } else {
             Write-Host "  This PC: no exception EXE paths found yet (OK if WoW is not installed)." -ForegroundColor DarkGray
         }
@@ -825,7 +843,7 @@ function Write-BastionStrictHandleGuidance {
     # Block (default): recovery-menu honesty block
     Write-Host "  Honest notes" -ForegroundColor Yellow
     Write-Host "    System StrictHandle hardens most apps. Some programs (especially games) can fail to start." -ForegroundColor DarkGray
-    Write-Host "    World of Warcraft is a documented example (now auto-excepted when Wow*.exe is found)." -ForegroundColor DarkGray
+    Write-Host "    WoW retail and Classic Era are documented examples (auto-excepted when Wow*.exe is found)." -ForegroundColor DarkGray
     Write-Host "    Other titles may break with NO exception until someone reports them and we add one." -ForegroundColor DarkGray
     Write-Host "    Option 1: turn StrictHandle OFF for the whole PC (security trade-off). Reboot after." -ForegroundColor DarkGray
     Write-Host "    Option 2: refresh known exception EXEs only (keeps system StrictHandle ON)." -ForegroundColor DarkGray

@@ -15,14 +15,14 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 | Program / client | Status (maintainer-tested) |
 |---------------|----------------------------|
-| **World of Warcraft** (`Wow.exe`) | **Documented example** that **was broken** (Eidolon / `INVALID_HANDLE` in `Wow_loader.dll`) without an exception. Bastion now **auto-excepts** discovered `Wow*.exe`. |
+| **World of Warcraft** (`Wow.exe`, Classic Era `WowClassic.exe`) | **Documented example** that **was broken** (Eidolon crash reporter / `INVALID_HANDLE` in `Wow_loader.dll` or `WowClassic_loader.dll`) without an exception. Bastion now **auto-excepts** discovered `Wow*.exe`. Installing Classic after Apply does **not** inherit the retail exception - refresh / re-Apply. |
 | **Counter-Strike 2** | **Tested - not an issue** under the same system StrictHandle profile. |
 | **Other titles** | **Unknown.** No Bastion exception means they **may still break** until reported and we ship one. |
 
 **What Bastion does**
 
 1. Enables system-wide: DEP, SEHOP, BottomUp, HighEntropy, **StrictHandle**.
-2. Turns **StrictHandle OFF only** for **known exception EXEs** (discovered `Wow*.exe` plus any full paths in `StrictHandleExceptionPaths`).
+2. Turns **StrictHandle OFF only** for **known exception EXEs** (discovered `Wow*.exe` including `Wow.exe` and `WowClassic.exe`, plus any EXE next to a `*_loader.dll`, plus any full paths in `StrictHandleExceptionPaths`).
 3. Leaves StrictHandle **ON** for everything else.
 
 **If a program fails after Apply**
@@ -55,7 +55,7 @@ Do **not** assume every crash is StrictHandle, but if the launcher works and onl
 ### Symptoms (without exception)
 
 - Battle.net UI works.  
-- **Play** or direct `Wow.exe` -> Blizzard **Eidolon**.  
+- **Play** or direct `Wow.exe` / Classic Era `WowClassic.exe` -> Blizzard **Eidolon** (that window is `BlizzardError.exe`, the crash reporter - not the process that needs the exception).  
 - Crash.txt:
 
 ```text
@@ -63,18 +63,20 @@ Do **not** assume every crash is StrictHandle, but if the launcher works and onl
 INVALID_HANDLE
 ```
 
-Stack typically includes **`Wow_loader.dll`** and `ntdll.dll` very early.
+Stack typically includes **`Wow_loader.dll`** (retail) or **`WowClassic_loader.dll`** (Classic Era) and `ntdll.dll` very early.
 
 ### Cause (what we know)
 
-System-wide **StrictHandle** from ExploitProtection, without a per-app exception for `Wow.exe`. Disabling StrictHandle for that EXE (or system-wide) restored launch. That is the verified causal chain.
+System-wide **StrictHandle** from ExploitProtection, without a per-app exception for that flavor's EXE. Disabling StrictHandle for `Wow.exe` or `WowClassic.exe` (or system-wide) restored launch. That is the verified causal chain.
+
+Retail and Classic are **separate image paths**. An exception on `_retail_\Wow.exe` does **not** cover `_classic_era_\WowClassic.exe`. If you install Classic after Apply, refresh exceptions (Recovery -> **6** -> StrictHandle -> option **2**) or re-Apply.
 
 ### How we describe it (and what we do *not* claim)
 
 **Accurate technical framing:**
 
 - StrictHandle changes Windows behavior so certain invalid handle uses are fatal.  
-- WoW's **early load path** (`Wow_loader.dll`) triggers that under a system-wide policy.  
+- WoW's **early load path** (`Wow_loader.dll` or Classic Era `WowClassic_loader.dll`) triggers that under a system-wide policy.  
 - Battle.net is a separate, lighter process and was unaffected.  
 - **Plausible, ordinary explanations** (not mutually exclusive, not proven in reverse-engineering detail) include:
   - custom loader behavior  
@@ -99,6 +101,8 @@ System-wide **StrictHandle** from ExploitProtection, without a per-app exception
   "WowInstallRoots": [ "D:\\Games\\World of Warcraft" ],
   "StrictHandleExceptionPaths": [
     "D:\\Games\\World of Warcraft\\_retail_\\Wow.exe",
+    "D:\\Games\\World of Warcraft\\_classic_era_\\WowClassic.exe",
+    "D:\\Games\\World of Warcraft\\_classic_\\WowClassic.exe",
     "E:\\Games\\SomeOtherTitle\\game.exe"
   ]
 }
@@ -106,9 +110,9 @@ System-wide **StrictHandle** from ExploitProtection, without a per-app exception
 
 Re-run Bastion (load config) and **Apply** with ExploitProtection enabled. Paths must exist on disk when loaded.
 
-### If you install WoW after Apply
+### If you install WoW or Classic after Apply
 
-Re-Apply so discovery runs again (metadata + folders).
+Re-Apply, or Recovery -> **6** -> StrictHandle -> **refresh known exception EXEs**, so discovery runs again (metadata + folders). Classic Era is a new `WowClassic.exe` path; it does not reuse the retail `Wow.exe` exception.
 
 ### Emergency (disables StrictHandle for the whole PC)
 
@@ -210,7 +214,7 @@ Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name
 - **Refresh known exception EXEs** only (keeps system ON; helps after installing WoW or adding config paths), or
 - **Re-enable** Bastion-style profile + exceptions after you can run your software again
 
-**Honest scope:** World of Warcraft is a **documented example** with an automatic exception. **Other programs may break** until you report them and we ship an exception. Until then, leave system StrictHandle off or use a manual `StrictHandleExceptionPaths` entry.
+**Honest scope:** World of Warcraft retail and Classic Era are **documented examples** with automatic exceptions (`Wow.exe`, `WowClassic.exe`). **Other programs may break** until you report them and we ship an exception. Until then, leave system StrictHandle off or use a manual `StrictHandleExceptionPaths` entry. Installing Classic after Apply needs option **2** (refresh) even if retail already had an exception.
 
 Also see the [notice above](#before-you-enable-exploitprotection-stricthandle) and GitHub issue #18.
 

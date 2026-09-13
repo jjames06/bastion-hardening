@@ -337,11 +337,11 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Pairs well with process creation auditing if you enable that separately outside Bastion."
     }
     "ExploitProtection" = @{
-        Intent  = "Apply a mild system exploit mitigation profile, including system-wide StrictHandle, with automatic per-app exceptions only for paths Bastion already knows (today: discovered Wow*.exe)."
-        Changes = "Enables DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle system-wide. Then turns StrictHandle OFF only for discovered exception EXEs (currently Wow*.exe discovery plus any StrictHandleExceptionPaths you list in Bastion-Config.json)."
-        Impact  = "Most processes get stricter handle checks. Programs without an exception may fail to start. World of Warcraft is a documented example that broke under system StrictHandle and is now auto-excepted when found. CS2 was tested OK. Other titles are unknown until reported - no exception means they may still break."
+        Intent  = "Apply a mild system exploit mitigation profile, including system-wide StrictHandle, with automatic per-app exceptions only for paths Bastion already knows (today: discovered Wow*.exe including retail Wow.exe and Classic Era WowClassic.exe)."
+        Changes = "Enables DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle system-wide. Then turns StrictHandle OFF only for discovered exception EXEs (currently Wow*.exe / loader-sibling EXEs plus any StrictHandleExceptionPaths you list in Bastion-Config.json)."
+        Impact  = "Most processes get stricter handle checks. Programs without an exception may fail to start. World of Warcraft retail and Classic Era are documented examples that broke under system StrictHandle (Eidolon / INVALID_HANDLE in the loader DLL) and are now auto-excepted when found. CS2 was tested OK. Other titles are unknown until reported - no exception means they may still break. Installing Classic after Apply requires a refresh."
         Revert  = "Recovery > 6 > StrictHandle: (1) disable system StrictHandle and reboot, or (2) add full .exe path under StrictHandleExceptionPaths and refresh exceptions. Report so we can ship an automatic exception. Then re-enable system StrictHandle when ready. System Restore remains bulletproof."
-        Notes   = "WoW is an example, not the only possible break. Prefer Recovery > 6 so status stays accurate. Report game name + full .exe path on GitHub issue #18 or Discussions #23; until we add that exception, keep system StrictHandle off or use a config path exception. See docs/KNOWN-ISSUES.md."
+        Notes   = "WoW retail and Classic Era are examples, not the only possible break. Installing Classic after Apply needs Recovery > 6 > refresh. Prefer Recovery > 6 so status stays accurate. Report game name + full .exe path on GitHub issue #18 or Discussions #23; until we add that exception, keep system StrictHandle off or use a config path exception. See docs/KNOWN-ISSUES.md."
     }
     "LSAProtection" = @{
         Intent  = "Protect the Local Security Authority process (credential material) with RunAsPPL."
