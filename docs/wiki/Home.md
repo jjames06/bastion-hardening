@@ -10,7 +10,7 @@ This wiki is a short **user handbook** for **Bastion v15.9.8** (modular plain-te
 
 1. [Quick start](Quick-start) - install, restore point, Dry Run, Apply  
 2. [Hardening workflow](Hardening-workflow) - full ordered checklist, section defaults, verify, when things break  
-3. [Recovery cookbook](Recovery-cookbook) - fix printing, network, games, Defender side effects  
+3. [Recovery cookbook](Recovery-cookbook) - printing, network, games, Defender if you want a feature back  
 4. [Games and StrictHandle](Games-and-StrictHandle) - what breaks, how to reverse, how to report  
 5. [FAQ](FAQ) - common questions, honest limits  
 6. [Modular source layout](Modular-source) - why Bastion is no longer one giant script, and how to review it  
@@ -36,7 +36,7 @@ This wiki is a short **user handbook** for **Bastion v15.9.8** (modular plain-te
 |----|--------|
 | A guided toolkit for a **single personal** Windows 10/11 PC | Antivirus or a malware guarantee |
 | Dry Run, selective Apply, Recovery hubs, catalog winget installs | Enterprise MDM / domain / Intune tooling |
-| Honest about side effects (print, RDP, games, DNS) | Automatic GPU driver or BIOS flasher |
+| Dry Run, Recovery, and Help when you want a feature back | Automatic GPU driver or BIOS flasher |
 
 ## Documentation map
 
