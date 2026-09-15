@@ -16,7 +16,7 @@
 # Shared conventions
 #   Read-MenuChoice validates keys; Write-Header / Write-AppliesWhen label timing.
 #   Save-BastionConfig persists toggles to Bastion-Config.json under LogDirectory.
-#   Comments use ASCII punctuation only (hyphens, not em dashes).
+#   Comments use ASCII punctuation only.
 # =============================================================================
 
 # -----------------------------------------------------------------------------

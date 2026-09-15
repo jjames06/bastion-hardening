@@ -224,7 +224,7 @@ Also see the [notice above](#before-you-enable-exploitprotection-stricthandle) a
 
 **Recovery:** Main menu **9 > 6 > Defender**: soften NP and/or CFA, or re-harden with CFA allow-path refresh. Allow a trusted app path before turning protections off permanently when you can.
 
-**Honesty about Protection History:** Windows Security **Protection History** often stays **blank** for Controlled Folder Access blocks even when Event ID **1123** is present in `Microsoft-Windows-Windows Defender/Operational`. That is a Windows UI gap, not evidence that CFA is off. Prefer **Virus & threat protection → Ransomware protection → Allow an app through Controlled folder access**. Defender Apply also refreshes ExtraCfaPaths that **exist on this PC** (Edge, PowerShell, optional tools such as `grok.exe` if present). Do not turn CFA off only because History is empty.
+**Honesty about Protection History:** Windows Security **Protection History** often stays **blank** for Controlled Folder Access blocks even when Event ID **1123** is present in `Microsoft-Windows-Windows Defender/Operational`. That is a Windows UI gap, not evidence that CFA is off. Prefer **Virus & threat protection → Ransomware protection → Allow an app through Controlled folder access**. Defender Apply also refreshes ExtraCfaPaths that **exist on this PC** (Edge, PowerShell, and other listed tools only if present). Do not turn CFA off only because History is empty.
 
 ---
 
@@ -232,7 +232,7 @@ Also see the [notice above](#before-you-enable-exploitprotection-stricthandle) a
 
 **LanHygiene is off by default** and is **not** in Quick Harden. When enabled, Apply changes **this Windows PC only**: LLMNR off, WPAD override, mDNS off, NetBIOS-over-TCP off, common NIC power-save properties Disabled when present, optional outbound UDP 137/138/5353 rules.
 
-Bastion **does not assume** a Bell Giga Hub, `192.168.2.1`, TP-Link, ASUS, NETGEAR, or any other named CPE. Apply never logs in to a modem/router and never locks Speed & Duplex.
+Bastion **does not assume** a named ISP modem, mesh kit, or LAN IP. Apply never logs in to a modem/router and never locks Speed & Duplex. Gateway handling is live-fingerprint only.
 
 **Side effects:** printers, NAS, Chromecast, and some Apple discovery can break.
 

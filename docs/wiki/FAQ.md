@@ -109,9 +109,9 @@ Menu **D** alone still does not change Windows until Apply (**A** or main **8**)
 
 If you are on **v15.8.1-15.8.3** (or any build before Settings-matching DoH) and Settings still says **Unencrypted**, prefer upgrading to **v15.9.8** modular (includes the DoH Encrypted path since **v15.8.4**) and re-Apply DNS (or Network -> restore snapshot / Apply preferred). Manual fallback (old builds only): adapter -> DNS -> **Edit** -> DNS over HTTPS -> **On (automatic template)** -> Fallback off -> Save.
 
-## Does Bastion need my ISP modem (Giga Hub, TP-Link, ASUS, …)?
+## Does Bastion need my ISP modem?
 
-**No.** Apply only changes **this Windows PC**. It does not assume a Bell Giga Hub, `192.168.2.1`, or any other named CPE. Optional **LanHygiene** (off by default) is workstation LLMNR/WPAD/mDNS/NetBIOS and NIC power-save only.
+**No.** Apply only changes **this Windows PC**. It does not assume a named ISP modem, mesh kit, or LAN IP. Optional **LanHygiene** (off by default) is workstation LLMNR/WPAD/mDNS/NetBIOS and NIC power-save only.
 
 Recovery **9 → 3 → 6** probes **this PC's live IPv4 default gateway** over HTTP. Vendor JSON runs only if that GUI fingerprints as a known family (Sagemcom Fast). Any other CPE: identify only. Password is never saved. See [LAN hygiene](LAN-hygiene).
 

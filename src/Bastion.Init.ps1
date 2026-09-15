@@ -469,7 +469,7 @@ $script:ProgramDefs = [ordered]@{
 
 # Extra Controlled Folder Access allow paths beyond catalog app detection.
 # Get-CfaCandidatePaths skips any path that does not exist on THIS PC
-# (optional tools such as grok.exe are not required).
+# (optional tools are not required).
 $script:ExtraCfaPaths = @(
     "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     "$env:USERPROFILE\.grok\bin\grok.exe",
