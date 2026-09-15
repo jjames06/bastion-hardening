@@ -1,6 +1,6 @@
 # LAN hygiene and home gateways
 
-**v15.9.8** adds workstation LAN leak controls that work on **any** personal Windows 10/11 PC. Bastion **does not assume** you have a Bell Giga Hub, or any other named ISP modem.
+**v15.9.8** adds workstation LAN leak controls that work on **any** personal Windows 10/11 PC. Bastion **does not assume** a named ISP modem, mesh kit, or LAN address.
 
 ## What Apply does (section **LanHygiene**, off by default)
 
@@ -20,9 +20,9 @@ Enable it under main menu **4**, then **8 Apply**. Dry Run previews first.
 ## What Apply does **not** do
 
 - Flash or log in to your ISP modem/router
-- Assume `192.168.2.1` or any brand
-- Turn off Wi-Fi on a mesh kit, TP-Link, ASUS, NETGEAR, or unknown CPE
-- Change Mullvad / VPN features
+- Assume a brand or LAN IP
+- Turn off Wi-Fi on a mesh kit or unknown CPE
+- Change VPN client features
 
 ## Recovery
 
@@ -37,7 +37,7 @@ If option **6** says unknown or other-cpe, use the vendor admin page. Wrong firm
 
 ## Controlled Folder Access / empty Protection History
 
-Windows Security **Protection History** often stays blank for CFA blocks even when Event ID **1123** is in `Microsoft-Windows-Windows Defender/Operational`. Allow apps under **Virus & threat protection → Ransomware protection → Allow an app through Controlled folder access**. Defender Apply also refreshes ExtraCfaPaths (Edge, PowerShell, `grok.exe` if present). Do not turn CFA off only because History is empty.
+Windows Security **Protection History** often stays blank for CFA blocks even when Event ID **1123** is in `Microsoft-Windows-Windows Defender/Operational`. Allow apps under **Virus & threat protection → Ransomware protection → Allow an app through Controlled folder access**. Defender Apply also refreshes ExtraCfaPaths that exist on this PC (Edge, PowerShell, and any other listed tools that are present). Do not turn CFA off only because History is empty.
 
 ## Side effects
 

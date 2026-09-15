@@ -83,7 +83,7 @@ Defaults live in product code (`DefaultSections` / Quick Harden preset). High-le
 | **BrowserPolicies** (bulk section) | **Off** by default | Leave off for first Apply; use menu **6** only when ready |
 | **Suggestions / CopilotM365** | **Off** by default | Leave off until you want those UI changes |
 | **RdpHostLock** | **Off** by default | Firewall already locks the Remote Desktop **group**; host lock is optional and separate |
-| **LanHygiene** | **Off** by default | Workstation LLMNR/WPAD/mDNS/NetBIOS and NIC power-save only. Does **not** assume a Giga Hub or any other ISP modem. See [LAN hygiene](LAN-hygiene) |
+| **LanHygiene** | **Off** by default | Workstation LLMNR/WPAD/mDNS/NetBIOS and NIC power-save only. Does **not** assume a named ISP modem or LAN IP. See [LAN hygiene](LAN-hygiene) |
 | **OneDrive** | Seeded **on** for full Apply defaults | Turn **off** under sections **4** if you still need OneDrive sync; Undo does **not** reinstall OneDrive |
 | **ExploitProtection** | On in full defaults; **not** in Quick Harden preset | Enables system **StrictHandle**; some programs can fail until excepted - see [Games and StrictHandle](Games-and-StrictHandle) |
 | **HighRiskServices / Firewall** | On in defaults and Quick Harden | Printing, discovery, RDP/WinRM paths can break; Recovery re-opens what you need |

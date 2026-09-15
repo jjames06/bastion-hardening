@@ -7,7 +7,7 @@
 #   personal Windows 10/11 PC. Optional Recovery helper fingerprints the
 #   default gateway over HTTP; vendor-specific CPE actions run ONLY when the
 #   live banner matches a known family (currently Sagemcom Fast GUI, used by
-#   some ISP skins). Never assumes a brand or 192.168.2.1. Never stores CPE passwords.
+#   some ISP skins). Never assumes a brand or LAN IP. Never stores CPE passwords.
 #
 # LOAD ORDER
 #   After Bastion.Dns.ps1, before Bastion.Harden.ps1.
@@ -239,7 +239,7 @@ function Show-HomeGatewayRecoveryMenu {
     Write-Header "HOME GATEWAY (OPTIONAL)"
     Write-AppliesWhen -Mode Now -Extra "Read-only probe of THIS PC's default gateway. Vendor commands run only after a matching fingerprint AND a Yes."
     Write-Host ""
-    Write-Host "  Bastion does not assume a brand or LAN IP. Most homes are not a Bell Giga Hub." -ForegroundColor Yellow
+    Write-Host "  Bastion does not assume a brand or LAN IP. Most homes will not match a known GUI family." -ForegroundColor Yellow
     Write-Host "  Wrong firmware commands can drop Wi-Fi, IPTV, or the admin UI. Prefer the vendor page." -ForegroundColor Yellow
     Write-Host ""
     $fp = Get-BastionGatewayFingerprint
