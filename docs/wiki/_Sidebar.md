@@ -2,6 +2,7 @@
 * [Quick start](Quick-start)
 * [Hardening workflow](Hardening-workflow)
 * [Recovery cookbook](Recovery-cookbook)
+* [LAN hygiene](LAN-hygiene)
 * [Games and StrictHandle](Games-and-StrictHandle)
 * [FAQ](FAQ)
 * [Modular source layout](Modular-source)

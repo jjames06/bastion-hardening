@@ -8,6 +8,7 @@ User-facing handbook (Quick start, Hardening workflow, Recovery, StrictHandle, F
 | Quick start | [Quick-start.md](Quick-start.md) |
 | Hardening workflow | [Hardening-workflow.md](Hardening-workflow.md) |
 | Recovery cookbook | [Recovery-cookbook.md](Recovery-cookbook.md) |
+| LAN hygiene | [LAN-hygiene.md](LAN-hygiene.md) |
 | Games and StrictHandle | [Games-and-StrictHandle.md](Games-and-StrictHandle.md) |
 | FAQ | [FAQ.md](FAQ.md) |
 | Modular source layout | [Modular-source.md](Modular-source.md) |

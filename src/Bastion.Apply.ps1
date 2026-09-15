@@ -429,6 +429,9 @@ function Invoke-DryRun {
         }
     }
 
+    if (-not $script:Sections["LanHygiene"]) { Show-DryItem "LanHygiene" "Skipped" "Section disabled (opt-in; not CPE firmware)" }
+    else { Invoke-BastionLanHygiene -DryRun }
+
     if (-not $script:Sections["Defender"]) { Show-DryItem "Defender" "Skipped" "Section disabled" }
     else {
         try {
@@ -669,6 +672,7 @@ function Show-ApplyPreview {
             "HighRiskServices" { " [includes Print Spooler]" }
             "Firewall" { " [locks remote/LAN groups; Recovery > 3 Network to re-open]" }
             "RdpHostLock" { " [opt-in: deny fDenyTSConnections + TermService Manual]" }
+            "LanHygiene" { " [opt-in: LLMNR/WPAD/mDNS/NetBIOS/NIC power-save; no CPE flash; no speed lock]" }
             "Programs" {
                 if ($script:SelectedApps.Count) { (" -> {0}" -f ($script:SelectedApps -join ", ")) } else { " -> none" }
             }
@@ -807,6 +811,22 @@ function Invoke-SelfTest {
             Add-Warn "DNS adapters" ("Not all on {0}" -f $prov.DisplayName) ($dnsLines -join "; ") "DNS section / menu D (VPN override is normal)"
         }
     } catch { Add-Warn "DNS adapters" "Query failed" }
+
+    try {
+        $hy = Get-BastionLanHygieneStatus
+        $bits = @()
+        if ($hy.LlmnrOff) { $bits += "LLMNR off" } else { $bits += "LLMNR on" }
+        if ($hy.MdnsOff) { $bits += "mDNS off" } else { $bits += "mDNS on" }
+        if ($hy.NetbiosOff) { $bits += "NetBIOS off" } else { $bits += "NetBIOS on" }
+        if ($hy.WpadOverride) { $bits += "WPAD override" } else { $bits += "WPAD default" }
+        $detail = ($bits -join "; ")
+        if ($hy.LinkNotes.Count) { $detail = $detail + " | " + ($hy.LinkNotes -join " ") }
+        if ($hy.LlmnrOff -and $hy.MdnsOff -and $hy.NetbiosOff -and $hy.NicPowerOk) {
+            Add-Good "LAN hygiene" "Workstation leaks reduced" $detail "Section LanHygiene (opt-in)"
+        } else {
+            Add-Warn "LAN hygiene" "Discovery/NIC power-save still loose" $detail "Enable LanHygiene then Apply; Recovery > 3"
+        }
+    } catch { Add-Warn "LAN hygiene" "Query failed" $_.Exception.Message }
 
     try {
         $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
@@ -1100,7 +1120,7 @@ function Invoke-ApplyHardening {
     <#
       Purpose:
         Execute enabled sections for real: firewall, services, SMBv1, OneDrive, Xbox, LSA,
-        tasks, DO, DNS+DoH, RdpHostLock, Defender/CFA, PS auditing, ExploitProtection
+        tasks, DO, DNS+DoH, RdpHostLock, LanHygiene, Defender/CFA, PS auditing, ExploitProtection
         (including system StrictHandle + exceptions), browser policies, bloat Appx,
         suggestions, Copilot/M365, catalog Programs. Write undo + config; optional audit.
 
@@ -1403,6 +1423,10 @@ function Invoke-ApplyHardening {
         } catch {
             Write-Status ("RdpHostLock failed: {0}" -f $_.Exception.Message) "Failed"
         }
+    }
+
+    if ($script:Sections["LanHygiene"]) {
+        Invoke-BastionLanHygiene
     }
 
     if ($script:Sections["Defender"]) {

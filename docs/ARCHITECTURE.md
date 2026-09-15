@@ -46,7 +46,7 @@ If a launch fails after hardening, the cause is almost always **launcher / eleva
 ## Runtime layout
 
 ```
-bastion-hardening-v15.9.7\   (folder name matches the release tag)
+bastion-hardening-v15.9.8\   (folder name matches the release tag)
   Bastion-Hardening.bat      # UAC launcher; High-IL whoami check; goto-safe; calls helpers
   tools-elevate-self.ps1     # UAC re-launch helper (avoids nested parentheses in cmd)
   tools-run-bootstrap.ps1    # Unblock-File + Process Bypass + & Bastion-Hardening.ps1
@@ -62,6 +62,7 @@ bastion-hardening-v15.9.7\   (folder name matches the release tag)
     Bastion.Services.ps1     # high-risk / Xbox service helpers
     Bastion.Browsers.ps1     # Firefox / Chromium policies + ECH packs
     Bastion.Dns.ps1          # adapter DNS, DoH, snapshots, restore
+    Bastion.Network.ps1      # opt-in LanHygiene + Recovery gateway fingerprint
     Bastion.Harden.ps1       # OneDrive, bloat, CFA, StrictHandle, registry, RDP host
     Bastion.Apply.ps1        # DryRun, SelfTest/Audit, Apply, QuickHarden, restore points
     Bastion.Recovery.ps1     # Recovery hubs (network, services, mitigations, ...)
@@ -108,10 +109,11 @@ Bootstrap (`Bastion-Hardening.ps1`) always:
 | 5 | `Bastion.Services.ps1` | Service disable/enable and catalog rows |
 | 6 | `Bastion.Browsers.ps1` | Per-browser policy modes and optional ECH |
 | 7 | `Bastion.Dns.ps1` | Live DNS, DoH interface keys, snapshot apply/restore |
-| 8 | `Bastion.Harden.ps1` | Hardening section helpers (OneDrive, bloat, CFA, StrictHandle, RDP host, ...) |
-| 9 | `Bastion.Apply.ps1` | Dry Run, Audit, Apply, Quick Harden, restore points |
-| 10 | `Bastion.Recovery.ps1` | Recovery menus and targeted undo helpers |
-| 11 | `Bastion.Menus.ps1` | Interactive menus including `Show-MainMenu` |
+| 8 | `Bastion.Network.ps1` | Opt-in LanHygiene; Recovery gateway fingerprint (no assumed ISP modem) |
+| 9 | `Bastion.Harden.ps1` | Hardening section helpers (OneDrive, bloat, CFA, StrictHandle, RDP host, ...) |
+| 10 | `Bastion.Apply.ps1` | Dry Run, Audit, Apply, Quick Harden, restore points |
+| 11 | `Bastion.Recovery.ps1` | Recovery menus and targeted undo helpers |
+| 12 | `Bastion.Menus.ps1` | Interactive menus including `Show-MainMenu` |
 
 4. Optional smoke: `-BastionSmokeLoadOnly` prints version and exits 0 after a successful import (requires elevation; friendly admin gate if not elevated).
 5. Resolves/binds the data directory, `Ensure-BastionPaths`, `Initialize-BastionDataStore`, then `Show-MainMenu`.
@@ -154,7 +156,7 @@ Elevated:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Bastion-Hardening.ps1 -BastionSmokeLoadOnly
 ```
 
-Expected: `Bastion smoke load OK v15.9.7 (commands verified)` (version string follows `ScriptVersion`) and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
+Expected: `Bastion smoke load OK v15.9.8 (commands verified)` (version string follows `ScriptVersion`) and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
 
 Bat path smoke (elevated host, LanmanServer may be stopped/disabled):
 
@@ -166,9 +168,9 @@ Expected: "Elevated console ready", then main menu (or use `tools-run-bootstrap.
 
 ## Version
 
-Product-facing version is **15.9.7** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). Prefer **15.9.7** for Help color-coded docs on the dark console, forced black theme (**15.9.6**), and **15.9.5** launch fixes on Bastion-hardened machines where Server/LanmanServer is disabled. Always start with the `.bat`, never the `.ps1` alone.
+Product-facing version is **15.9.8** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). **15.9.8** adds opt-in **LanHygiene** (workstation LAN leaks / NIC power-save; no ISP CPE flash; no NIC speed lock) and Recovery home-gateway fingerprinting (Sagemcom Fast commands only if the live default gateway matches). Prefer **15.9.7** only if you have not upgraded. Always start with the `.bat`, never the `.ps1` alone.
 
-**Public site note:** Official site download and GitHub **Latest** recommend modular **15.9.7** (plain-text `src\`, MANIFEST integrity; source never encrypted).
+**Public site note:** Official site download and GitHub **Latest** recommend modular **15.9.8** (plain-text `src\`, MANIFEST integrity; source never encrypted).
 
 ## Related docs
 

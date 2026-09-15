@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.9.7 FINAL
+    Bastion Hardening Framework v15.9.8 FINAL
 
 .DESCRIPTION
     Selective Windows hardening for a personal or small-team workstation.
@@ -32,7 +32,7 @@
     Used by packaging smoke tests; skips menus and data-store full UI path after load.
 
 .NOTES
-    Version 15.9.7 FINAL. System Restore is the strongest rollback. Run elevated.
+    Version 15.9.8 FINAL. System Restore is the strongest rollback. Run elevated.
     Save as UTF-8 (ASCII subset preferred). Licensed under GNU GPLv3 - see LICENSE
     and NOTICE in the project root.
 
@@ -50,6 +50,7 @@
     v15.9.5: High-IL elevation SID; goto bat; tools-run-bootstrap; LanmanServer-disabled launch fixed.
     v15.9.6: Force black console theme (soft-fail) for consistent dark UI across hosts.
     v15.9.7: Help docs color-coded headings/labels/body for readability on dark theme.
+    v15.9.8: Opt-in LanHygiene (LLMNR/WPAD/mDNS/NetBIOS/NIC power-save; no speed lock); Recovery gateway fingerprint (Sagemcom Fast actions only if detected); CFA extra paths; Protection History honesty.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
@@ -91,6 +92,7 @@ $script:BastionSourceModules = @(
     "Bastion.Services.ps1",
     "Bastion.Browsers.ps1",
     "Bastion.Dns.ps1",
+    "Bastion.Network.ps1",
     "Bastion.Harden.ps1",
     "Bastion.Apply.ps1",
     "Bastion.Recovery.ps1",
@@ -109,7 +111,9 @@ $script:BastionRequiredCommands = @(
     "Write-Log",
     "Write-Banner",
     "Show-MainMenu",
-    "Wait-ForKey"
+    "Wait-ForKey",
+    "Invoke-BastionLanHygiene",
+    "Get-BastionLanHygieneStatus"
 )
 
 # -----------------------------------------------------------------------------
