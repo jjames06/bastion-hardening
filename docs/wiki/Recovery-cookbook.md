@@ -8,7 +8,7 @@ Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know wh
 |------|-----|----------------|
 | **1** | Undo last hardening | Best-effort restore of **tracked** services, firewall groups, **encrypted DNS snapshot** (when present), and **RDP host prior** (when RdpHostLock was applied) |
 | **2** | Services | Printing stopped; you need file-share host, discovery helpers, or Xbox services again |
-| **3** | Network | RDP, Remote Assistance, or WinRM; LAN sharing, discovery, or mDNS; DNS reset to DHCP; **restore prior DNS** from last Apply snapshot when available |
+| **3** | Network | RDP, Remote Assistance, or WinRM; LAN sharing, discovery, or mDNS; DNS reset to DHCP; **restore prior DNS**; **LAN hygiene reverse**; **home gateway probe** (fingerprint only unless a known CPE GUI is detected) |
 | **4** | Browser policies | Sites break after Strict or ECH settings; set that browser back to **Default** |
 | **5** | Apps and UI | Copilot or M365, Widgets or Suggestions, Game Bar or the ms-gamingoverlay prompt |
 | **6** | Security mitigations | StrictHandle and games, Defender NP/CFA, Delivery Optimization, PowerShell logging, LSA, CEIP tasks |
@@ -26,7 +26,9 @@ Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know wh
 | Browser sites broken after policies | **9 → 4** or main **6** | Set that browser to **Default** (best-effort). System Restore remains the surest rollback |
 | ms-gamingoverlay "get an app" dialog | **9 → 5 →** Game Bar | Silence Game DVR (or re-enable flags and install Xbox Game Bar from the Store) |
 | Game or program fails after Apply (instant exit) | **9 → 6 →** StrictHandle | See [Games and StrictHandle](Games-and-StrictHandle) |
-| Controlled Folder Access blocks a trusted app | **9 → 6 →** Defender | Prefer allow-listing the app or re-hardening carefully; soften protection only if needed |
+| Controlled Folder Access blocks a trusted app | **9 → 6 →** Defender | Prefer allow-listing the app (Windows Security → Ransomware protection → Allow an app). Protection History is often empty; Event ID 1123 still logs. See [LAN hygiene](LAN-hygiene) |
+| Printers or Chromecast died after LanHygiene | **9 → 3 →** option **5** | Removes Bastion outbound 137/138/5353 rules only; policies may need System Restore |
+| Curious about the ISP modem | **9 → 3 →** option **6** | Identifies **this PC's** default gateway. CPE commands only if the live GUI matches a known family (not every home has a Giga Hub) |
 | Need Widgets or suggestions back | **9 → 5** | Restore Widgets/Suggestions defaults |
 | Need Copilot UI tools | **9 → 5 →** Copilot / M365 | Status plus policy and Appx helpers |
 

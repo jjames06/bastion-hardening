@@ -40,7 +40,7 @@
 # Resolve-BastionLogDirectory may reuse a writable legacy path (flat C:\Temp)
 # or fall back to ProgramData / LOCALAPPDATA / TEMP when C:\Temp is unusable.
 $script:Config = @{
-    ScriptVersion = "15.9.7"
+    ScriptVersion = "15.9.8"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     # Windows Event Log source name used by Write-Log (Application log).
@@ -252,6 +252,8 @@ $script:DefaultSections = [ordered]@{
     "CopilotM365"          = $false
     # Opt-in: deny system RDP host (fDenyTSConnections + TermService). Firewall still locks the RD group by default.
     "RdpHostLock"          = $false
+    # Opt-in: workstation LAN leak/NIC power-save hygiene. Not CPE firmware. Not Quick Harden.
+    "LanHygiene"           = $false
 }
 
 # Subset used by "Quick Harden" style presets (core mitigations without opt-ins).
@@ -315,6 +317,13 @@ $script:SectionDocs = [ordered]@{
         Revert  = "Recovery > 3 Network: option 3 = DHCP, option 4 = restore last DNS snapshot (runs now). Undo can also restore the snapshot. Best-effort if adapters changed."
         Notes   = "Menu D only saves preference. Apply is required for Windows. Snapshot on disk is DPAPI-encrypted (separate from Settings Encrypted = DoH on the wire)."
     }
+    "LanHygiene" = @{
+        Intent  = "Optionally reduce workstation LAN discovery leaks and NIC power-save features that can drop a wired link. Works on any personal Windows PC; it does not assume a brand of home router."
+        Changes = "When enabled on Apply: LLMNR policy off, WPAD autodetect override, mDNS off, NetBIOS-over-TCP disabled on IP-enabled adapters, common NIC Green Ethernet/GigaLite/EEE/Power Saving properties set Disabled when present (no Speed & Duplex lock), optional outbound UDP 137/138/5353 block rules named Bastion Block *."
+        Impact  = "Some printers, NAS, and Apple/Chromecast discovery may stop. VPN DNS is unchanged. Does not flash ISP CPE firmware and does not lock 1G vs 2.5G."
+        Revert  = "Recovery > 3 Network > LAN hygiene reverse (remove Bastion outbound rules). Re-enable NetBIOS/mDNS/LLMNR via Recovery notes or System Restore. NIC properties: adapter advanced settings."
+        Notes   = "Off by default. Apply never logs in to a home gateway and never assumes a brand or LAN IP. Recovery option 6 probes THIS PC's IPv4 default gateway over HTTP; vendor JSON runs only if that live GUI fingerprints as a known family (Sagemcom Fast). Most homes are not that family; unknown CPE is identify-only. Password is never saved."
+    }
     "RdpHostLock" = @{
         Intent  = "Optionally deny this PC as a Remote Desktop host (workstation that should not accept RDP logons)."
         Changes = "When enabled: sets fDenyTSConnections=1 and stops TermService (Remote Desktop Services) with startup Manual. Prior system allow and TermService start type are tracked for Undo."
@@ -327,7 +336,7 @@ $script:SectionDocs = [ordered]@{
         Changes = "Enables Network Protection and Controlled Folder Access when Defender is available; refreshes a CFA allow-list for known catalog app paths and a few common system paths."
         Impact  = "Suspicious network connections and untrusted apps writing to protected folders are more likely to be blocked. Rare false positives may need an allow path."
         Revert  = "Recovery > 6 Security mitigations > Defender: soften NP and/or CFA, or re-harden with allow-path refresh. Or Windows Security UI."
-        Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings."
+        Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings. Windows Security Protection History often stays empty for CFA blocks (Event ID 1123 still logs). Allow apps via Windows Security > Ransomware protection > Allow an app, or let Bastion refresh ExtraCfaPaths. Do not turn CFA off just because History is blank."
     }
     "PowerShellAuditing" = @{
         Intent  = "Record PowerShell script block activity for later investigation if malware uses scripts."
@@ -459,7 +468,14 @@ $script:ProgramDefs = [ordered]@{
 }
 
 # Extra Controlled Folder Access allow paths beyond catalog app detection.
-$script:ExtraCfaPaths = @("C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
+# Get-CfaCandidatePaths skips any path that does not exist on THIS PC
+# (optional tools such as grok.exe are not required).
+$script:ExtraCfaPaths = @(
+    "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    "$env:USERPROFILE\.grok\bin\grok.exe",
+    "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+    "C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe"
+)
 
 # Path fragments never allowed as custom winget --location roots (system / package stores).
 $script:BlockedPathFragments = @(

@@ -998,6 +998,8 @@ function Show-NetworkRecoveryMenu {
         Write-Host "  Choose an action" -ForegroundColor Cyan
         Write-Host "  1  Remote access (RDP / Assistance / WinRM + system RDP)" -ForegroundColor White
         Write-Host "  2  LAN / discovery (File Sharing, Network Discovery, mDNS)" -ForegroundColor White
+        Write-Host "  5  LAN hygiene reverse (remove Bastion outbound 137/138/5353 rules)" -ForegroundColor White
+        Write-Host "  6  Home gateway probe (live default gateway; CPE commands only if fingerprint matches)" -ForegroundColor White
         Write-Host "  3  DNS -> automatic (DHCP) on eligible adapters" -ForegroundColor Yellow
         if ($hasSnap) {
             Write-Host "  4  DNS -> restore prior snapshot (before last Bastion DNS Apply)" -ForegroundColor Yellow
@@ -1006,12 +1008,22 @@ function Show-NetworkRecoveryMenu {
         }
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
-        Write-Host "  Tip: 3 and 4 are independent. You do not need 3 before 4." -ForegroundColor DarkGray
-        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4")
+        Write-Host "  Tip: 3 and 4 are independent. You do not need 3 before 4. 5/6 never assume a router brand." -ForegroundColor DarkGray
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6")
         switch ($c) {
             "0" { return }
             "1" { Show-RemoteAccessRecoveryMenu }
             "2" { Show-LanDiscoveryRecoveryMenu }
+            "5" {
+                Write-Host ""
+                Write-Host "  Remove Bastion LAN-hygiene outbound firewall rules (137/138/5353)." -ForegroundColor Cyan
+                Write-Host "  Does not restore LLMNR/mDNS/NetBIOS policies (use System Restore or re-enable in Windows)." -ForegroundColor DarkGray
+                if ((Read-YesNo -Prompt "  Remove those Bastion firewall rules now (Y/N)?") -eq "Y") {
+                    Invoke-BastionUndoLanHygieneFirewall
+                } else { Write-Host "  Cancelled." -ForegroundColor DarkGray }
+                Wait-ForKey "Press any key to return to Network recovery..."
+            }
+            "6" { Show-HomeGatewayRecoveryMenu }
             "3" {
                 Write-Host ""
                 Write-Host "  Reset DNS to automatic (DHCP)" -ForegroundColor Cyan

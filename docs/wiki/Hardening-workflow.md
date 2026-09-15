@@ -8,7 +8,7 @@ Ordered path from a clean download to a careful first Apply, then verify and rec
 
 | This guide is | This guide is not |
 |---------------|-------------------|
-| A **user handbook** for **Bastion v15.9.7** modular builds on a **personal** Windows 10/11 PC you administer | A substitute for reading Dry Run lines and in-app Help (menu **11**) on *your* machine |
+| A **user handbook** for **Bastion v15.9.8** modular builds on a **personal** Windows 10/11 PC you administer | A substitute for reading Dry Run lines and in-app Help (menu **11**) on *your* machine |
 | An ordered workflow: right build, safety gates, first Apply, verify, fix side effects | A promise that every app, game, printer, or network setup will keep working after hardening |
 | Honest about section defaults, side effects, and partial Undo | Antivirus, enterprise MDM/Intune guidance, or a "debloat everything" script |
 | Links into Recovery, StrictHandle, FAQ, and modular source review | A place to invent features that are not in the product |
@@ -29,13 +29,13 @@ Confirm all of these before you download or Apply:
 
 If you are not comfortable with restore points and Recovery, **do not run Apply**.
 
-## 3. Get the right build (v15.9.7 modular, Unblock, bat only)
+## 3. Get the right build (v15.9.8 modular, Unblock, bat only)
 
 1. Open **https://www.operationlockedin.com/bastion/download** (resolves the same GitHub Latest zip) **or** **https://github.com/jjames06/bastion-hardening/releases/latest**.
-2. Prefer **v15.9.7** modular: plain-text `src\` modules, thin bootstrap, `MANIFEST.sha256` integrity, forced black console theme, Help colors for dark UI. That is the public recommended build.
-3. Download **`bastion-hardening-v*.zip`** (Latest should match **v15.9.7** when that tag is current).
+2. Prefer **v15.9.8** modular: plain-text `src\` modules, thin bootstrap, `MANIFEST.sha256` integrity, forced black console theme, Help colors for dark UI, opt-in LanHygiene (no assumed ISP modem). That is the public recommended build.
+3. Download **`bastion-hardening-v*.zip`** (Latest should match **v15.9.8** when that tag is current).
 4. **Unblock the zip** before extract: right-click zip -> **Properties** -> check **Unblock** if shown -> **OK**. Skipping this often causes *running scripts is disabled on this system*.
-5. Extract to a path **you** control (for example `C:\Tools\`). Expect one folder such as `bastion-hardening-v15.9.7\`.
+5. Extract to a path **you** control (for example `C:\Tools\`). Expect one folder such as `bastion-hardening-v15.9.8\`.
 6. Confirm the product tree: `Bastion-Hardening.bat`, `Bastion-Hardening.ps1`, full **`src\`** (and usually docs). Keep them together.
 7. Right-click **`Bastion-Hardening.bat`** -> **Run as administrator** -> accept UAC.
 
@@ -58,7 +58,7 @@ There is no silent bulk harden. If you cancel at the restore gate or skip YES, n
 
 Use this order the first time on a machine:
 
-1. Download **v15.9.7** modular, **Unblock** the zip, extract, run **`Bastion-Hardening.bat` as administrator**.
+1. Download **v15.9.8** modular, **Unblock** the zip, extract, run **`Bastion-Hardening.bat` as administrator**.
 2. Create a **System Restore Point** (**13** / **R**).
 3. Open **Help** (**11**) for live paths and section docs if anything is unclear.
 4. Run **Dry Run** (**1**). Read Would change lines; do not Apply yet if surprises appear.
@@ -83,13 +83,14 @@ Defaults live in product code (`DefaultSections` / Quick Harden preset). High-le
 | **BrowserPolicies** (bulk section) | **Off** by default | Leave off for first Apply; use menu **6** only when ready |
 | **Suggestions / CopilotM365** | **Off** by default | Leave off until you want those UI changes |
 | **RdpHostLock** | **Off** by default | Firewall already locks the Remote Desktop **group**; host lock is optional and separate |
+| **LanHygiene** | **Off** by default | Workstation LLMNR/WPAD/mDNS/NetBIOS and NIC power-save only. Does **not** assume a Giga Hub or any other ISP modem. See [LAN hygiene](LAN-hygiene) |
 | **OneDrive** | Seeded **on** for full Apply defaults | Turn **off** under sections **4** if you still need OneDrive sync; Undo does **not** reinstall OneDrive |
 | **ExploitProtection** | On in full defaults; **not** in Quick Harden preset | Enables system **StrictHandle**; some programs can fail until excepted - see [Games and StrictHandle](Games-and-StrictHandle) |
 | **HighRiskServices / Firewall** | On in defaults and Quick Harden | Printing, discovery, RDP/WinRM paths can break; Recovery re-opens what you need |
 
 **Quick Harden vs full Apply:**
 
-- **Quick Harden (7)** turns on a **core preset** only: Firewall, HighRiskServices, SMBv1, DeliveryOptimization, DNS (if you opt in), Defender, PowerShellAuditing, LSAProtection, ScheduledTasks. It does **not** turn on BloatApps, Xbox, browser policies, OneDrive, ExploitProtection, Programs, Suggestions, Copilot, or RdpHostLock. It asks whether to change DNS and whether to **keep Print Spooler** for that run.
+- **Quick Harden (7)** turns on a **core preset** only: Firewall, HighRiskServices, SMBv1, DeliveryOptimization, DNS (if you opt in), Defender, PowerShellAuditing, LSAProtection, ScheduledTasks. It does **not** turn on BloatApps, Xbox, browser policies, OneDrive, ExploitProtection, Programs, Suggestions, Copilot, RdpHostLock, or LanHygiene. It asks whether to change DNS and whether to **keep Print Spooler** for that run.
 - **Apply (8)** uses **your** section toggles from menu **4** (including anything still at product defaults). That is more powerful and easier to over-select if you never review toggles.
 - Neither path applies browser policies or ECH unless you configured browsers (menu **6**) and enabled the browser section for bulk Apply where required. ECH is never automatic.
 
@@ -104,6 +105,8 @@ Expect real tradeoffs after Apply. Prefer **Recovery hubs** (menu **9**) over ra
 | Printing | Print Spooler disabled with HighRiskServices | Recovery **9 → 2** Services → Spooler |
 | Firewall / remote | RDP, WinRM, LAN discovery locked | Recovery **9 → 3** Network |
 | DNS | Wrong resolver or need prior servers | Recovery **9 → 3** → reset DHCP or restore snapshot (**4**) |
+| Printers / Chromecast after LanHygiene | Discovery leaks blocked | Recovery **9 → 3 → 5**; [LAN hygiene](LAN-hygiene) |
+| CFA blocks a trusted app; Protection History empty | Event ID 1123 still logs | Recovery **9 → 6** Defender; Windows Security → Allow an app |
 | Games / apps exit early | System StrictHandle | [Games and StrictHandle](Games-and-StrictHandle); Recovery **9 → 6** |
 | Browser sites break | Medium/Strict or ECH policies | Menu **6** or Recovery **9 → 4** → that browser → **Default** |
 | OneDrive / Appx bloat | Client or packages removed | System Restore or vendor/Store installers (not Undo) |
@@ -136,8 +139,8 @@ Menu **D** alone never proves DNS changed - only **A** or Apply with DNS on does
 
 If you want to read the product before you trust Apply:
 
-1. Confirm you are on a **v15.9.7** modular tree (bootstrap + `src\Bastion.*.ps1` + `MANIFEST.sha256`).
-2. Follow [Modular source layout](Modular-source): bat/helpers -> bootstrap integrity -> `Bastion.Init.ps1` (version, defaults) -> domain modules (`Bastion.Apply.ps1`, `Bastion.Recovery.ps1`, `Bastion.Dns.ps1`, and so on).
+1. Confirm you are on a **v15.9.8** modular tree (bootstrap + `src\Bastion.*.ps1` + `MANIFEST.sha256`).
+2. Follow [Modular source layout](Modular-source): bat/helpers -> bootstrap integrity -> `Bastion.Init.ps1` (version, defaults) -> domain modules (`Bastion.Apply.ps1`, `Bastion.Recovery.ps1`, `Bastion.Dns.ps1`, `Bastion.Network.ps1`, and so on).
 3. Technical load order and threat notes: [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md) in the zip or repository.
 4. Bastion hard-fails on missing modules or MANIFEST hash mismatch. Source stays plain text under GPLv3.
 
@@ -150,6 +153,7 @@ You do not need a code review to use Bastion safely if you stick to Dry Run, res
 | [Home](Home) | Handbook index and safety summary |
 | [Quick start](Quick-start) | Shorter install + first Apply path |
 | [Recovery cookbook](Recovery-cookbook) | Symptom -> Recovery hub map |
+| [LAN hygiene](LAN-hygiene) | Opt-in workstation leaks; no assumed ISP modem |
 | [Games and StrictHandle](Games-and-StrictHandle) | Game breaks, reverse, report |
 | [FAQ](FAQ) | Limits, DNS Encrypted, Undo, license |
 | [Modular source layout](Modular-source) | Why modular, how to review |

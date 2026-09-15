@@ -322,6 +322,8 @@ function Show-SectionMenu {
                 }
             } elseif ($n -eq "RdpHostLock") {
                 $suffix = "  (opt-in: deny OS RDP host)"
+            } elseif ($n -eq "LanHygiene") {
+                $suffix = "  (opt-in: LAN leaks / NIC power-save; not your ISP modem)"
             }
             Write-Host ("  {0,2}. {1}  {2}{3}" -f ($i + 1), $mark, $n, $suffix) `
                 -ForegroundColor $(if ($script:Sections[$n]) { "Green" } else { "DarkGray" })
@@ -1197,6 +1199,7 @@ function Show-Help {
         "Status is live from Windows. Enabling services or OPEN firewall groups increases attack surface; LOCKED/DISABLED is the safer default after harden.",
         "Firewall hubs only toggle named groups (not profile Inbound=Block). DNS: option 3 = DHCP; option 4 = restore snapshot when available. Menu D intent may re-apply on next DNS Apply. VPN may override DNS.",
         "RDP triad: firewall Remote Desktop group + system fDenyTSConnections + TermService. Optional section RdpHostLock denies the host switch on Apply (off by default). Windows Home may not host RDP like Pro.",
+        "LanHygiene (opt-in, off by default): workstation LLMNR/WPAD/mDNS/NetBIOS and NIC power-save. It does not flash ISP modems. Recovery > 3 option 6 fingerprints the live default gateway; CPE commands run only if that GUI matches a known family.",
         "StrictHandle: WoW retail and Classic Era are documented examples (now auto-excepted when Wow.exe / WowClassic.exe are found). Installing Classic after Apply needs Recovery > 6 > refresh. Other programs may break with no exception until reported and we ship one. Disable system StrictHandle + reboot, report, wait for update, then re-enable.",
         "Softening Defender reduces blocking strength. Appx bloat and OneDrive are not reinstallable here - System Restore or vendor installers.",
         "## System Restore",
