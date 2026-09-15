@@ -26,9 +26,9 @@ Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know wh
 | Browser sites broken after policies | **9 → 4** or main **6** | Set that browser to **Default** (best-effort). System Restore remains the surest rollback |
 | ms-gamingoverlay "get an app" dialog | **9 → 5 →** Game Bar | Silence Game DVR (or re-enable flags and install Xbox Game Bar from the Store) |
 | Game or program fails after Apply (instant exit) | **9 → 6 →** StrictHandle | See [Games and StrictHandle](Games-and-StrictHandle) |
-| Controlled Folder Access blocks a trusted app | **9 → 6 →** Defender | Prefer allow-listing the app (Windows Security → Ransomware protection → Allow an app). Protection History is often empty; Event ID 1123 still logs. See [LAN hygiene](LAN-hygiene) |
+| Controlled Folder Access blocks a trusted app | **9 → 6 →** Defender | Prefer allow-listing the app (Windows Security → Ransomware protection → Allow an app) |
 | Printers or Chromecast died after LanHygiene | **9 → 3 →** option **5** | Removes Bastion outbound 137/138/5353 rules only; policies may need System Restore |
-| Curious about the ISP modem | **9 → 3 →** option **6** | Identifies **this PC's** default gateway. CPE commands only if the live GUI matches a known family. Most homes will not match. |
+| Curious about the ISP modem | **9 → 3 →** option **6** | Identifies the default gateway on the computer running Bastion. CPE commands only if the live admin speaks a known JSON gateway protocol. Most homes will not match. |
 | Need Widgets or suggestions back | **9 → 5** | Restore Widgets/Suggestions defaults |
 | Need Copilot UI tools | **9 → 5 →** Copilot / M365 | Status plus policy and Appx helpers |
 

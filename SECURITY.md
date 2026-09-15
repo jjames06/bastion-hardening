@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.9.8  | Yes (current modular) - opt-in LanHygiene; Recovery home-gateway fingerprint (Sagemcom Fast only if detected); CFA extra paths; always use `.bat` |
+| 15.9.8  | Yes (current modular) - opt-in LanHygiene; Recovery home-gateway fingerprint (JSON gateway protocol only if detected); CFA extra paths; always use `.bat` |
 | 15.9.7  | Superseded - Help color-coded docs; prefer 15.9.8 |
 | 15.9.6  | Superseded - forced black console theme (Black bg + Gray fg, soft-fail); prefer 15.9.8 |
 | 15.9.5  | Superseded - High-IL bat elevation; goto-safe launcher; tools-run-bootstrap; LanmanServer-disabled launch; prefer 15.9.8 |

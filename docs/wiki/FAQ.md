@@ -111,9 +111,9 @@ If you are on **v15.8.1-15.8.3** (or any build before Settings-matching DoH) and
 
 ## Does Bastion need my ISP modem?
 
-**No.** Apply only changes **this Windows PC**. It does not assume a named ISP modem, mesh kit, or LAN IP. Optional **LanHygiene** (off by default) is workstation LLMNR/WPAD/mDNS/NetBIOS and NIC power-save only.
+**No.** Apply only changes **the Windows PC running Bastion**. It does not assume a named ISP modem, mesh kit, or LAN IP. Optional **LanHygiene** (off by default) is workstation LLMNR/WPAD/mDNS/NetBIOS and NIC power-save only.
 
-Recovery **9 → 3 → 6** probes **this PC's live IPv4 default gateway** over HTTP. Vendor JSON runs only if that GUI fingerprints as a known family (Sagemcom Fast). Any other CPE: identify only. Password is never saved. See [LAN hygiene](LAN-hygiene).
+Recovery **9 → 3 → 6** probes **that PC's live IPv4 default gateway** over HTTP. Vendor JSON runs only if the admin speaks a known JSON gateway protocol. Any other CPE: identify only. Password is never saved. See [LAN hygiene](LAN-hygiene).
 
 ## Does Bastion enable Encrypted Client Hello (ECH) by default?
 

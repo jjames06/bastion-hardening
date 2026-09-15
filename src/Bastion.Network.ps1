@@ -6,8 +6,8 @@
 #   Workstation-side LAN leak and NIC power-save hardening that works on any
 #   personal Windows 10/11 PC. Optional Recovery helper fingerprints the
 #   default gateway over HTTP; vendor-specific CPE actions run ONLY when the
-#   live banner matches a known family (currently Sagemcom Fast GUI, used by
-#   some ISP skins). Never assumes a brand or LAN IP. Never stores CPE passwords.
+#   live admin speaks a known JSON-CGI / TR-181 protocol (used by several ISP
+#   skins). Never assumes a brand or LAN IP. Never stores CPE passwords.
 #
 # LOAD ORDER
 #   After Bastion.Dns.ps1, before Bastion.Harden.ps1.
@@ -72,10 +72,6 @@ function Get-BastionLanHygieneStatus {
                     $st.NicPowerOk = $false
                     $st.NicNotes += ("{0}: {1}={2}" -f $nic.Name, $kw, $p.DisplayValue)
                 }
-            }
-            $spd = [string]$nic.LinkSpeed
-            if ($spd -match "2\.5" -or $spd -match "2500") {
-                $st.LinkNotes += ("{0} is {1}. Long or marginal cables can retrain and look like disconnects; Bastion does not lock speed." -f $nic.Name, $spd)
             }
         }
     } catch {}
@@ -181,6 +177,27 @@ function Invoke-BastionLanHygiene {
     }
 }
 
+function Test-BastionGatewayJsonReq {
+    <#
+      Purpose:
+        Detect a JSON-CGI admin endpoint on the live default gateway.
+        GET 404 means absent. Other HTTP responses mean the path exists.
+        Never POSTs login here.
+    #>
+    param([string]$Gateway)
+    if (-not $Gateway) { return $false }
+    $uri = "http://{0}/cgi/json-req" -f $Gateway
+    try {
+        $null = Invoke-WebRequest -Uri $uri -Method GET -UseBasicParsing -TimeoutSec 3 -MaximumRedirection 0 -ErrorAction Stop
+        return $true
+    } catch {
+        $code = $null
+        try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+        if ($code -and $code -ne 404) { return $true }
+        return $false
+    }
+}
+
 function Get-BastionGatewayFingerprint {
     <#
       Purpose:
@@ -195,7 +212,7 @@ function Get-BastionGatewayFingerprint {
         Reachable  = $false
     }
     if (-not $gw) {
-        $info.Detail = "No IPv4 default gateway on this PC."
+        $info.Detail = "No IPv4 default gateway on the computer running Bastion."
         return [pscustomobject]$info
     }
     $url = "http://{0}/" -f $gw
@@ -205,18 +222,15 @@ function Get-BastionGatewayFingerprint {
         $body = [string]$r.Content
         $hdr = ""
         try { $hdr = [string]$r.Headers["TPL_VER"] } catch {}
-        if ($body -match "sagemcom|Sagem Communications|TPL_VER|jquery-1\.8\.3" -or $hdr) {
-            $info.Family = "sagemcom-fast"
-            $info.Detail = ("HTTP 200 from {0}; Sagemcom Fast-style GUI (TPL={1}). Actions below are optional and CPE-specific." -f $gw, $(if ($hdr) { $hdr } else { "n/a" }))
-        } elseif ($body -match "tplink|TP-Link") {
+        $jsonReq = Test-BastionGatewayJsonReq -Gateway $gw
+        $looksConsumer = $body -match "tplink|TP-Link|netgear|NETGEAR|asus|ASUSWRT"
+        $looksJson = $jsonReq -or $hdr -or ($body -match "sagemcom|Sagem Communications|TPL_VER|jquery-1\.8\.3|/cgi/json-req")
+        if ($looksJson -and -not $looksConsumer) {
+            $info.Family = "json-gateway"
+            $info.Detail = ("HTTP 200 from {0}; known JSON gateway admin. Optional Wi-Fi / UPnP / USB-SMB actions are offered after Yes." -f $gw)
+        } elseif ($looksConsumer) {
             $info.Family = "other-cpe"
-            $info.Detail = ("HTTP 200 from {0}; looks like TP-Link. Bastion will not drive this firmware." -f $gw)
-        } elseif ($body -match "netgear|NETGEAR") {
-            $info.Family = "other-cpe"
-            $info.Detail = ("HTTP 200 from {0}; looks like NETGEAR. Bastion will not drive this firmware." -f $gw)
-        } elseif ($body -match "asus|ASUS") {
-            $info.Family = "other-cpe"
-            $info.Detail = ("HTTP 200 from {0}; looks like ASUS. Bastion will not drive this firmware." -f $gw)
+            $info.Detail = ("HTTP 200 from {0}; consumer router UI. Bastion will not send CPE commands. Use the vendor admin page." -f $gw)
         } else {
             $info.Family = "generic-http"
             $info.Detail = ("HTTP 200 from {0}; unknown CPE UI. Use the vendor admin page. Bastion will not send CPE commands." -f $gw)
@@ -231,15 +245,15 @@ function Show-HomeGatewayRecoveryMenu {
     <#
       Purpose:
         Recovery-only. Identify the live default gateway. If it fingerprints as
-        Sagemcom Fast (some ISP skins), offer optional Wi-Fi-radio / UPnP /
+        a known JSON-CGI / TR-181 admin, offer optional Wi-Fi-radio / UPnP /
         USB-SMB toggles. Any other CPE: identify only. Never part of Apply
         or Quick Harden. Most homes will not match.
     #>
     Clear-BastionScreen
     Write-Header "HOME GATEWAY (OPTIONAL)"
-    Write-AppliesWhen -Mode Now -Extra "Read-only probe of THIS PC's default gateway. Vendor commands run only after a matching fingerprint AND a Yes."
+    Write-AppliesWhen -Mode Now -Extra "Read-only probe of the default gateway on the computer running Bastion. Vendor commands run only after a matching fingerprint AND a Yes."
     Write-Host ""
-    Write-Host "  Bastion does not assume a brand or LAN IP. Most homes will not match a known GUI family." -ForegroundColor Yellow
+    Write-Host "  Bastion does not assume a brand or LAN IP. Most homes will not match a known admin protocol." -ForegroundColor Yellow
     Write-Host "  Wrong firmware commands can drop Wi-Fi, IPTV, or the admin UI. Prefer the vendor page." -ForegroundColor Yellow
     Write-Host ""
     $fp = Get-BastionGatewayFingerprint
@@ -247,13 +261,13 @@ function Show-HomeGatewayRecoveryMenu {
     Write-Host ("  Family:          {0}" -f $fp.Family) -ForegroundColor White
     Write-Host ("  {0}" -f $fp.Detail) -ForegroundColor DarkGray
     Write-Host ""
-    if ($fp.Family -ne "sagemcom-fast") {
-        Write-Host "  No Sagemcom Fast GUI detected. Nothing to apply here." -ForegroundColor Cyan
+    if ($fp.Family -ne "json-gateway") {
+        Write-Host "  No known gateway admin protocol detected. Nothing to apply here." -ForegroundColor Cyan
         Write-Host "  Open the vendor admin UI in a browser if you need CPE settings." -ForegroundColor DarkGray
         Wait-ForKey "Press any key to return to Network recovery..."
         return
     }
-    Write-Host "  Optional Sagemcom Fast actions (session only; password is never saved):" -ForegroundColor Cyan
+    Write-Host "  Optional gateway actions (session only; password is never saved):" -ForegroundColor Cyan
     Write-Host "  1  Disable Wi-Fi radios (wired-only homes; can break IPTV Wi-Fi boxes)" -ForegroundColor White
     Write-Host "  2  Disable UPnP IGD + USB/SMB file sharing if those objects exist" -ForegroundColor White
     Write-Host "  0  Back (recommended unless you know this CPE)" -ForegroundColor DarkGray
@@ -262,7 +276,7 @@ function Show-HomeGatewayRecoveryMenu {
     if ($c -eq "0") { return }
     Write-Host ""
     Write-Host "  These JSON calls are CPE-specific. A failed xpath is a no-op, not a brick guarantee." -ForegroundColor Yellow
-    if ((Read-YesNo -Prompt "  Continue against the detected Sagemcom Fast GUI (Y/N)?") -ne "Y") {
+    if ((Read-YesNo -Prompt "  Continue against the detected gateway admin (Y/N)?") -ne "Y") {
         Write-Host "  Cancelled." -ForegroundColor DarkGray
         Wait-ForKey "Press any key..."
         return
@@ -313,7 +327,7 @@ function Invoke-BastionSagemcomJson {
 
 function Invoke-BastionSagemcomOptionalHardening {
     <#
-      Purpose: Best-effort Sagemcom Fast JSON after fingerprint match.
+      Purpose: Best-effort JSON-CGI / TR-181 setValue after fingerprint match.
       Honesty: xpaths may 16777219 (unknown) on other skins; those are skipped.
     #>
     param(
