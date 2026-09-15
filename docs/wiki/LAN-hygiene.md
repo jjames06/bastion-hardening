@@ -8,14 +8,14 @@ Enable it under main menu **4**, then **8 Apply**. Dry Run previews first.
 
 | Control | Scope |
 |---------|--------|
-| LLMNR off | This Windows PC |
-| WPAD autodetect override | This Windows PC |
-| mDNS off | This Windows PC |
-| NetBIOS-over-TCP off | IP-enabled adapters on this PC |
+| LLMNR off | The Windows PC running Bastion |
+| WPAD autodetect override | The Windows PC running Bastion |
+| mDNS off | The Windows PC running Bastion |
+| NetBIOS-over-TCP off | IP-enabled adapters on that PC |
 | Green Ethernet / GigaLite / EEE / Power Saving **Disabled** when those properties exist | Physical NICs that expose them |
-| Outbound UDP 137 / 138 / 5353 block rules named `Bastion Block *` | Windows Firewall on this PC |
+| Outbound UDP 137 / 138 / 5353 block rules named `Bastion Block *` | Windows Firewall on that PC |
 
-**Bastion never locks Speed & Duplex.** A 2.5 Gbps link on a long or marginal cable can retrain and look like disconnects; that is a cable/PHY choice, not a global Apply action.
+Apply does **not** lock NIC speed. Speed is a cable and adapter choice, not a Bastion control.
 
 ## What Apply does **not** do
 
@@ -31,13 +31,9 @@ Main menu **9 → 3 Network**
 | Option | Meaning |
 |--------|---------|
 | **5** | Remove the Bastion outbound 137/138/5353 firewall rules only |
-| **6** | Probe **this PC's IPv4 default gateway** over HTTP. If the banner matches a **Sagemcom Fast** GUI (some ISP skins), optional Wi-Fi-radio / UPnP / USB-SMB actions are offered after Yes. Any other CPE: identify only. **Password is never saved.** Most homes will not match. |
+| **6** | Probe the IPv4 default gateway of the computer running Bastion over HTTP. If the admin speaks a known JSON gateway protocol, optional Wi-Fi-radio / UPnP / USB-SMB actions are offered after Yes. Any other CPE: identify only. **Password is never saved.** Most homes will not match. |
 
-If option **6** says unknown or other-cpe, use the vendor admin page. Wrong firmware commands are out of scope.
-
-## Controlled Folder Access / empty Protection History
-
-Windows Security **Protection History** often stays blank for CFA blocks even when Event ID **1123** is in `Microsoft-Windows-Windows Defender/Operational`. Allow apps under **Virus & threat protection → Ransomware protection → Allow an app through Controlled folder access**. Defender Apply also refreshes ExtraCfaPaths that exist on this PC (Edge, PowerShell, and any other listed tools that are present). Do not turn CFA off only because History is empty.
+If option **6** says unknown or other-cpe, use the vendor admin page. Bastion will not send commands to a consumer router UI it does not speak. Wrong firmware commands are out of scope.
 
 ## Side effects
 

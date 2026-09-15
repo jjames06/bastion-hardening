@@ -168,7 +168,7 @@ Expected: "Elevated console ready", then main menu (or use `tools-run-bootstrap.
 
 ## Version
 
-Product-facing version is **15.9.8** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). **15.9.8** adds opt-in **LanHygiene** (workstation LAN leaks / NIC power-save; no ISP CPE flash; no NIC speed lock) and Recovery home-gateway fingerprinting (Sagemcom Fast commands only if the live default gateway matches). Prefer **15.9.7** only if you have not upgraded. Always start with the `.bat`, never the `.ps1` alone.
+Product-facing version is **15.9.8** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). **15.9.8** adds opt-in **LanHygiene** (workstation LAN leaks / NIC power-save; no ISP CPE flash; no NIC speed lock) and Recovery home-gateway fingerprinting (JSON-CGI / TR-181 commands only if the live default gateway matches). Prefer **15.9.7** only if you have not upgraded. Always start with the `.bat`, never the `.ps1` alone.
 
 **Public site note:** Official site download and GitHub **Latest** recommend modular **15.9.8** (plain-text `src\`, MANIFEST integrity; source never encrypted).
 
