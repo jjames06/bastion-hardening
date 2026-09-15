@@ -224,19 +224,17 @@ Also see the [notice above](#before-you-enable-exploitprotection-stricthandle) a
 
 **Recovery:** Main menu **9 > 6 > Defender**: soften NP and/or CFA, or re-harden with CFA allow-path refresh. Allow a trusted app path before turning protections off permanently when you can.
 
-**Honesty about Protection History:** Windows Security **Protection History** often stays **blank** for Controlled Folder Access blocks even when Event ID **1123** is present in `Microsoft-Windows-Windows Defender/Operational`. That is a Windows UI gap, not evidence that CFA is off. Prefer **Virus & threat protection → Ransomware protection → Allow an app through Controlled folder access**. Defender Apply also refreshes ExtraCfaPaths that **exist on this PC** (Edge, PowerShell, and other listed tools only if present). Do not turn CFA off only because History is empty.
-
 ---
 
 ## LanHygiene (opt-in) and home gateways
 
-**LanHygiene is off by default** and is **not** in Quick Harden. When enabled, Apply changes **this Windows PC only**: LLMNR off, WPAD override, mDNS off, NetBIOS-over-TCP off, common NIC power-save properties Disabled when present, optional outbound UDP 137/138/5353 rules.
+**LanHygiene is off by default** and is **not** in Quick Harden. When enabled, Apply changes **the Windows PC running Bastion only**: LLMNR off, WPAD override, mDNS off, NetBIOS-over-TCP off, common NIC power-save properties Disabled when present, optional outbound UDP 137/138/5353 rules.
 
-Bastion **does not assume** a named ISP modem, mesh kit, or LAN IP. Apply never logs in to a modem/router and never locks Speed & Duplex. Gateway handling is live-fingerprint only.
+Bastion **does not assume** a named ISP modem, mesh kit, or LAN IP. Apply never logs in to a modem/router and does not lock NIC speed. Gateway handling is live-fingerprint only.
 
 **Side effects:** printers, NAS, Chromecast, and some Apple discovery can break.
 
 **Recovery:** Main menu **9 → 3 Network → 5** removes the Bastion outbound 137/138/5353 rules only. Policies may need System Restore.
 
-**Home gateway probe (Recovery 9 → 3 → 6):** HTTP GET of **this PC's live IPv4 default gateway**. Vendor JSON is offered only if the live GUI fingerprints as a known family (Sagemcom Fast). Any other CPE: identify only. Password is never saved. Most homes will not match. See [LAN hygiene](wiki/LAN-hygiene.md).
+**Home gateway probe (Recovery 9 → 3 → 6):** HTTP GET of **the live IPv4 default gateway on the computer running Bastion**. Vendor JSON is offered only if that admin speaks a known JSON gateway protocol. Any other CPE: identify only. Password is never saved. Most homes will not match. See [LAN hygiene](wiki/LAN-hygiene.md).
 

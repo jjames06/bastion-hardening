@@ -50,7 +50,7 @@
     v15.9.5: High-IL elevation SID; goto bat; tools-run-bootstrap; LanmanServer-disabled launch fixed.
     v15.9.6: Force black console theme (soft-fail) for consistent dark UI across hosts.
     v15.9.7: Help docs color-coded headings/labels/body for readability on dark theme.
-    v15.9.8: Opt-in LanHygiene (LLMNR/WPAD/mDNS/NetBIOS/NIC power-save; no speed lock); Recovery gateway fingerprint (Sagemcom Fast actions only if detected); CFA extra paths; Protection History honesty.
+    v15.9.8: Opt-in LanHygiene (LLMNR/WPAD/mDNS/NetBIOS/NIC power-save; no speed lock); Recovery gateway fingerprint (JSON gateway actions only if detected); CFA extra paths.
 #>
 param(
     [switch]$BastionSmokeLoadOnly

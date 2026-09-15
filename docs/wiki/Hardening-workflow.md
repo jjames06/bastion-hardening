@@ -106,13 +106,13 @@ Expect real tradeoffs after Apply. Prefer **Recovery hubs** (menu **9**) over ra
 | Firewall / remote | RDP, WinRM, LAN discovery locked | Recovery **9 → 3** Network |
 | DNS | Wrong resolver or need prior servers | Recovery **9 → 3** → reset DHCP or restore snapshot (**4**) |
 | Printers / Chromecast after LanHygiene | Discovery leaks blocked | Recovery **9 → 3 → 5**; [LAN hygiene](LAN-hygiene) |
-| CFA blocks a trusted app; Protection History empty | Event ID 1123 still logs | Recovery **9 → 6** Defender; Windows Security → Allow an app |
+| CFA blocks a trusted app | Allow-list the app | Recovery **9 → 6** Defender; Windows Security → Allow an app |
 | Games / apps exit early | System StrictHandle | [Games and StrictHandle](Games-and-StrictHandle); Recovery **9 → 6** |
 | Browser sites break | Medium/Strict or ECH policies | Menu **6** or Recovery **9 → 4** → that browser → **Default** |
 | OneDrive / Appx bloat | Client or packages removed | System Restore or vendor/Store installers (not Undo) |
 | Full rollback | Many registry/service/Appx changes | System Restore (**13** / **R**, or Safe Mode `rstrui.exe`) |
 
-Full symptom map: [Recovery cookbook](Recovery-cookbook). Site [Help](https://www.operationlockedin.com/bastion/help) works from a phone while you repair this PC.
+Full symptom map: [Recovery cookbook](Recovery-cookbook). Site [Help](https://www.operationlockedin.com/bastion/help) works from a phone while you repair the computer that ran Bastion.
 
 ## 8. Verify after Apply
 

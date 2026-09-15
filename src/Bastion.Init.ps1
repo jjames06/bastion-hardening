@@ -320,9 +320,9 @@ $script:SectionDocs = [ordered]@{
     "LanHygiene" = @{
         Intent  = "Optionally reduce workstation LAN discovery leaks and NIC power-save features that can drop a wired link. Works on any personal Windows PC; it does not assume a brand of home router."
         Changes = "When enabled on Apply: LLMNR policy off, WPAD autodetect override, mDNS off, NetBIOS-over-TCP disabled on IP-enabled adapters, common NIC Green Ethernet/GigaLite/EEE/Power Saving properties set Disabled when present (no Speed & Duplex lock), optional outbound UDP 137/138/5353 block rules named Bastion Block *."
-        Impact  = "Some printers, NAS, and Apple/Chromecast discovery may stop. VPN DNS is unchanged. Does not flash ISP CPE firmware and does not lock 1G vs 2.5G."
+        Impact  = "Some printers, NAS, and Apple/Chromecast discovery may stop. VPN DNS is unchanged. Does not flash ISP CPE firmware and does not lock NIC speed."
         Revert  = "Recovery > 3 Network > LAN hygiene reverse (remove Bastion outbound rules). Re-enable NetBIOS/mDNS/LLMNR via Recovery notes or System Restore. NIC properties: adapter advanced settings."
-        Notes   = "Off by default. Apply never logs in to a home gateway and never assumes a brand or LAN IP. Recovery option 6 probes THIS PC's IPv4 default gateway over HTTP; vendor JSON runs only if that live GUI fingerprints as a known family (Sagemcom Fast). Most homes are not that family; unknown CPE is identify-only. Password is never saved."
+        Notes   = "Off by default. Apply never logs in to a home gateway and never assumes a brand or LAN IP. Recovery option 6 probes the IPv4 default gateway on the computer running Bastion; vendor JSON runs only if that admin speaks a known JSON gateway protocol. Unknown CPE is identify-only. Password is never saved."
     }
     "RdpHostLock" = @{
         Intent  = "Optionally deny this PC as a Remote Desktop host (workstation that should not accept RDP logons)."
@@ -336,7 +336,7 @@ $script:SectionDocs = [ordered]@{
         Changes = "Enables Network Protection and Controlled Folder Access when Defender is available; refreshes a CFA allow-list for known catalog app paths and a few common system paths."
         Impact  = "Suspicious network connections and untrusted apps writing to protected folders are more likely to be blocked. Rare false positives may need an allow path."
         Revert  = "Recovery > 6 Security mitigations > Defender: soften NP and/or CFA, or re-harden with allow-path refresh. Or Windows Security UI."
-        Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings. Windows Security Protection History often stays empty for CFA blocks (Event ID 1123 still logs). Allow apps via Windows Security > Ransomware protection > Allow an app, or let Bastion refresh ExtraCfaPaths. Do not turn CFA off just because History is blank."
+        Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings. Allow a trusted app via Windows Security > Ransomware protection > Allow an app, or let Bastion refresh ExtraCfaPaths."
     }
     "PowerShellAuditing" = @{
         Intent  = "Record PowerShell script block activity for later investigation if malware uses scripts."
