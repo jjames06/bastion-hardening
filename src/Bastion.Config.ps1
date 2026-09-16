@@ -356,6 +356,7 @@ function Initialize-BastionDataStore {
     $script:FirstRunSeeded = $false
 
     Load-BastionConfig
+    Initialize-BastionLocale
     Load-BrowserPolicyStateFile
 
     if (-not $script:HadPriorConfig) {
@@ -537,6 +538,7 @@ function Save-BastionConfig {
             DnsProviderId = $script:DnsProviderId
             WowInstallRoots = @($script:WowInstallRoots)
             StrictHandleExceptionPaths = @($script:StrictHandleExceptionPaths)
+            UiLanguage = $script:BastionUiLanguage
         }
         foreach ($k in $script:Sections.Keys) { $data.Sections[$k] = [bool]$script:Sections[$k] }
         foreach ($k in $script:ProgramInstallRoots.Keys) { $data.ProgramInstallRoots[$k] = $script:ProgramInstallRoots[$k] }
@@ -567,6 +569,10 @@ function Load-BastionConfig {
     if (-not (Test-Path -LiteralPath $script:configFile)) { return }
     try {
         $data = Get-Content -LiteralPath $script:configFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ($data.UiLanguage) {
+            Set-BastionUiLanguage -Lang ([string]$data.UiLanguage)
+            $script:BastionUiLanguageFromConfig = $true
+        }
         if ($data.Sections) {
             foreach ($prop in $data.Sections.PSObject.Properties) {
                 if ($script:Sections.Contains($prop.Name)) {

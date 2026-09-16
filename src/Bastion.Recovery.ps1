@@ -1540,24 +1540,24 @@ function Show-SecurityMitigationsRecoveryMenu {
 function Show-RecoveryMenu {
     while ($true) {
         Clear-BastionScreen
-        Write-Header "RECOVERY / FIX"
-        Write-AppliesWhen -Mode Now -Extra "Prefer a specific hub when you know what broke. Full Undo (1) is broader and still best-effort."
+        Write-Header (BT "hdr.recovery")
+        Write-AppliesWhen -Mode Now -Extra (BT "rec.extra")
         Write-Host ""
-        Write-Host "  1  Undo last Apply (tracked services, firewall groups, DNS snapshot, RDP prior)" -ForegroundColor White
-        Write-Host "  2  Services (Print Spooler, high-risk stack, Xbox)" -ForegroundColor White
-        Write-Host "  3  Network (remote access, LAN discovery, DNS DHCP / restore snapshot)" -ForegroundColor Cyan
-        Write-Host "  4  Browser policies (per browser; Default reverts Bastion policies)" -ForegroundColor White
-        Write-Host "  5  Apps and UI (Copilot, Widgets/Suggestions, Game Bar)" -ForegroundColor Green
-        Write-Host "  6  Security mitigations (StrictHandle, Defender, LSA, policies/tasks)" -ForegroundColor Yellow
-        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host (BT "rec.1") -ForegroundColor White
+        Write-Host (BT "rec.2") -ForegroundColor White
+        Write-Host (BT "rec.3") -ForegroundColor Cyan
+        Write-Host (BT "rec.4") -ForegroundColor White
+        Write-Host (BT "rec.5") -ForegroundColor Green
+        Write-Host (BT "rec.6") -ForegroundColor Yellow
+        Write-Host (BT "rec.0") -ForegroundColor DarkGray
         Write-Host ""
-        Write-Host "  Notes:" -ForegroundColor DarkGray
+        Write-Host (BT "rec.notes") -ForegroundColor DarkGray
         Write-UxBullets -Items @(
-            "Hubs show live status first, then offer reverse / re-harden actions"
-            "Re-opening remote/LAN paths or services increases attack surface"
-            "Appx bloat and OneDrive are not reinstallable here - System Restore or vendor installers"
+            (BT "rec.n1")
+            (BT "rec.n2")
+            (BT "rec.n3")
         ) -ForegroundColor DarkGray
-        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6")
+        $c = Read-MenuChoice -Prompt (BT "menu.select") -Valid @("0","1","2","3","4","5","6")
         switch ($c) {
             "0" { return }
             "1" { Invoke-UndoHardening }

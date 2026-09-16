@@ -116,8 +116,8 @@ function Show-HardwareDriverGuide {
     $hw = Get-HardwareInventory
     while ($true) {
         Clear-BastionScreen
-        Write-Header "HARDWARE AND DRIVER GUIDANCE"
-        Write-Host "  Bastion does NOT install GPU drivers or flash BIOS." -ForegroundColor Yellow
+        Write-Header (BT "hdr.hardware")
+        Write-Host (BT "hw.noInstall") -ForegroundColor Yellow
         Write-Host "  Official vendor/OEM sites only. Avoid third-party driver boosters." -ForegroundColor Gray
         Write-Host ""
         if ($hw.ComputerSystem) {
@@ -209,7 +209,7 @@ function Show-ProgramMenu {
         # Re-detect installed/missing every paint so status stays accurate.
         $apps = @(Get-CatalogProgramRows)
         Clear-BastionScreen
-        Write-Header "PROGRAMS AND INSTALL PATHS"
+        Write-Header (BT "hdr.programs")
         Write-AppliesWhen -Mode MainMenu8 -Extra "Queue missing apps here. Installs run only when you Apply (main menu 8). Uninstall is menu 10 (runs now)."
         Write-Host "  [X] = queued to install (missing apps only). Installed apps stay [ ] here." -ForegroundColor DarkGray
         Write-Host "  No custom path => vendor defaults. L sets paths for the current queue only." -ForegroundColor DarkGray
@@ -304,7 +304,7 @@ function Show-SectionMenu {
     $names = @($script:Sections.Keys)
     while ($true) {
         Clear-BastionScreen
-        Write-Header "HARDENING SECTIONS"
+        Write-Header (BT "hdr.sections")
         Write-AppliesWhen -Mode MainMenu8 -Extra "Toggles here only choose what Apply will run. Windows is not hardened until you leave and press 8."
         Write-Host ""
         Write-Host "  [X] = included in next Apply   [ ] = skipped" -ForegroundColor DarkGray
@@ -383,7 +383,7 @@ function Show-SectionMenu {
 function Show-DnsProviderMenu {
     while ($true) {
         Clear-BastionScreen
-        Write-Header "DNS RESOLVER"
+        Write-Header (BT "hdr.dns")
         Write-AppliesWhen -Mode PreferenceOrApply -Extra "VPN software may override DNS while a tunnel is connected."
         Write-Host ""
         Write-Host "  Status" -ForegroundColor Cyan
@@ -480,7 +480,7 @@ function Show-DnsProviderMenu {
 function Show-BrowserPolicyMenu {
     while ($true) {
         Clear-BastionScreen
-        Write-Header "BROWSER PRIVACY POLICIES"
+        Write-Header (BT "hdr.browser")
         Write-AppliesWhen -Mode Now -Extra "Unlike sections/DNS, a confirmed mode is written immediately. You do not need main menu 8."
         Write-Host "  Only installed Firefox / Chrome / Brave are listed. ECH is never on unless you opt in under Strict." -ForegroundColor Cyan
         Write-Host ""
@@ -607,7 +607,7 @@ function Show-BrowserPolicyMenu {
 # -----------------------------------------------------------------------------
 function Show-UninstallMenu {
     Clear-BastionScreen
-    Write-Header "UNINSTALL"
+    Write-Header (BT "hdr.uninstall")
     Write-AppliesWhen -Mode Now -Extra "Uninstall runs from this menu after YES confirm. It does not wait for main menu 8."
     $wg = Test-WingetAvailable
     if (-not $wg.Ok) {
@@ -643,14 +643,14 @@ function Show-UninstallMenu {
 
         if ($installed.Count -eq 0) {
             Clear-BastionScreen
-            Write-Header "UNINSTALL"
+            Write-Header (BT "hdr.uninstall")
             Write-Host "  No catalog apps are currently installed (nothing to select or remove)." -ForegroundColor Yellow
             Wait-ForKey
             return
         }
 
         Clear-BastionScreen
-        Write-Header "UNINSTALL"
+        Write-Header (BT "hdr.uninstall")
         Write-Host "  Only apps detected as INSTALLED can be selected or uninstalled." -ForegroundColor DarkGray
         Write-Host "  Missing catalog apps never appear here. [X] = queued to uninstall (starts empty)." -ForegroundColor DarkGray
         Write-Host "  After U, install paths are re-checked to verify removal." -ForegroundColor DarkGray
@@ -1272,7 +1272,7 @@ function Show-Help {
 function Show-HelpReportsMenu {
     while ($true) {
         Clear-BastionScreen
-        Write-Header "HELP AND REPORTS"
+        Write-Header (BT "hdr.help")
         Write-Host ""
         Write-Host "  Choose a topic" -ForegroundColor Yellow
         Write-Host "  1  Full documentation (13 pages)" -ForegroundColor Cyan
@@ -1395,53 +1395,54 @@ function Show-MainMenu {
     while ($true) {
         Clear-BastionScreen
         Write-Banner
-        Write-Host ("  Data directory: {0}" -f $script:Config.LogDirectory) -ForegroundColor DarkGray
+        Write-Host (BT "status.dataDir" @($script:Config.LogDirectory)) -ForegroundColor DarkGray
         # First-run vs loaded config messaging (store may be missing after wipe).
         if ($script:FirstRunSeeded -and -not $script:HadPriorConfig) {
-            Write-Host "  First run (or wiped store): defaults seeded. No prior Bastion config was found." -ForegroundColor Cyan
+            Write-Host (BT "status.firstRun") -ForegroundColor Cyan
         } elseif ($script:ConfigLoaded) {
-            Write-Host "  Config loaded from previous session." -ForegroundColor DarkGray
+            Write-Host (BT "status.loaded") -ForegroundColor DarkGray
         } else {
-            Write-Host "  Config: using in-memory defaults (file missing or unreadable)." -ForegroundColor Yellow
+            Write-Host (BT "status.defaults") -ForegroundColor Yellow
         }
         $last = Get-LastApplyInfo
         if ($last) {
             $snapNote = if ($last.HasDnsSnapshot) { "; encrypted DNS snapshot available" } else { "" }
             $rdpNote = if ($last.RdpHostLocked) { "; RDP host prior saved" } else { "" }
-            Write-Host ("  Last Bastion Apply: {0} (v{1}){2}{3}" -f $last.Timestamp, $last.ScriptVersion, $snapNote, $rdpNote) -ForegroundColor DarkGray
+            Write-Host (BT "status.lastApply" @($last.Timestamp, $last.ScriptVersion, $snapNote, $rdpNote)) -ForegroundColor DarkGray
         } else {
-            Write-Host "  No Bastion Apply recorded yet (live OS detection still drives Dry Run / Apply)." -ForegroundColor DarkGray
+            Write-Host (BT "status.noApply") -ForegroundColor DarkGray
         }
-        Write-Host ("  Browser policies: {0}" -f (Get-BrowserPolicyModesSummary)) -ForegroundColor DarkGray
-        Write-Host ("  DNS resolver:   {0}" -f (Get-BastionDnsProviderLabel)) -ForegroundColor DarkGray
+        Write-Host (BT "status.browser" @((Get-BrowserPolicyModesSummary))) -ForegroundColor DarkGray
+        Write-Host (BT "status.dns" @((Get-BastionDnsProviderLabel))) -ForegroundColor DarkGray
 
-        Write-MenuGroup "REVIEW (no changes)"
-        Write-Host "   1    Dry Run (preview only)"
-        Write-Host "   2    Security audit"
-        Write-Host "   3    Hardware and driver guidance"
+        Write-MenuGroup (BT "menu.review")
+        Write-Host (BT "menu.1")
+        Write-Host (BT "menu.2")
+        Write-Host (BT "menu.3")
 
-        Write-MenuGroup "CONFIGURE (save choices; Windows not changed yet)"
-        Write-Host "   4    Hardening sections"
-        Write-Host "   5    Programs and install paths"
-        Write-Host "   6    Browser privacy policies (applies NOW to chosen browsers)"
-        Write-Host "   D    DNS resolver (preference; Apply via A inside D, or 8)"
+        Write-MenuGroup (BT "menu.configure")
+        Write-Host (BT "menu.4")
+        Write-Host (BT "menu.5")
+        Write-Host (BT "menu.6")
+        Write-Host (BT "menu.D")
 
-        Write-MenuGroup "EXECUTE (makes system changes)"
-        Write-Host "   7    Quick Harden (guided preset + Apply)" -ForegroundColor Green
-        Write-Host "   8    Apply Hardening (run enabled sections + install queue)" -ForegroundColor Yellow
+        Write-MenuGroup (BT "menu.execute")
+        Write-Host (BT "menu.7") -ForegroundColor Green
+        Write-Host (BT "menu.8") -ForegroundColor Yellow
 
-        Write-MenuGroup "MAINTAIN (actions run NOW)"
-        Write-Host "   9    Recovery / fix"
-        Write-Host "  10    Uninstall programs"
+        Write-MenuGroup (BT "menu.maintain")
+        Write-Host (BT "menu.9")
+        Write-Host (BT "menu.10")
 
-        Write-MenuGroup "SAFETY (do this first)"
-        Write-Host "  13    Create / name a System Restore Point" -ForegroundColor Green
-        Write-Host "   R    Same as 13 (shortcut)" -ForegroundColor Green
+        Write-MenuGroup (BT "menu.safety")
+        Write-Host (BT "menu.13") -ForegroundColor Green
+        Write-Host (BT "menu.R") -ForegroundColor Green
 
-        Write-MenuGroup "SYSTEM"
-        Write-Host "  11    Help and reports"
-        Write-Host "  12    Reset Bastion config only"
-        Write-Host "   0    Exit"
+        Write-MenuGroup (BT "menu.system")
+        Write-Host (BT "menu.11")
+        Write-Host (BT "menu.12")
+        Write-Host (BT "menu.L")
+        Write-Host (BT "menu.0")
         Write-Host ""
         Write-Host "  --------------------------------------------------------------" -ForegroundColor DarkRed
         # System Restore urgency strip (48h recent window via Get-RestorePointStatus).
@@ -1453,27 +1454,27 @@ function Show-MainMenu {
         if ($rpStatus.Ok -and $rpStatus.HasRecent) {
             $top = $rpStatus.RecentPoints | Select-Object -First 1
             $when = if ($top -and $top.CreationTime) { $top.CreationTime.ToString("yyyy-MM-dd HH:mm") } else { "recent" }
-            Write-Host ("  Restore status: recent point OK ({0})" -f $when) -ForegroundColor Green
-            Write-Host "  Tip: still create a fresh point with 13 / R before major Apply runs." -ForegroundColor DarkGray
+            Write-Host (BT "restore.ok" @($when)) -ForegroundColor Green
+            Write-Host (BT "restore.tip") -ForegroundColor DarkGray
         } elseif ($rpStatus.Ok -and $rpStatus.HasAny) {
-            Write-Host "  Restore status: points exist, but none in the last 48 hours." -ForegroundColor Yellow
-            Write-Host "  Action: press 13 or R to create a named point before Apply / Quick Harden." -ForegroundColor Yellow
+            Write-Host (BT "restore.old") -ForegroundColor Yellow
+            Write-Host (BT "restore.oldAction") -ForegroundColor Yellow
         } elseif ($rpStatus.Ok) {
-            Write-Host "  Restore status: NONE found on this PC." -ForegroundColor Red
-            Write-Host "  Action: press 13 or R BEFORE Apply, Quick Harden, or BloatApps." -ForegroundColor Red
+            Write-Host (BT "restore.none") -ForegroundColor Red
+            Write-Host (BT "restore.noneAction") -ForegroundColor Red
         } else {
-            Write-Host "  Restore status: could not query System Restore." -ForegroundColor Yellow
-            Write-Host "  Check System Protection is on for the system drive (sysdm.cpl > System Protection)." -ForegroundColor Yellow
+            Write-Host (BT "restore.queryFail") -ForegroundColor Yellow
+            Write-Host (BT "restore.check") -ForegroundColor Yellow
         }
-        Write-Host "  Flow: configure (4/5/D) -> Dry Run (1) optional -> restore point (13) -> Apply (8)." -ForegroundColor Yellow
-        Write-Host "  Exception: menu 6 browser policies apply as soon as you confirm a mode." -ForegroundColor Yellow
-        Write-Host "  Installs: catalog IDs only; winget hash enforced. GPU/BIOS: option 3 is guidance only." -ForegroundColor DarkGray
+        Write-Host (BT "menu.flow") -ForegroundColor Yellow
+        Write-Host (BT "menu.exception6") -ForegroundColor Yellow
+        Write-Host (BT "menu.installs") -ForegroundColor DarkGray
         Write-Host "  --------------------------------------------------------------" -ForegroundColor DarkRed
-        Write-Host ("  Programs queued to install: {0}" -f $(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { "None" })) -ForegroundColor White
+        Write-Host (BT "menu.queued" @($(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { BT "menu.none" }))) -ForegroundColor White
         Write-Host ""
 
-        $choice = Read-MenuChoice -Prompt "  Select" -Valid @(
-            "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r","D","d"
+        $choice = Read-MenuChoice -Prompt (BT "menu.select") -Valid @(
+            "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r","D","d","L","l"
         )
 
         # Aliases: Q=Quick Harden, A=Apply, H=Help, R=Restore point, D=DNS.
@@ -1494,6 +1495,7 @@ function Show-MainMenu {
             "11" { Show-HelpReportsMenu }
             "H" { Show-HelpReportsMenu }
             "12" { Reset-ToDefaults }
+            "L" { Show-LanguageMenu }
             "13" { Show-RestorePointMenu }
             "R" { Show-RestorePointMenu }
             "0" {

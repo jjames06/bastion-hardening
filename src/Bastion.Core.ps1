@@ -526,14 +526,14 @@ function Write-AppliesWhen {
     )
     switch ($Mode) {
         "Now" {
-            Write-Host "  Takes effect: NOW from this menu (no main menu 8 needed)." -ForegroundColor Green
+            Write-Host (BT "applies.now") -ForegroundColor Green
         }
         "MainMenu8" {
-            Write-Host "  Takes effect: after main menu 8 (Apply Hardening)." -ForegroundColor Yellow
+            Write-Host (BT "applies.m8") -ForegroundColor Yellow
         }
         "PreferenceOrApply" {
-            Write-Host "  Preference: saved immediately." -ForegroundColor Cyan
-            Write-Host "  Windows DNS: only after Apply - press A here, or main menu 8 (DNS section on)." -ForegroundColor Yellow
+            Write-Host (BT "applies.pref") -ForegroundColor Cyan
+            Write-Host (BT "applies.dns") -ForegroundColor Yellow
         }
     }
     if (-not [string]::IsNullOrWhiteSpace($Extra)) {
@@ -577,19 +577,19 @@ function Read-YesNo([string]$Prompt) {
     while ($true) {
         $tries++
         if ($tries -gt 12) {
-            Write-Host "  Too many invalid inputs; defaulting to N." -ForegroundColor Red
+            Write-Host (BT "input.tooManyN") -ForegroundColor Red
             return "N"
         }
         try {
             $raw = Read-Host $Prompt
             $a = if ($null -eq $raw) { "" } else { ([string]$raw).Trim() }
         } catch {
-            Write-Host "  Input error. Enter Y or N." -ForegroundColor Red
+            Write-Host (BT "input.yn") -ForegroundColor Red
             continue
         }
         if ($a -match '^[Yy]$') { return "Y" }
         if ($a -match '^[Nn]$') { return "N" }
-        Write-Host "  Invalid input. Enter Y or N only." -ForegroundColor Red
+        Write-Host (BT "input.ynOnly") -ForegroundColor Red
     }
 }
 
@@ -606,19 +606,19 @@ function Read-ConfirmYes([string]$Prompt = "  Type YES to proceed") {
     while ($true) {
         $tries++
         if ($tries -gt 12) {
-            Write-Host "  Too many invalid inputs; cancelling." -ForegroundColor Red
+            Write-Host (BT "input.tooManyCancel") -ForegroundColor Red
             return $false
         }
         try {
             $raw = Read-Host $Prompt
             $a = if ($null -eq $raw) { "" } else { ([string]$raw).Trim() }
         } catch {
-            Write-Host "  Input error. Type YES to confirm, or NO to cancel." -ForegroundColor Red
+            Write-Host (BT "input.yesNo") -ForegroundColor Red
             continue
         }
         if ($a -eq "YES") { return $true }
         if ($a -eq "NO" -or $a -match '^[Nn]$') { return $false }
-        Write-Host "  Invalid input. Type YES (all caps) to confirm, or NO to cancel." -ForegroundColor Red
+        Write-Host (BT "input.yesOnly") -ForegroundColor Red
     }
 }
 
@@ -634,14 +634,14 @@ function Read-MenuChoice {
     #>
     param([string]$Prompt = "  Select", [string[]]$Valid)
     if (-not $Valid -or @($Valid).Count -eq 0) {
-        Write-Host "  Internal error: no valid choices configured." -ForegroundColor Red
+        Write-Host (BT "input.menuNone") -ForegroundColor Red
         return "0"
     }
     $tries = 0
     while ($true) {
         $tries++
         if ($tries -gt 20) {
-            Write-Host "  Too many invalid inputs; returning cancel (0) if available." -ForegroundColor Red
+            Write-Host (BT "input.menuGiveUp") -ForegroundColor Red
             foreach ($v in $Valid) {
                 if ([string]$v -eq "0") { return "0" }
             }
