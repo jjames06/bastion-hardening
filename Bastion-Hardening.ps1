@@ -86,6 +86,7 @@ if ([string]::IsNullOrWhiteSpace($script:BastionRoot)) {
 # Order matters: Init first, Core logging next, Config paths, then domain, Apply, Recovery, Menus last.
 $script:BastionSourceModules = @(
     "Bastion.Init.ps1",
+    "Bastion.Locale.ps1",
     "Bastion.Core.ps1",
     "Bastion.Config.ps1",
     "Bastion.Programs.ps1",

@@ -50,6 +50,10 @@ $script:Config = @{
 # Per-launch stamp for log file names (Bastion-Log-yyyyMMdd-HHmmss.txt).
 $script:timestamp   = Get-Date -Format "yyyyMMdd-HHmmss"
 
+# UI language for menus (en/de/es/fr). English default keeps website help screenshots accurate.
+$script:BastionUiLanguage = "en"
+$script:BastionUiLanguageFromConfig = $false
+
 # -----------------------------------------------------------------------------
 # Data-store and first-run flags (bound/filled by Bastion.Config.ps1)
 # -----------------------------------------------------------------------------
