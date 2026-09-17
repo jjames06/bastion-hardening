@@ -346,7 +346,7 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Pairs well with process creation auditing if you enable that separately outside Bastion."
     }
     "ExploitProtection" = @{
-        Intent  = "Apply a mild system exploit mitigation profile, including system-wide StrictHandle, with automatic per-app exceptions only for paths Bastion already knows (today: discovered Wow*.exe including retail Wow.exe and Classic Era WowClassic.exe)."
+        Intent  = "Apply a mild system exploit mitigation profile, including system-wide StrictHandle, with automatic per-app exceptions only for paths Bastion already knows (today: discovered Wow*.exe including retail Wow.exe, Classic Era WowClassic.exe, and Forever-family clients such as WowB.exe)."
         Changes = "Enables DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle system-wide. Then turns StrictHandle OFF only for discovered exception EXEs (currently Wow*.exe / loader-sibling EXEs plus any StrictHandleExceptionPaths you list in Bastion-Config.json)."
         Impact  = "Most processes get stricter handle checks. Programs without an exception may fail to start. World of Warcraft retail and Classic Era are documented examples that broke under system StrictHandle (Eidolon / INVALID_HANDLE in the loader DLL) and are now auto-excepted when found. CS2 was tested OK. Other titles are unknown until reported - no exception means they may still break. Installing Classic after Apply requires a refresh."
         Revert  = "Recovery > 6 > StrictHandle: (1) disable system StrictHandle and reboot, or (2) add full .exe path under StrictHandleExceptionPaths and refresh exceptions. Report so we can ship an automatic exception. Then re-enable system StrictHandle when ready. System Restore remains bulletproof."

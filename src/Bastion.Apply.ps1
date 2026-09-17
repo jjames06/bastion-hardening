@@ -465,9 +465,9 @@ function Invoke-DryRun {
             } catch {}
             $wowEx = @(Get-BastionStrictHandleExceptionPaths)
             $wowNote = if ($wowEx.Count -gt 0) {
-                ("StrictHandle exceptions for {0} WoW/Classic EXE path(s)" -f $wowEx.Count)
+                ("StrictHandle exceptions for {0} WoW/Classic/Forever EXE path(s)" -f $wowEx.Count)
             } else {
-                "no Wow*.exe found yet (exception applied when present at Apply; refresh after installing Classic)"
+                "no Wow*.exe found yet (exception applied when present at Apply; refresh after installing Classic or Forever)"
             }
             if ($depOn -and $sehOn -and $strictOn) {
                 Show-DryItem "ExploitProtection" "Already OK" ("DEP/SEHOP/StrictHandle system ON; {0}" -f $wowNote)
