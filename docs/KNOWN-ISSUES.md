@@ -15,14 +15,14 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 | Program / client | Status (maintainer-tested) |
 |---------------|----------------------------|
-| **World of Warcraft** (`Wow.exe`, Classic Era `WowClassic.exe`) | **Documented example** that **was broken** (Eidolon crash reporter / `INVALID_HANDLE` in `Wow_loader.dll` or `WowClassic_loader.dll`) without an exception. Bastion now **auto-excepts** discovered `Wow*.exe`. Installing Classic after Apply does **not** inherit the retail exception - refresh / re-Apply. |
+| **World of Warcraft** (`Wow.exe`, Classic Era `WowClassic.exe`, Forever / Classic Beta `Wow*.exe` such as `WowB.exe`) | **Documented example** that **was broken** (Eidolon crash reporter / `INVALID_HANDLE` in `*_loader.dll`) without an exception. Bastion **auto-excepts** discovered `Wow*.exe` in known product folders (`_retail_`, `_classic_era_`, `_classic_beta_`, `_forever_`, and any other `_…_` child of the WoW root). Installing Classic or Forever after Apply does **not** inherit the retail exception - refresh / re-Apply. |
 | **Counter-Strike 2** | **Tested - not an issue** under the same system StrictHandle profile. |
 | **Other titles** | **Unknown.** No Bastion exception means they **may still break** until reported and we ship one. |
 
 **What Bastion does**
 
 1. Enables system-wide: DEP, SEHOP, BottomUp, HighEntropy, **StrictHandle**.
-2. Turns **StrictHandle OFF only** for **known exception EXEs** (discovered `Wow*.exe` including `Wow.exe` and `WowClassic.exe`, plus any EXE next to a `*_loader.dll`, plus any full paths in `StrictHandleExceptionPaths`).
+2. Turns **StrictHandle OFF only** for **known exception EXEs** (discovered `Wow*.exe` including `Wow.exe`, `WowClassic.exe`, `WowB.exe`, plus any EXE next to a `*_loader.dll`, plus any full paths in `StrictHandleExceptionPaths`).
 3. Leaves StrictHandle **ON** for everything else.
 
 **If a program fails after Apply**
@@ -69,7 +69,7 @@ Stack typically includes **`Wow_loader.dll`** (retail) or **`WowClassic_loader.d
 
 System-wide **StrictHandle** from ExploitProtection, without a per-app exception for that flavor's EXE. Disabling StrictHandle for `Wow.exe` or `WowClassic.exe` (or system-wide) restored launch. That is the verified causal chain.
 
-Retail and Classic are **separate image paths**. An exception on `_retail_\Wow.exe` does **not** cover `_classic_era_\WowClassic.exe`. If you install Classic after Apply, refresh exceptions (Recovery -> **6** -> StrictHandle -> option **2**) or re-Apply.
+Retail, Classic Era, Classic Beta, and Forever are **separate image paths**. An exception on `_retail_\Wow.exe` does **not** cover `_classic_era_\WowClassic.exe` or `_classic_beta_\WowB.exe` (Forever Beta currently uses the Classic Beta product folder). If you install Classic or Forever after Apply, refresh exceptions (Recovery -> **6** -> StrictHandle -> option **2**) or re-Apply.
 
 ### How we describe it (and what we do *not* claim)
 

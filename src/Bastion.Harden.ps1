@@ -404,12 +404,24 @@ function Test-BastionLooksLikeWowRoot {
     param([string]$Dir)
     if ([string]::IsNullOrWhiteSpace($Dir) -or -not (Test-Path -LiteralPath $Dir -PathType Container)) { return $false }
     # Do NOT treat a lone "data" folder as enough (Battle.net Agent also has data\).
-    $strong = @("_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_", "_ptr_", "_beta_", "_xptr_")
+    $strong = @(
+        "_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_",
+        "_classic_era_ptr_", "_classic_era_beta_",
+        "_forever_", "_forever_beta_", "_classic_forever_",
+        "_ptr_", "_beta_", "_xptr_"
+    )
     foreach ($m in $strong) {
         if (Test-Path -LiteralPath (Join-Path $Dir $m)) { return $true }
     }
+    try {
+        $kids = @(Get-ChildItem -LiteralPath $Dir -Directory -ErrorAction SilentlyContinue)
+        foreach ($k in $kids) {
+            if ($k.Name -match '^_[a-z0-9_]+_$') { return $true }
+        }
+    } catch {}
     if (Test-Path -LiteralPath (Join-Path $Dir "Wow.exe")) { return $true }
     if (Test-Path -LiteralPath (Join-Path $Dir "WowClassic.exe")) { return $true }
+    if (Test-Path -LiteralPath (Join-Path $Dir "WowB.exe")) { return $true }
     # .battle.net beside product dirs is a Blizzard game install marker when under a Warcraft-named folder
     $leaf = Split-Path -Leaf $Dir
     if ($leaf -match 'Warcraft|WoW' -and (Test-Path -LiteralPath (Join-Path $Dir ".battle.net"))) { return $true }
@@ -443,7 +455,7 @@ function Resolve-BastionWowRootFromPath {
     $cur = $candidate
     for ($i = 0; $i -lt 6 -and $cur; $i++) {
         $leaf = Split-Path -Leaf $cur
-        if ($leaf -match '^(World of Warcraft|_retail_|_classic_|_classic_era_|_classic_ptr_|_ptr_|_beta_|_xptr_|UTILS|Utils)$') {
+        if ($leaf -match '^(World of Warcraft|_retail_|_classic_|_classic_era_|_classic_ptr_|_classic_beta_|_classic_era_ptr_|_classic_era_beta_|_forever_|_forever_beta_|_classic_forever_|_ptr_|_beta_|_xptr_|UTILS|Utils)$' -or $leaf -match '^_[a-z0-9_]+_$') {
             if ($leaf -eq "World of Warcraft" -and (Test-BastionLooksLikeWowRoot -Dir $cur)) {
                 return $cur
             }
@@ -542,7 +554,7 @@ function Get-BastionWowRootsFromBattleNetMetadata {
                 # Paths in JSON often use forward slashes
                 foreach ($m in [regex]::Matches($raw, '[A-Za-z]:(?:/|\\)(?:[^\"\\r\\n]+)+')) {
                     $cand = $m.Value
-                    if ($cand -notmatch 'World of Warcraft|Warcraft|\\\\wow|_retail_|_classic_') { continue }
+                    if ($cand -notmatch 'World of Warcraft|Warcraft|\\\\wow|_retail_|_classic_|_forever_|wow_classic') { continue }
                     $root = Resolve-BastionWowRootFromPath -RawPath $cand
                     if ($root -and -not $roots.Contains($root)) { [void]$roots.Add($root) }
                 }
@@ -685,8 +697,10 @@ function Get-BastionStrictHandleExceptionPaths {
         in Wow_loader.dll or WowClassic_loader.dll). Eidolon is BlizzardError.exe - the crash
         reporter window, not the process that needs the exception.
         Undiscovered games are NOT excepted. Full path required (bare names collide).
-        Empty list is normal when WoW is not installed. Installing Classic after Apply does
-        not inherit the retail Wow.exe exception - refresh / re-Apply.
+        Empty list is normal when WoW is not installed. Installing Classic Era, Classic
+        Beta, or Forever after Apply does not inherit the retail Wow.exe exception -
+        refresh / re-Apply. Forever Beta currently ships under _classic_beta_; a later
+        _forever_ product folder is still picked up by scanning any _*_ child of the root.
     #>
     # Per-app StrictHandle OFF targets. System keeps StrictHandle ON for everything else.
     # Loader DLLs (Wow_loader.dll, WowClassic_loader.dll) are loaded by the sibling EXE;
@@ -722,11 +736,21 @@ function Get-BastionStrictHandleExceptionPaths {
     $productDirs = @(
         "_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_",
         "_classic_era_ptr_", "_classic_era_beta_",
+        "_forever_", "_forever_beta_", "_classic_forever_",
         "_ptr_", "_beta_", "_xptr_", "UTILS", "Utils"
     )
     foreach ($root in @(Get-BastionWowInstallRoots)) {
         try {
+            $scan = [System.Collections.Generic.List[string]]::new()
             foreach ($rel in $productDirs) {
+                if (-not $scan.Contains($rel)) { [void]$scan.Add($rel) }
+            }
+            Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '^_[a-z0-9_]+_$' } |
+                ForEach-Object {
+                    if (-not $scan.Contains($_.Name)) { [void]$scan.Add($_.Name) }
+                }
+            foreach ($rel in $scan) {
                 $dir = Join-Path $root $rel
                 if (-not (Test-Path -LiteralPath $dir)) { continue }
                 Add-WowDirExes $dir
@@ -802,7 +826,7 @@ function Write-BastionStrictHandleGuidance {
         [ConsoleColor]$Color = [ConsoleColor]::DarkYellow
     )
     if ($Style -eq "Inline") {
-        Write-Host "      Example: WoW retail and Classic Era broke under system StrictHandle; Bastion auto-excepts discovered Wow*.exe (Wow.exe, WowClassic.exe) now. CS2 tested OK." -ForegroundColor $Color
+        Write-Host "      Example: WoW retail, Classic Era, and Forever-family clients can break under system StrictHandle; Bastion auto-excepts discovered Wow*.exe (Wow.exe, WowClassic.exe, WowB.exe, plus any new _*_ product folder). CS2 tested OK." -ForegroundColor $Color
         Write-Host "      Other programs may break until we ship an exception for them. That is expected and not a silent failure." -ForegroundColor $Color
         Write-Host "      If something breaks: Recovery > 6 > StrictHandle > disable system StrictHandle, reboot, confirm it works." -ForegroundColor $Color
         Write-Host "      Then report game name + full .exe path on GitHub #18 or Discussions #23 so we can add an exception." -ForegroundColor $Color
@@ -817,7 +841,7 @@ function Write-BastionStrictHandleGuidance {
         Write-Host "  are fine under default Windows policy but fatal under StrictHandle." -ForegroundColor DarkGray
         Write-Host "  Example (not the only case): WoW retail Play/Wow.exe and Classic Era WowClassic.exe failed" -ForegroundColor DarkGray
         Write-Host "  (Eidolon crash reporter / INVALID_HANDLE in Wow_loader.dll or WowClassic_loader.dll) until" -ForegroundColor DarkGray
-        Write-Host "  a per-app exception. Bastion auto-excepts discovered Wow*.exe. Install Classic after Apply? Refresh." -ForegroundColor DarkGray
+        Write-Host "  a per-app exception. Bastion auto-excepts discovered Wow*.exe. Install Classic or Forever after Apply? Refresh." -ForegroundColor DarkGray
         Write-Host "  CS2 was tested OK. Other titles: unknown. No exception means it may still break." -ForegroundColor DarkGray
         $wowEx = @()
         try { $wowEx = @(Get-BastionStrictHandleExceptionPaths) } catch { $wowEx = @() }
@@ -843,7 +867,7 @@ function Write-BastionStrictHandleGuidance {
     # Block (default): recovery-menu honesty block
     Write-Host "  Honest notes" -ForegroundColor Yellow
     Write-Host "    System StrictHandle hardens most apps. Some programs (especially games) can fail to start." -ForegroundColor DarkGray
-    Write-Host "    WoW retail and Classic Era are documented examples (auto-excepted when Wow*.exe is found)." -ForegroundColor DarkGray
+    Write-Host "    WoW retail, Classic Era, and Forever-family clients are documented examples (auto-excepted when Wow*.exe is found)." -ForegroundColor DarkGray
     Write-Host "    Other titles may break with NO exception until someone reports them and we add one." -ForegroundColor DarkGray
     Write-Host "    Option 1: turn StrictHandle OFF for the whole PC (security trade-off). Reboot after." -ForegroundColor DarkGray
     Write-Host "    Option 2: refresh known exception EXEs only (keeps system StrictHandle ON)." -ForegroundColor DarkGray
