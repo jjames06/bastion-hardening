@@ -53,6 +53,7 @@
     v15.9.8: Opt-in LanHygiene (LLMNR/WPAD/mDNS/NetBIOS/NIC power-save; no speed lock); Recovery gateway fingerprint (JSON gateway actions only if detected); CFA extra paths.
     v15.9.9: Folded into 16.0 (never shipped as a public zip).
     v16.0: Known CVE checks category (main menu C, Recovery hub 7, optional Apply section). Defender update health (BigDiskBuster compensating control). Catalog detects Windows 10/11 issues Bastion can scan and, where a reliable non-exploit fix exists, remediate after confirm.
+    v16.0 patch: CVE catalogue row FIREWALL-LAN (inbound discovery/RDP/WinRM groups and all-interface 135/139/445/RDP/WinRM listeners); lock File and Printer Sharing over SMBDirect with the Firewall section. Product version stays 16.0.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
