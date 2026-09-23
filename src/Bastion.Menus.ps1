@@ -1208,6 +1208,7 @@ function Show-Help {
         "5. Press 3 for the same catalogue menu as main menu C.",
         "6. Optional daily Defender health task: Recovery 9, then 6, then Defender, then 5, then option 5, then Yes. That task never deletes files.",
         "7. VLC uninstall and SMBv1 disable are not undone here. Use the vendor installer or Windows Optional Features, or System Restore (menu 13 / R).",
+        "8. FIREWALL-LAN inbound group locks: Recovery 9, then 3 Network (Remote access or LAN / discovery). That is hub 3, not hub 7.",
         "Public explanation with sources: https://www.operationlockedin.com/bastion/cve-checks",
         "Phone-friendly reverse steps: https://www.operationlockedin.com/bastion/help#cve-checks",
         "## Honesty rules shared by hubs",

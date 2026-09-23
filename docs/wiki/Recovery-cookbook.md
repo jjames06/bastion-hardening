@@ -29,7 +29,7 @@ Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know wh
 | Game or program fails after Apply (instant exit) | **9 → 6 →** StrictHandle | See [Games and StrictHandle](Games-and-StrictHandle) |
 | Controlled Folder Access blocks a trusted app | **9 → 6 →** Defender | Prefer allow-listing the app (Windows Security → Ransomware protection → Allow an app) |
 | Defender looks on but signatures are old / C: is full | **9 → 6 →** Defender **→ 5** or main **C** | Disk, signature age, TEMP fill files; optional delete + signature update. Catalog row BIGDISKBUSTER. |
-| Want a known CVE scan without full Apply | Main **C** or **9 → 7** | Live scan, then confirm remediations. Recovery **7** reverses Bastion registry/protocol changes only. |
+| Want a known CVE scan without full Apply | Main **C** or **9 → 7** | Live scan, then confirm remediations. Recovery **7** reverses Bastion registry/protocol changes only. FIREWALL-LAN group locks reverse under **9 → 3** Network. |
 | Printers or Chromecast died after LanHygiene | **9 → 3 →** option **5** | Removes Bastion outbound 137/138/5353 rules only; policies may need System Restore |
 | Curious about the ISP modem | **9 → 3 →** option **6** | Identifies the default gateway on the computer running Bastion. CPE commands only if the live admin speaks a known JSON gateway protocol. Most homes will not match. |
 | Need Widgets or suggestions back | **9 → 5** | Restore Widgets/Suggestions defaults |

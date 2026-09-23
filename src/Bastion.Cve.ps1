@@ -280,6 +280,15 @@ function Get-BastionCveCatalog {
             CanRevert   = $false
         }
         [pscustomobject]@{
+            Id          = "FIREWALL-LAN"
+            Title       = "Inbound LAN and remote firewall groups"
+            Cves        = @("CVE-2017-0144","CVE-2021-34527","network-facing workstation paths")
+            Category    = "Firewall"
+            Honesty     = "Local kernel and Defender platform bugs are not stopped by the Windows Firewall. This row is for network-facing paths that still matter on a personal PC: SMB/print sharing, RDP, and WinRM. Bastion locks the same inbound groups the Firewall section uses (including File and Printer Sharing over SMBDirect when present). Reverse is Recovery hub 3, not hub 7."
+            AutoOnApply = $true
+            CanRevert   = $false
+        }
+        [pscustomobject]@{
             Id          = "PRINTNIGHTMARE"
             Title       = "PrintNightmare Point and Print"
             Cves        = @("CVE-2021-34527","CVE-2021-1675","CVE-2021-34481")
@@ -425,6 +434,62 @@ function Test-BastionCveBigDiskBuster {
     return [pscustomobject]@{ Status = "Healthy"; Detail = $ok }
 }
 
+function Get-BastionCveFirewallOpenGroups {
+    $open = New-Object System.Collections.Generic.List[string]
+    $groups = @($script:FirewallGroups)
+    if (-not $groups -or $groups.Count -eq 0) {
+        $groups = @(
+            "File and Printer Sharing",
+            "File and Printer Sharing over SMBDirect",
+            "Network Discovery",
+            "Remote Assistance",
+            "Remote Desktop",
+            "Windows Remote Management",
+            "mDNS"
+        )
+    }
+    foreach ($g in $groups) {
+        try {
+            $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
+            if ($st -and $st.Open) { [void]$open.Add($g) }
+        } catch {}
+    }
+    return @($open.ToArray())
+}
+
+function Get-BastionCveSensitiveListenPorts {
+    $ports = New-Object System.Collections.Generic.List[int]
+    try {
+        $conns = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+            Where-Object {
+                ($_.LocalAddress -eq "0.0.0.0" -or $_.LocalAddress -eq "::") -and
+                $_.LocalPort -in 139,445,3389,5985,5986
+            })
+        foreach ($p in ($conns.LocalPort | Sort-Object -Unique)) {
+            [void]$ports.Add([int]$p)
+        }
+    } catch {}
+    return @($ports.ToArray())
+}
+
+function Test-BastionCveFirewallLan {
+    $open = @(Get-BastionCveFirewallOpenGroups)
+    $ports = @(Get-BastionCveSensitiveListenPorts)
+    if ($open.Count -eq 0 -and $ports.Count -eq 0) {
+        return [pscustomobject]@{
+            Status = "Healthy"
+            Detail = "Inbound File Sharing / Discovery / RDP / WinRM / mDNS groups locked; no all-interface 139/445/RDP/WinRM listeners"
+        }
+    }
+    $bits = New-Object System.Collections.Generic.List[string]
+    if ($open.Count -gt 0) { [void]$bits.Add(("OPEN groups: {0}" -f ($open -join ", "))) }
+    if ($ports.Count -gt 0) { [void]$bits.Add(("all-interface listen {0}" -f ($ports -join ", "))) }
+    return [pscustomobject]@{
+        Status = "Exposed"
+        Detail = ($bits -join "; ")
+    }
+}
+
 function Test-BastionCveSmbv1 {
     try {
         $f = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction Stop
@@ -440,13 +505,24 @@ function Test-BastionCveSmbv1 {
 function Test-BastionCvePrintNightmare {
     $p = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint"
     $v = Get-BastionRegDword -Path $p -Name "RestrictDriverInstallationToAdministrators"
-    if ($v -eq 1) {
-        return [pscustomobject]@{ Status = "Healthy"; Detail = "RestrictDriverInstallationToAdministrators=1" }
+    $share = $null
+    try { $share = Get-BastionFirewallGroupInboundStatus -DisplayGroup "File and Printer Sharing" } catch {}
+    $spool = $null
+    try { $spool = Get-Service -Name "Spooler" -ErrorAction SilentlyContinue } catch {}
+    $remote = ($share -and $share.Open -and $spool -and $spool.Status -eq "Running")
+    $regOk = ($v -eq 1)
+    if ($regOk -and -not $remote) {
+        return [pscustomobject]@{ Status = "Healthy"; Detail = "RestrictDriverInstallationToAdministrators=1; File and Printer Sharing inbound not open while Spooler is running" }
     }
-    if ($null -eq $v) {
-        return [pscustomobject]@{ Status = "Exposed"; Detail = "Point and Print restriction is not set (Microsoft remaining hardening)" }
+    $bits = New-Object System.Collections.Generic.List[string]
+    if (-not $regOk) {
+        if ($null -eq $v) { [void]$bits.Add("Point and Print restriction is not set") }
+        else { [void]$bits.Add(("RestrictDriverInstallationToAdministrators={0}" -f $v)) }
     }
-    return [pscustomobject]@{ Status = "Exposed"; Detail = ("RestrictDriverInstallationToAdministrators={0}" -f $v) }
+    if ($remote) {
+        [void]$bits.Add("Spooler is running and File and Printer Sharing inbound is OPEN (remote PrintNightmare-class path)")
+    }
+    return [pscustomobject]@{ Status = "Exposed"; Detail = ($bits -join "; ") }
 }
 
 function Test-BastionCveFollina {
@@ -533,6 +609,7 @@ function Invoke-BastionCveDetect {
         "DEFENDER-REDSUN"    { return Test-BastionCveDefenderEngine -MinVersion "1.1.26040.8" }
         "BIGDISKBUSTER"      { return Test-BastionCveBigDiskBuster }
         "SMBV1"              { return Test-BastionCveSmbv1 }
+        "FIREWALL-LAN"       { return Test-BastionCveFirewallLan }
         "PRINTNIGHTMARE"     { return Test-BastionCvePrintNightmare }
         "FOLLINA"            { return Test-BastionCveFollina }
         "CERT-PADDING"       { return Test-BastionCveCertPadding }
@@ -642,6 +719,22 @@ function Invoke-BastionCveRemediate {
                 Write-Status "SMB1Protocol disable requested (reboot may be needed)." "Applied"
             } catch {
                 Write-Status ("SMBv1 disable: {0}" -f $_.Exception.Message) "Failed"
+            }
+            return
+        }
+        "FIREWALL-LAN" {
+            Write-Host "    Reverse later is Recovery > 3 Network (not hub 7)." -ForegroundColor DarkGray
+            $open = @(Get-BastionCveFirewallOpenGroups)
+            if ($open.Count -eq 0) {
+                Write-Status "Inbound Bastion firewall groups already locked." "Already"
+                return
+            }
+            foreach ($g in $open) {
+                try {
+                    [void](Disable-BastionFirewallGroupInbound -DisplayGroup $g)
+                } catch {
+                    Write-Status ("Lock {0}: {1}" -f $g, $_.Exception.Message) "Failed"
+                }
             }
             return
         }

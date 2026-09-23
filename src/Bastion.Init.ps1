@@ -279,7 +279,7 @@ foreach ($k in $script:DefaultSections.Keys) {
 $script:SectionDocs = [ordered]@{
     "Firewall" = @{
         Intent  = "Reduce unsolicited inbound exposure while keeping normal outbound traffic working (browsing, VPN, Windows Update)."
-        Changes = "Enables the firewall on Domain, Private, and Public profiles; sets DefaultInboundAction=Block and leaves DefaultOutboundAction=Allow; disables inbound rule groups for File and Printer Sharing, Network Discovery, Remote Assistance, Remote Desktop, Windows Remote Management, and mDNS when those groups are present and enabled."
+        Changes = "Enables the firewall on Domain, Private, and Public profiles; sets DefaultInboundAction=Block and leaves DefaultOutboundAction=Allow; disables inbound rule groups for File and Printer Sharing, File and Printer Sharing over SMBDirect (when present), Network Discovery, Remote Assistance, Remote Desktop, Windows Remote Management, and mDNS when those groups are present and enabled."
         Impact  = "Inbound discovery, SMB sharing, RDP, and WinRM from the network are blocked unless you later re-enable specific rules. Outbound apps continue to work. Does not by itself change fDenyTSConnections or TermService (see optional RdpHostLock)."
         Revert  = "Recovery > 3 Network: Remote access (RDP/Assistance/WinRM) and LAN/discovery (File Sharing, Network Discovery, mDNS) with live OPEN/LOCKED status. Recovery > 1 Undo restores tracked groups from last Apply. Or use wf.msc / System Restore."
         Notes   = "Verify with Get-NetFirewallProfile and Get-NetFirewallRule. Full RDP host needs OPEN Remote Desktop group + system allow + TermService. Dry Run and Audit report the RDP triad (firewall group, system policy, TermService)."
@@ -344,7 +344,7 @@ $script:SectionDocs = [ordered]@{
         Intent  = "Optionally run the known Windows 10/11 CVE catalog during Apply (same detectors as main menu C). Prefer the standalone menu so you can read live status first."
         Changes = "When enabled on Apply: for Exposed rows marked Apply-safe, start a Windows Update scan, request Defender signature/platform update, disable SMBv1 if still on, set PrintNightmare / Wintrust / WDigest / AlwaysInstallElevated hardening. Does not uninstall VLC or delete the ms-msdt protocol during Apply (those stay on menu C with extra confirm)."
         Impact  = "Windows Update Settings may open. Printer driver installs from the network then need an administrator. Rare old Authenticode installers may fail to verify. SMBv1-only NAS will fail."
-        Revert  = "Exact reverse: Bastion-Hardening.bat as Administrator, main menu 9, then 7, then 2, then Yes. That restores Bastion-CveUndo.json only (Point and Print, Wintrust padding, WDigest, AlwaysInstallElevated, ms-msdt backup). It does not uninstall a Microsoft update, re-enable SMBv1, or reinstall VLC. Daily Defender health task: Recovery 9, then 6, then Defender, then 5, then 5, then Yes. System Restore (menu 13 or R) remains the strongest full rollback."
+        Revert  = "Exact reverse: Bastion-Hardening.bat as Administrator, main menu 9, then 7, then 2, then Yes. That restores Bastion-CveUndo.json only (Point and Print, Wintrust padding, WDigest, AlwaysInstallElevated, ms-msdt backup). FIREWALL-LAN group locks: Recovery 9, then 3 Network (Remote access or LAN / discovery). It does not uninstall a Microsoft update, re-enable SMBv1, or reinstall VLC. Daily Defender health task: Recovery 9, then 6, then Defender, then 5, then 5, then Yes. System Restore (menu 13 or R) remains the strongest full rollback."
         Notes   = "Off by default. Not in Quick Harden. Bastion cannot patch Microsoft kernel CVEs; those rows only start an update scan. No exploit payloads."
     }
     "PowerShellAuditing" = @{
@@ -531,8 +531,11 @@ $script:LanDiscoveryFirewallGroups = @(
 )
 
 # Full list Bastion disables under the Firewall section when rules exist and are on.
+# SMBDirect is the RDMA/SMB path on SKUs that ship it; lock it with File and Printer Sharing.
 $script:FirewallGroups = @(
-    "File and Printer Sharing","Network Discovery","Remote Assistance",
+    "File and Printer Sharing",
+    "File and Printer Sharing over SMBDirect",
+    "Network Discovery","Remote Assistance",
     "Remote Desktop","Windows Remote Management","mDNS"
 )
 
