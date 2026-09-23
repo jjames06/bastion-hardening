@@ -2,7 +2,7 @@
 
 **Selective - State-aware - Safety-first Windows hardening for a personal workstation**
 
-Version **15.9.8**
+Version **16.0**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)](#tested-on)
@@ -72,7 +72,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.9.8** | GPLv3; LanHygiene opt-in; Recovery gateway fingerprint (no assumed ISP modem); CFA extra paths; modular `src\`; as of 2026-09-14 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.9.9** | GPLv3; Defender update health (disk, signature age, TEMP fill files, opt-in daily task); LanHygiene opt-in; Recovery gateway fingerprint; CFA extra paths; modular `src\`; as of 2026-09-23 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions -> Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -202,12 +202,12 @@ Best for most people. Prefer one of these **official** sources only (not random 
 
 Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). Older pinned tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain on GitHub if you need them.
 
-1. Download **`bastion-hardening-v15.9.8.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
+1. Download **`bastion-hardening-v15.9.9.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
 2. **Always Unblock the zip before extract** (Mark-of-the-Web): right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**.  
    Skipping this is a common cause of *running scripts is disabled on this system* after extract.
 3. Extract the zip to a location **you** control, for example `C:\Tools\`.  
    Official release zips expand to a **single folder** such as  
-   `bastion-hardening-v15.9.8\` with all product files already together inside.  
+   `bastion-hardening-v15.9.9\` with all product files already together inside.  
    Avoid extracting into `C:\Windows` or Program Files.
 4. Open that folder and confirm these files sit together:
 
@@ -430,7 +430,7 @@ Public resolvers above are DoH-capable. On Apply (v15.8.4+ / 15.9.0), Bastion se
 - **OneDrive & BloatApps** - Hard to reverse. System Restore is the reliable recovery path.
 - **Browser policies / Encrypted Client Hello (ECH)** - BrowserPolicies section defaults off. ECH is **never** applied unless you opt in under Strict for a selected installed browser. Strict HTTPS-Only and ECH can break some sites or networks. Details: [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md).
 - **Undo** - Restores tracked services, firewall groups, an **encrypted DNS snapshot** (when a DNS Apply stored one), and **RDP host prior** (when **RdpHostLock** ran) from the last Apply only (`Bastion-LastApply.json`). It does **not** reinstall AppX packages or OneDrive. Prefer Recovery hubs when you know what broke.
-- **Recovery hubs (menu 9)** - One main-menu entry, six hubs with live status: **1** Undo - **2** Services (Spooler / high-risk / Xbox) - **3** Network (remote access, LAN discovery, DNS reset to DHCP, **restore prior DNS from snapshot**) - **4** Browser policies - **5** Apps and UI (Copilot, Widgets, Game Bar) - **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore.
+- **Recovery hubs (menu 9)** - One main-menu entry, seven hubs with live status: **1** Undo - **2** Services (Spooler / high-risk / Xbox) - **3** Network (remote access, LAN discovery, DNS reset to DHCP, **restore prior DNS from snapshot**) - **4** Browser policies - **5** Apps and UI (Copilot, Widgets, Game Bar) - **6** Security mitigations (StrictHandle, Defender NP/CFA, DO / PS logging / LSA / CEIP tasks) - **7** Known CVE checks (scan and reverse Bastion-recorded remediations). Hubs can re-harden or soften without full Apply. Enabling remote/LAN paths or services increases attack surface; Appx/OneDrive still need Store or System Restore. Main menu **C** opens the same CVE catalog without Apply.
 - **DNS** - Optional. Choose a provider or leave DNS unchanged. Before Bastion changes adapter DNS, it snapshots prior IPv4 servers and stores them **DPAPI-encrypted** for Undo / Network recovery option **4**. Known public resolvers also get Windows DNS-over-HTTPS (same Edit DNS path: template + Encrypted badge). VPN software may still override while connected.
 - **RDP triad / RdpHostLock** - Dry Run and Security Audit report firewall Remote Desktop group + system `fDenyTSConnections` + TermService. Optional section **RdpHostLock** (off by default) denies the OS host switch on Apply; prior state is encrypted for Undo.
 - **Custom install paths** - Only allowed on fixed local volumes outside system directories.
@@ -467,6 +467,14 @@ Tracked on GitHub. Full write-up: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
 4. **Until that exception ships**, keep system StrictHandle off (or keep your manual path exception). After a Bastion update includes it, re-Apply or Recovery -> 6 -> re-enable system StrictHandle + exceptions.
 
 Dry Run, Apply, and Recovery use the same guidance. Full detail: [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
+
+### Defender looks on but signatures are stale
+
+Public write-ups (Sep 2026, "BigDiskBuster") describe filling C: so Defender **platform and definition updates fail** while the service still looks running. There is no Microsoft patch in those write-ups. Bastion cannot fix Windows Update.
+
+**What Bastion does (v15.9.9):** Security audit and Dry Run report free space, signature age, oversized hidden TEMP files, blocking update policies, and recent 0x80070643-style events. Recovery **9 → 6 → Defender → 5** can delete listed TEMP files after you confirm and request `Update-MpSignature`. Apply (Defender section on) turns on check-signatures-before-scan and requests an update when signatures are already stale and C: has headroom. Option **4** on that Recovery screen installs an **opt-in** daily health task; it never deletes files.
+
+Keep headroom on C:. A green shield with week-old signatures is not healthy.
 
 ---
 
@@ -507,12 +515,12 @@ Official assets should extract to **one folder** (not loose files at the zip roo
 ```powershell
 # From the repo root (Windows PowerShell 5.1+ or pwsh)
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1
-# Default version is 15.9.8 (or set -Version / BASTION_RELEASE_VERSION)
-# Regenerates src\MANIFEST.sha256, then writes dist\bastion-hardening-v15.9.8.zip
+# Default version is 16.0 (or set -Version / BASTION_RELEASE_VERSION)
+# Regenerates src\MANIFEST.sha256, then writes dist\bastion-hardening-v16.0.zip
 # Upload that file as the GitHub Release asset (name must match bastion-hardening-v*.zip)
 ```
 
-Layout inside the zip: `bastion-hardening-v15.9.8\Bastion-Hardening.bat` plus helpers (`tools-elevate-self.ps1`, `tools-run-bootstrap.ps1`), `src\Bastion.*.ps1`, and `src\MANIFEST.sha256`. Modular source is plain text; only Apply undo DNS/RDP blobs use DPAPI. **v15.9.8** is the public recommended build (GitHub Latest + official site).
+Layout inside the zip: `bastion-hardening-v16.0\Bastion-Hardening.bat` plus helpers (`tools-elevate-self.ps1`, `tools-run-bootstrap.ps1`), `src\Bastion.*.ps1`, and `src\MANIFEST.sha256`. Modular source is plain text; only Apply undo DNS/RDP blobs use DPAPI. **v16.0** is the current tree (known CVE checks + Defender update health).
 
 ---
 

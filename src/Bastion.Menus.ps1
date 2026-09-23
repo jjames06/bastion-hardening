@@ -324,6 +324,8 @@ function Show-SectionMenu {
                 $suffix = "  (opt-in: deny OS RDP host)"
             } elseif ($n -eq "LanHygiene") {
                 $suffix = "  (opt-in: LAN leaks / NIC power-save; not your ISP modem)"
+            } elseif ($n -eq "CveChecks") {
+                $suffix = "  (opt-in: known CVE catalog on Apply; prefer main menu C)"
             }
             Write-Host ("  {0,2}. {1}  {2}{3}" -f ($i + 1), $mark, $n, $suffix) `
                 -ForegroundColor $(if ($script:Sections[$n]) { "Green" } else { "DarkGray" })
@@ -1187,14 +1189,15 @@ function Show-Help {
 
     $r = Show-HelpPage -Title "HELP 11/13 - RECOVERY AND SAFE MODE" -Page 11 -Total $total -Lines @(
         "## Recovery design (option 9) - modular, not bloated",
-        "Main menu still has a single Recovery entry. Inside are six hubs with live status and targeted reverse. Prefer a hub over full Undo when you know what broke.",
+        "Main menu still has a single Recovery entry. Inside are seven hubs with live status and targeted reverse. Prefer a hub over full Undo when you know what broke.",
         "## Recovery hubs",
         "1 Undo last hardening - services, firewall groups, encrypted DNS snapshot (when present), and RDP host prior (when RdpHostLock was applied). Partial by design.",
         "2 Services - Print Spooler, HighRiskServices stack (file share, UPnP, Remote Registry, ...), Xbox services. Enable one, all present, or re-disable Bastion-style.",
         "3 Network - Remote access (RDP/Assistance/WinRM + optional fDenyTSConnections/TermService), LAN/discovery, DNS reset to DHCP, restore prior DNS from last Apply snapshot (encrypted).",
         "4 Browser policies - same as main menu 6 for installed Firefox/Chrome/Brave. Default reverts that browser (best-effort).",
         "5 Apps and UI - Copilot/M365 tools, Widgets/Suggestions restore, Game Bar / ms-gamingoverlay silence or reverse.",
-        "6 Security mitigations - StrictHandle (disable / refresh exceptions / re-enable), Defender NP/CFA, policies/tasks (DO, PowerShell logging, LSA, CEIP tasks).",
+        "6 Security mitigations - StrictHandle (disable / refresh exceptions / re-enable), Defender NP/CFA, Defender updates/disk (signature age, TEMP fill files, optional daily health task), policies/tasks (DO, PowerShell logging, LSA, CEIP tasks).",
+        "7 Known CVE checks - scan this PC, reverse Bastion CVE registry/protocol remediations, or open the same menu as main C.",
         "## Honesty rules shared by hubs",
         "Status is live from Windows. Enabling services or OPEN firewall groups increases attack surface; LOCKED/DISABLED is the safer default after harden.",
         "Firewall hubs only toggle named groups (not profile Inbound=Block). DNS: option 3 = DHCP; option 4 = restore snapshot when available. Menu D intent may re-apply on next DNS Apply. VPN may override DNS.",
@@ -1433,6 +1436,7 @@ function Show-MainMenu {
         Write-MenuGroup "MAINTAIN (actions run NOW)"
         Write-Host "   9    Recovery / fix"
         Write-Host "  10    Uninstall programs"
+        Write-Host "   C    Known CVE checks (scan now; remediations after confirm)" -ForegroundColor Cyan
 
         Write-MenuGroup "SAFETY (do this first)"
         Write-Host "  13    Create / name a System Restore Point" -ForegroundColor Green
@@ -1466,14 +1470,14 @@ function Show-MainMenu {
             Write-Host "  Check System Protection is on for the system drive (sysdm.cpl > System Protection)." -ForegroundColor Yellow
         }
         Write-Host "  Flow: configure (4/5/D) -> Dry Run (1) optional -> restore point (13) -> Apply (8)." -ForegroundColor Yellow
-        Write-Host "  Exception: menu 6 browser policies apply as soon as you confirm a mode." -ForegroundColor Yellow
+        Write-Host "  Exception: menu 6 browser policies and menu C CVE remediations apply when you confirm." -ForegroundColor Yellow
         Write-Host "  Installs: catalog IDs only; winget hash enforced. GPU/BIOS: option 3 is guidance only." -ForegroundColor DarkGray
         Write-Host "  --------------------------------------------------------------" -ForegroundColor DarkRed
         Write-Host ("  Programs queued to install: {0}" -f $(if ($script:SelectedApps.Count) { $script:SelectedApps -join ", " } else { "None" })) -ForegroundColor White
         Write-Host ""
 
         $choice = Read-MenuChoice -Prompt "  Select" -Valid @(
-            "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r","D","d"
+            "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r","D","d","C","c"
         )
 
         # Aliases: Q=Quick Harden, A=Apply, H=Help, R=Restore point, D=DNS.
@@ -1491,6 +1495,7 @@ function Show-MainMenu {
             "A" { Invoke-ApplyHardening }
             "9" { Show-RecoveryMenu }
             "10" { Show-UninstallMenu }
+            "C" { Show-CveChecksMenu }
             "11" { Show-HelpReportsMenu }
             "H" { Show-HelpReportsMenu }
             "12" { Reset-ToDefaults }

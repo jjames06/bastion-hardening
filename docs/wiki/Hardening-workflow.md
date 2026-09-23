@@ -8,7 +8,7 @@ Ordered path from a clean download to a careful first Apply, then verify and rec
 
 | This guide is | This guide is not |
 |---------------|-------------------|
-| A **user handbook** for **Bastion v15.9.8** modular builds on a **personal** Windows 10/11 PC you administer | A substitute for reading Dry Run lines and in-app Help (menu **11**) on *your* machine |
+| A **user handbook** for **Bastion v15.9.9** modular builds on a **personal** Windows 10/11 PC you administer | A substitute for reading Dry Run lines and in-app Help (menu **11**) on *your* machine |
 | An ordered workflow: right build, safety gates, first Apply, verify, fix side effects | A promise that every app, game, printer, or network setup will keep working after hardening |
 | Honest about section defaults, side effects, and partial Undo | Antivirus, enterprise MDM/Intune guidance, or a "debloat everything" script |
 | Links into Recovery, StrictHandle, FAQ, and modular source review | A place to invent features that are not in the product |
@@ -29,13 +29,13 @@ Confirm all of these before you download or Apply:
 
 If you are not comfortable with restore points and Recovery, **do not run Apply**.
 
-## 3. Get the right build (v15.9.8 modular, Unblock, bat only)
+## 3. Get the right build (v15.9.9 modular, Unblock, bat only)
 
 1. Open **https://www.operationlockedin.com/bastion/download** (resolves the same GitHub Latest zip) **or** **https://github.com/jjames06/bastion-hardening/releases/latest**.
-2. Prefer **v15.9.8** modular: plain-text `src\` modules, thin bootstrap, `MANIFEST.sha256` integrity, forced black console theme, Help colors for dark UI, opt-in LanHygiene (no assumed ISP modem). That is the public recommended build.
-3. Download **`bastion-hardening-v*.zip`** (Latest should match **v15.9.8** when that tag is current).
+2. Prefer **v15.9.9** modular: plain-text `src\` modules, thin bootstrap, `MANIFEST.sha256` integrity, forced black console theme, Help colors for dark UI, Defender update health, opt-in LanHygiene (no assumed ISP modem). This tree is **v15.9.9**; GitHub Latest remains the last published zip until a new tag is cut.
+3. Download **`bastion-hardening-v*.zip`** (or run this local tree).
 4. **Unblock the zip** before extract: right-click zip -> **Properties** -> check **Unblock** if shown -> **OK**. Skipping this often causes *running scripts is disabled on this system*.
-5. Extract to a path **you** control (for example `C:\Tools\`). Expect one folder such as `bastion-hardening-v15.9.8\`.
+5. Extract to a path **you** control (for example `C:\Tools\`). Expect one folder such as `bastion-hardening-v15.9.9\`.
 6. Confirm the product tree: `Bastion-Hardening.bat`, `Bastion-Hardening.ps1`, full **`src\`** (and usually docs). Keep them together.
 7. Right-click **`Bastion-Hardening.bat`** -> **Run as administrator** -> accept UAC.
 
@@ -58,7 +58,7 @@ There is no silent bulk harden. If you cancel at the restore gate or skip YES, n
 
 Use this order the first time on a machine:
 
-1. Download **v15.9.8** modular, **Unblock** the zip, extract, run **`Bastion-Hardening.bat` as administrator**.
+1. Download **v15.9.9** modular, **Unblock** the zip, extract, run **`Bastion-Hardening.bat` as administrator**.
 2. Create a **System Restore Point** (**13** / **R**).
 3. Open **Help** (**11**) for live paths and section docs if anything is unclear.
 4. Run **Dry Run** (**1**). Read Would change lines; do not Apply yet if surprises appear.
@@ -139,7 +139,7 @@ Menu **D** alone never proves DNS changed - only **A** or Apply with DNS on does
 
 If you want to read the product before you trust Apply:
 
-1. Confirm you are on a **v15.9.8** modular tree (bootstrap + `src\Bastion.*.ps1` + `MANIFEST.sha256`).
+1. Confirm you are on a **v15.9.9** modular tree (bootstrap + `src\Bastion.*.ps1` + `MANIFEST.sha256`).
 2. Follow [Modular source layout](Modular-source): bat/helpers -> bootstrap integrity -> `Bastion.Init.ps1` (version, defaults) -> domain modules (`Bastion.Apply.ps1`, `Bastion.Recovery.ps1`, `Bastion.Dns.ps1`, `Bastion.Network.ps1`, and so on).
 3. Technical load order and threat notes: [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md) in the zip or repository.
 4. Bastion hard-fails on missing modules or MANIFEST hash mismatch. Source stays plain text under GPLv3.

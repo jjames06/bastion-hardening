@@ -40,7 +40,7 @@
 # Resolve-BastionLogDirectory may reuse a writable legacy path (flat C:\Temp)
 # or fall back to ProgramData / LOCALAPPDATA / TEMP when C:\Temp is unusable.
 $script:Config = @{
-    ScriptVersion = "15.9.8"
+    ScriptVersion = "16.0"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     # Windows Event Log source name used by Write-Log (Application log).
@@ -254,6 +254,8 @@ $script:DefaultSections = [ordered]@{
     "RdpHostLock"          = $false
     # Opt-in: workstation LAN leak/NIC power-save hygiene. Not CPE firmware. Not Quick Harden.
     "LanHygiene"           = $false
+    # Opt-in: known Windows 10/11 CVE scan + safe remediations. Prefer main menu C. Not Quick Harden.
+    "CveChecks"            = $false
 }
 
 # Subset used by "Quick Harden" style presets (core mitigations without opt-ins).
@@ -332,11 +334,18 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Off by default. Firewall Apply already locks the Remote Desktop inbound group. Use this only if you also want the OS host switch denied."
     }
     "Defender" = @{
-        Intent  = "Turn on stronger Microsoft Defender workstation protections that are often left off by default."
-        Changes = "Enables Network Protection and Controlled Folder Access when Defender is available; refreshes a CFA allow-list for known catalog app paths and a few common system paths."
-        Impact  = "Suspicious network connections and untrusted apps writing to protected folders are more likely to be blocked. Rare false positives may need an allow path."
-        Revert  = "Recovery > 6 Security mitigations > Defender: soften NP and/or CFA, or re-harden with allow-path refresh. Or Windows Security UI."
-        Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings. Allow a trusted app via Windows Security > Ransomware protection > Allow an app, or let Bastion refresh ExtraCfaPaths."
+        Intent  = "Turn on stronger Microsoft Defender workstation protections that are often left off by default, and keep signature updates from silently starving."
+        Changes = "Enables Network Protection and Controlled Folder Access when Defender is available; refreshes a CFA allow-list for known catalog app paths and a few common system paths; turns on CheckForSignaturesBeforeRunningScan; if signatures are more than two days old and C: has headroom, requests Update-MpSignature. Does not delete TEMP files during Apply."
+        Impact  = "Suspicious network connections and untrusted apps writing to protected folders are more likely to be blocked. Rare false positives may need an allow path. A stale-signature update needs network and free disk."
+        Revert  = "Recovery > 6 Security mitigations > Defender: soften NP and/or CFA, re-harden with allow-path refresh, or option 5 for disk/signature health (optional daily task). Or Windows Security UI."
+        Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings and may turn real-time protection off. Allow a trusted app via Windows Security > Ransomware protection > Allow an app, or let Bastion refresh ExtraCfaPaths. Disk-fill update starvation has no Microsoft patch as of Sep 2026; Bastion is a compensating control (detect, clean with confirm, request update). Broader CVE catalog: main menu C / Recovery > 7."
+    }
+    "CveChecks" = @{
+        Intent  = "Optionally run the known Windows 10/11 CVE catalog during Apply (same detectors as main menu C). Prefer the standalone menu so you can read live status first."
+        Changes = "When enabled on Apply: for Exposed rows marked Apply-safe, start a Windows Update scan, request Defender signature/platform update, disable SMBv1 if still on, set PrintNightmare / Wintrust / WDigest / AlwaysInstallElevated hardening. Does not uninstall VLC or delete the ms-msdt protocol during Apply (those stay on menu C with extra confirm)."
+        Impact  = "Windows Update Settings may open. Printer driver installs from the network then need an administrator. Rare old Authenticode installers may fail to verify. SMBv1-only NAS will fail."
+        Revert  = "Recovery > 7 CVE checks: restore recorded registry/protocol values. Windows Update packages and SMBv1 feature state are not undone here. System Restore remains the strongest rollback."
+        Notes   = "Off by default. Not in Quick Harden. Bastion cannot patch Microsoft kernel CVEs; those rows only start an update scan. No exploit payloads."
     }
     "PowerShellAuditing" = @{
         Intent  = "Record PowerShell script block activity for later investigation if malware uses scripts."
@@ -544,6 +553,10 @@ $script:BastionScheduledTaskPaths = @(
     "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
     "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
 )
+
+# Opt-in daily Defender signature/disk health task (Recovery > 6 > Defender > 5). Not in Quick Harden.
+$script:BastionDefenderHealthTaskPath = "\"
+$script:BastionDefenderHealthTaskName = "BastionDefenderUpdateHealth"
 
 # Regex used when removing Copilot / Office Hub style user Appx packages.
 $script:CopilotM365PackageMatch = 'Copilot|MicrosoftOfficeHub|Microsoft.Copilot'

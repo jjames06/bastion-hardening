@@ -1292,9 +1292,10 @@ function Show-DefenderRecoveryMenu {
         Write-Host "  2  Soften: turn Controlled Folder Access OFF" -ForegroundColor Yellow
         Write-Host "  3  Soften both NP and CFA" -ForegroundColor Yellow
         Write-Host "  4  Re-harden: turn NP + CFA ON and refresh CFA allow paths" -ForegroundColor Green
+        Write-Host "  5  Defender updates and disk space (stale signatures / fill files)" -ForegroundColor Cyan
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
-        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4")
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5")
         switch ($c) {
             "0" { return }
             "1" {
@@ -1336,6 +1337,126 @@ function Show-DefenderRecoveryMenu {
                 }
                 Wait-ForKey "Press any key to return to Defender recovery..."
             }
+            "5" { Show-DefenderUpdateHealthMenu }
+        }
+    }
+}
+
+function Show-DefenderUpdateHealthMenu {
+    <#
+      Purpose:
+        Show Defender signature age, realtime, and C: free space. Offer cleanup of
+        oversized hidden TEMP files and a signature update request. Compensating
+        control for disk-fill update starvation (no Microsoft patch as of Sep 2026).
+
+      When called:
+        Recovery > Defender > 5.
+
+      Side effects:
+        Status is read-only until the user confirms delete or update.
+    #>
+    while ($true) {
+        Clear-BastionScreen
+        Write-Header "DEFENDER UPDATES AND DISK"
+        $h = Get-BastionDefenderUpdateHealth
+        Write-Host "  Live status" -ForegroundColor Cyan
+        Write-Host ("    C: free:                   {0} GiB ({1}%)" -f $(if ($null -eq $h.FreeGiB) { "?" } else { $h.FreeGiB }), $(if ($null -eq $h.FreePct) { "?" } else { $h.FreePct })) `
+            -ForegroundColor $(if ($null -eq $h.FreeGiB) { "DarkGray" } elseif ($h.FreeGiB -lt 5) { "Red" } elseif ($h.FreeGiB -lt 10) { "Yellow" } else { "Green" })
+        Write-Host ("    Real-time protection:      {0}" -f $(if ($null -eq $h.RealTimeOn) { "UNKNOWN" } elseif ($h.RealTimeOn) { "ON" } else { "OFF" })) `
+            -ForegroundColor $(if ($h.RealTimeOn) { "Green" } elseif ($null -eq $h.RealTimeOn) { "DarkGray" } else { "Red" })
+        Write-Host ("    Signature version:         {0}" -f $(if ($h.SignatureVersion) { $h.SignatureVersion } else { "?" })) -ForegroundColor White
+        Write-Host ("    Signatures last updated:   {0}" -f $(if ($h.SignatureLastUpdated) { $h.SignatureLastUpdated } else { "?" })) -ForegroundColor White
+        if ($null -ne $h.SignatureAgeDays) {
+            $ageCol = if ($h.SignatureAgeDays -le 2) { "Green" } elseif ($h.SignatureAgeDays -le 7) { "Yellow" } else { "Red" }
+            Write-Host ("    Signature age:             {0:N1} days" -f $h.SignatureAgeDays) -ForegroundColor $ageCol
+        }
+        Write-Host ("    Engine version:            {0}" -f $(if ($h.EngineVersion) { $h.EngineVersion } else { "?" })) -ForegroundColor DarkGray
+        Write-Host ("    Check signatures before scan: {0}" -f $(if ($null -eq $h.CheckForSignaturesBeforeScan) { "?" } elseif ($h.CheckForSignaturesBeforeScan) { "ON" } else { "OFF" })) `
+            -ForegroundColor $(if ($h.CheckForSignaturesBeforeScan) { "Green" } elseif ($null -eq $h.CheckForSignaturesBeforeScan) { "DarkGray" } else { "Yellow" })
+        Write-Host ("    Daily health task:         {0}" -f $(if ($h.HealthTaskPresent) { $h.HealthTaskState } else { "not installed" })) `
+            -ForegroundColor $(if ($h.HealthTaskPresent) { "Green" } else { "DarkGray" })
+        Write-Host ("    Oversized hidden TEMP files: {0}" -f $h.FillSuspects.Count) `
+            -ForegroundColor $(if ($h.FillSuspects.Count -gt 0) { "Yellow" } else { "Green" })
+        foreach ($f in $h.FillSuspects) {
+            Write-Host ("      {0:N2} GiB  {1}" -f $f.GiB, $f.FullName) -ForegroundColor DarkYellow
+        }
+        if ($h.PolicyNotes.Count -gt 0) {
+            Write-Host "    Blocking policies:" -ForegroundColor Red
+            foreach ($n in $h.PolicyNotes) {
+                Write-Host ("      {0}" -f $n) -ForegroundColor Red
+            }
+        }
+        if ($h.RecentUpdateFailures.Count -gt 0) {
+            Write-Host ("    Recent update-failure events: {0}" -f $h.RecentUpdateFailures.Count) -ForegroundColor Yellow
+            foreach ($e in $h.RecentUpdateFailures) {
+                Write-Host ("      {0:g}  id {1}" -f $e.TimeCreated, $e.Id) -ForegroundColor DarkYellow
+            }
+        }
+        Write-Host ""
+        Write-Host "  Honest notes" -ForegroundColor Yellow
+        Write-Host "    A running Defender service can still have stale signatures if updates fail." -ForegroundColor DarkGray
+        Write-Host "    One public PoC fills the system drive while Defender tries to update, then deletes the fill file." -ForegroundColor DarkGray
+        Write-Host "    While that process holds the file, C: looks full even if Explorer shows little. Delete can fail until the process exits; reboot if needed." -ForegroundColor DarkGray
+        Write-Host "    Bastion cannot patch Windows. It can show disk/signature health, delete obvious huge TEMP files you confirm, and ask Defender to update." -ForegroundColor DarkGray
+        Write-Host "    Third-party antivirus may turn real-time protection off. That is a product conflict, not this disk-fill trick." -ForegroundColor DarkGray
+        Write-Host "    The daily task is opt-in. It logs to Application (source BastionHardening) and never deletes files." -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  1  Delete listed oversized hidden TEMP files (confirm each)" -ForegroundColor Yellow
+        Write-Host "  2  Request a Defender signature update now" -ForegroundColor Green
+        Write-Host "  3  Delete listed files, then request a signature update" -ForegroundColor Green
+        Write-Host "  4  Install daily Defender signature health task (opt-in)" -ForegroundColor Cyan
+        Write-Host "  5  Remove daily Defender signature health task" -ForegroundColor Yellow
+        Write-Host "  0  Back" -ForegroundColor DarkGray
+        Write-Host ""
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5")
+        switch ($c) {
+            "0" { return }
+            "1" { Invoke-BastionClearSuspectedFillFiles -Health $h }
+            "2" { Invoke-BastionDefenderSignatureUpdate }
+            "3" {
+                Invoke-BastionClearSuspectedFillFiles -Health $h
+                Invoke-BastionDefenderSignatureUpdate
+            }
+            "4" {
+                if ((Read-YesNo -Prompt "  Install a daily SYSTEM task that requests a signature update when signatures are stale (Y/N)?") -eq "Y") {
+                    try {
+                        $p = Install-BastionDefenderHealthTask
+                        Write-Status ("Daily task BastionDefenderUpdateHealth installed (06:15). Helper: {0}" -f $p) "Applied"
+                    } catch {
+                        Write-Status ("Health task install failed: {0}" -f $_.Exception.Message) "Failed"
+                    }
+                }
+            }
+            "5" {
+                if ((Read-YesNo -Prompt "  Remove the daily Defender health task (Y/N)?") -eq "Y") {
+                    try {
+                        Uninstall-BastionDefenderHealthTask
+                        Write-Status "Daily Defender health task removed." "Applied"
+                    } catch {
+                        Write-Status ("Health task remove failed: {0}" -f $_.Exception.Message) "Failed"
+                    }
+                }
+            }
+        }
+        Wait-ForKey "Press any key to refresh Defender update health..."
+    }
+}
+
+function Invoke-BastionClearSuspectedFillFiles {
+    param($Health)
+    if (-not $Health) { $Health = Get-BastionDefenderUpdateHealth }
+    if ($Health.FillSuspects.Count -eq 0) {
+        Write-Status "No oversized hidden TEMP files matched the heuristic." "Already"
+        return
+    }
+    Write-Host "  These files are large and hidden or very large in TEMP. They may be legitimate caches." -ForegroundColor Yellow
+    if ((Read-YesNo -Prompt "  Delete the listed files (Y/N)?") -ne "Y") { return }
+    foreach ($f in $Health.FillSuspects) {
+        try {
+            Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop
+            Write-Status ("Deleted {0}" -f $f.FullName) "Applied"
+        } catch {
+            Write-Status ("Could not delete {0}: {1}" -f $f.FullName, $_.Exception.Message) "Failed"
         }
     }
 }
@@ -1533,7 +1654,7 @@ function Show-SecurityMitigationsRecoveryMenu {
 
 # -----------------------------------------------------------------------------
 # Show-RecoveryMenu
-#   Main menu 9 entry. Six hubs (see file header). Prefer a specific hub when
+#   Main menu 9 entry. Seven hubs (see file header). Prefer a specific hub when
 #   the user knows what broke; full Undo remains partial by design.
 #   Option 4 reuses Show-BrowserPolicyMenu (same as main menu 6).
 # -----------------------------------------------------------------------------
@@ -1549,6 +1670,7 @@ function Show-RecoveryMenu {
         Write-Host "  4  Browser policies (per browser; Default reverts Bastion policies)" -ForegroundColor White
         Write-Host "  5  Apps and UI (Copilot, Widgets/Suggestions, Game Bar)" -ForegroundColor Green
         Write-Host "  6  Security mitigations (StrictHandle, Defender, LSA, policies/tasks)" -ForegroundColor Yellow
+        Write-Host "  7  Known CVE checks (scan, reverse Bastion CVE remediations)" -ForegroundColor Cyan
         Write-Host "  0  Back" -ForegroundColor DarkGray
         Write-Host ""
         Write-Host "  Notes:" -ForegroundColor DarkGray
@@ -1557,7 +1679,7 @@ function Show-RecoveryMenu {
             "Re-opening remote/LAN paths or services increases attack surface"
             "Appx bloat and OneDrive are not reinstallable here - System Restore or vendor installers"
         ) -ForegroundColor DarkGray
-        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6")
+        $c = Read-MenuChoice -Prompt "  Select" -Valid @("0","1","2","3","4","5","6","7")
         switch ($c) {
             "0" { return }
             "1" { Invoke-UndoHardening }
@@ -1566,6 +1688,7 @@ function Show-RecoveryMenu {
             "4" { Show-BrowserPolicyMenu }
             "5" { Show-AppsUiRecoveryMenu }
             "6" { Show-SecurityMitigationsRecoveryMenu }
+            "7" { Show-CveRecoveryMenu }
         }
     }
 }

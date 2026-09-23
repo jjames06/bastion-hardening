@@ -432,6 +432,21 @@ function Invoke-DryRun {
     if (-not $script:Sections["LanHygiene"]) { Show-DryItem "LanHygiene" "Skipped" "Section disabled (opt-in; not CPE firmware)" }
     else { Invoke-BastionLanHygiene -DryRun }
 
+    if (-not $script:Sections["CveChecks"]) { Show-DryItem "CveChecks" "Skipped" "Section disabled (opt-in; prefer main menu C)" }
+    else {
+        try {
+            $rows = @(Invoke-BastionCveScan -Quiet)
+            $ex = @($rows | Where-Object { $_.Status -eq "Exposed" -and $_.AutoOnApply })
+            if ($ex.Count -eq 0) {
+                Show-DryItem "CveChecks" "Already OK" "No Apply-safe Exposed rows (full catalog is main menu C)"
+            } else {
+                Show-DryItem "CveChecks" "Would change" ("Apply-safe Exposed: {0}" -f (($ex | ForEach-Object { $_.Id }) -join ", "))
+            }
+        } catch {
+            Show-DryItem "CveChecks" "Would change" "Scan failed to preview; main menu C still works"
+        }
+    }
+
     if (-not $script:Sections["Defender"]) { Show-DryItem "Defender" "Skipped" "Section disabled" }
     else {
         try {
@@ -441,6 +456,25 @@ function Invoke-DryRun {
             if ($np -and $cfa) { Show-DryItem "Defender" "Already OK" "Network Protection + CFA on (Apply still refreshes CFA allow-list)" }
             else { Show-DryItem "Defender" "Would change" "Enable Network Protection and/or CFA; allow-list known app paths" }
         } catch { Show-DryItem "Defender" "Would change" "Enable NP + CFA if Defender available" }
+        try {
+            $du = Get-BastionDefenderUpdateHealth
+            if ($null -ne $du.FreeGiB -and $du.FreeGiB -lt 5) {
+                Show-DryItem "DefenderUpdates" "Would change" ("C: has {0} GiB free; signature updates can fail. Recovery > 6 > Defender > 5" -f $du.FreeGiB)
+            } elseif ($null -ne $du.SignatureAgeDays -and $du.SignatureAgeDays -gt 2) {
+                Show-DryItem "DefenderUpdates" "Would change" ("Signatures {0:N0} days old; Apply will request an update if C: has headroom" -f $du.SignatureAgeDays)
+            } else {
+                Show-DryItem "DefenderUpdates" "Already OK" "Signature age and C: free space look usable"
+            }
+            if ($du.FillSuspects.Count -gt 0) {
+                Show-DryItem "DefenderUpdates" "Would change" ("{0} oversized hidden TEMP file(s); cleanup is Recovery-only (you confirm delete)" -f $du.FillSuspects.Count)
+            }
+            if ($du.CheckForSignaturesBeforeScan -eq $false) {
+                Show-DryItem "DefenderUpdates" "Would change" "Enable CheckForSignaturesBeforeRunningScan"
+            }
+            if ($du.PolicyNotes.Count -gt 0) {
+                Show-DryItem "DefenderUpdates" "Would change" ("Blocking policy: {0}" -f ($du.PolicyNotes -join "; "))
+            }
+        } catch {}
     }
 
     if (-not $script:Sections["PowerShellAuditing"]) { Show-DryItem "PowerShellAuditing" "Skipped" "Section disabled" }
@@ -905,9 +939,31 @@ function Invoke-SelfTest {
         if ($st -and $st.AntivirusSignatureLastUpdated) {
             $age = (Get-Date) - [datetime]$st.AntivirusSignatureLastUpdated
             if ($age.TotalDays -le 2) { Add-Good "Defender signatures" "Fresh" ($st.AntivirusSignatureLastUpdated.ToString()) }
-            elseif ($age.TotalDays -le 7) { Add-Warn "Defender signatures" ("{0:N0} days old" -f $age.TotalDays) "" "Windows Security update" }
-            else { Add-Bad "Defender signatures" ("{0:N0} days old" -f $age.TotalDays) "" "Update immediately" }
+            elseif ($age.TotalDays -le 7) { Add-Warn "Defender signatures" ("{0:N0} days old" -f $age.TotalDays) "" "Recovery > 6 > Defender > 5" }
+            else { Add-Bad "Defender signatures" ("{0:N0} days old" -f $age.TotalDays) "" "Recovery > 6 > Defender > 5 then request update" }
         }
+        try {
+            $du = Get-BastionDefenderUpdateHealth
+            if ($null -ne $du.FreeGiB) {
+                if ($du.FreeGiB -lt 5) { Add-Bad "System drive free space" ("{0} GiB" -f $du.FreeGiB) "Defender updates can fail when C: is nearly full" "Recovery > 6 > Defender > 5" }
+                elseif ($du.FreeGiB -lt 10) { Add-Warn "System drive free space" ("{0} GiB" -f $du.FreeGiB) "" "Keep headroom so signature updates can stage" }
+                else { Add-Good "System drive free space" ("{0} GiB" -f $du.FreeGiB) }
+            }
+            if ($du.FillSuspects.Count -gt 0) {
+                Add-Warn "Oversized hidden TEMP files" ("{0} file(s)" -f $du.FillSuspects.Count) "Can starve Defender updates" "Recovery > 6 > Defender > 5"
+            }
+            if ($du.PolicyNotes.Count -gt 0) {
+                Add-Bad "Defender update policy" ($du.PolicyNotes -join "; ") "" "Clear the blocking policy, then Recovery > 6 > Defender > 5"
+            }
+            if ($du.RecentUpdateFailures.Count -gt 0) {
+                Add-Warn "Recent Defender update failures" ("{0} event(s) in 14 days" -f $du.RecentUpdateFailures.Count) "0x80070643 can mean a full disk during the update" "Recovery > 6 > Defender > 5"
+            }
+            if ($du.HealthTaskPresent) {
+                Add-Good "Defender health task" $du.HealthTaskState
+            } elseif ($null -ne $du.SignatureAgeDays -and $du.SignatureAgeDays -gt 2) {
+                Add-Warn "Defender health task" "Not installed" "Optional daily catch for stale signatures" "Recovery > 6 > Defender > 5 option 4"
+            }
+        } catch {}
         if ($st -and $st.IsTamperProtected) { Add-Good "Tamper Protection" "On" }
         elseif ($st) { Add-Warn "Tamper Protection" "Off / unknown" "" "Windows Security settings" }
         try {
@@ -1429,13 +1485,47 @@ function Invoke-ApplyHardening {
         Invoke-BastionLanHygiene
     }
 
+    if ($script:Sections["CveChecks"]) {
+        Write-Host "  [CveChecks]" -ForegroundColor Cyan
+        Write-Host "    Apply-safe rows only. VLC uninstall and Follina protocol delete stay on main menu C." -ForegroundColor DarkGray
+        try {
+            $rows = @(Invoke-BastionCveScan -Quiet)
+            $need = @($rows | Where-Object { $_.Status -eq "Exposed" -and $_.AutoOnApply })
+            if ($need.Count -eq 0) {
+                Write-Status "No Apply-safe Exposed CVE rows." "Already"
+            } else {
+                $cat = @(Get-BastionCveCatalog)
+                $entries = @()
+                foreach ($r in $need) {
+                    $hit = $cat | Where-Object { $_.Id -eq $r.Id } | Select-Object -First 1
+                    if ($hit) { $entries += $hit }
+                }
+                Invoke-BastionCveRemediateBatch -Entries $entries -NoConfirm -AutoOnly
+            }
+        } catch {
+            Write-Status ("CveChecks failed: {0}" -f $_.Exception.Message) "Failed"
+        }
+    }
+
     if ($script:Sections["Defender"]) {
         Write-Host "  [Defender]" -ForegroundColor Cyan
         try {
             Set-MpPreference -EnableNetworkProtection Enabled -ErrorAction SilentlyContinue
             Set-MpPreference -EnableControlledFolderAccess Enabled -ErrorAction SilentlyContinue
+            try { Set-MpPreference -CheckForSignaturesBeforeRunningScan $true -ErrorAction SilentlyContinue } catch {}
             Write-Status "Network Protection + CFA requested" "Applied"
             Add-CfaAllowPaths
+            $du = $null
+            try { $du = Get-BastionDefenderUpdateHealth } catch {}
+            if ($du -and $null -ne $du.FreeGiB -and $du.FreeGiB -lt 5) {
+                Write-Status ("C: has {0} GiB free. Defender updates can fail until you free space (Recovery > 6 > Defender > 5)." -f $du.FreeGiB) "Warn"
+            } elseif ($du -and $null -ne $du.SignatureAgeDays -and $du.SignatureAgeDays -gt 2) {
+                Write-Host "    Signatures are stale. Requesting an update (needs disk headroom and network)." -ForegroundColor Yellow
+                Invoke-BastionDefenderSignatureUpdate -NoConfirm
+            }
+            if ($du -and $du.FillSuspects.Count -gt 0) {
+                Write-Status ("{0} oversized hidden TEMP file(s) found. Review Recovery > 6 > Defender > 5 (Apply does not delete them)." -f $du.FillSuspects.Count) "Warn"
+            }
         } catch {
             Write-Status ("Defender failed: {0}" -f $_.Exception.Message) "Failed"
         }
