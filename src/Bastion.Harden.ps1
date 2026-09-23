@@ -362,7 +362,13 @@ function Get-BastionDefenderUpdateHealth {
         $sizeBytes = [int64]$sys.Size
     }
     $st = $null
-    try { $st = Get-MpComputerStatus -ErrorAction Stop } catch {}
+    # Reuse a live CVE-scan memo only. Do not create that cache from Dry Run / Audit.
+    if ($script:BastionCveScanCache -is [hashtable] -and $script:BastionCveScanCache.Contains("mp")) {
+        $st = $script:BastionCveScanCache["mp"]
+    }
+    if (-not $st) {
+        try { $st = Get-MpComputerStatus -ErrorAction Stop } catch {}
+    }
     $sigAgeDays = $null
     if ($st -and $st.AntivirusSignatureLastUpdated) {
         try { $sigAgeDays = ((Get-Date) - [datetime]$st.AntivirusSignatureLastUpdated).TotalDays } catch {}

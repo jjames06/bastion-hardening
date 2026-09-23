@@ -53,7 +53,7 @@
     v15.9.8: Opt-in LanHygiene (LLMNR/WPAD/mDNS/NetBIOS/NIC power-save; no speed lock); Recovery gateway fingerprint (JSON gateway actions only if detected); CFA extra paths.
     v15.9.9: Folded into 16.0 (never shipped as a public zip).
     v16.0: Known CVE checks category (main menu C, Recovery hub 7, optional Apply section). Defender update health (BigDiskBuster compensating control). Catalog detects Windows 10/11 issues Bastion can scan and, where a reliable non-exploit fix exists, remediate after confirm.
-    v16.0 patch: FIREWALL-LAN; SMBDirect; Office Click-to-Run reminder (CVE-2026-78509/78510); SMBv3 DisableCompression; RDP NLA; louder finish-it-yourself banners for Windows Update / Office / Defender. Product version stays 16.0.
+    v16.0 patch: FIREWALL-LAN; SMBDirect; Office Click-to-Run reminder; SMBv3 DisableCompression; RDP NLA; finish-it-yourself banners; CVE undo DPAPI wrap (no plaintext fallback); Bastion-folder directory ACL; scan cache for Defender/SMB1/firewall; faster Office detect (no full Uninstall hive walk). Product version stays 16.0.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
@@ -120,7 +120,10 @@ $script:BastionRequiredCommands = @(
     "Get-BastionLanHygieneStatus",
     "Get-BastionDefenderUpdateHealth",
     "Show-CveChecksMenu",
-    "Invoke-BastionCveScan"
+    "Invoke-BastionCveScan",
+    "Protect-BastionBlob",
+    "Set-BastionSensitiveDirectoryAcl",
+    "Save-BastionCveUndo"
 )
 
 # -----------------------------------------------------------------------------

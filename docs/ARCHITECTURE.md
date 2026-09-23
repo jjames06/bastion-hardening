@@ -29,7 +29,7 @@ Handbook-style overview for non-developers: [wiki Modular source](wiki/Modular-s
 | Single entry | Users **always** launch `Bastion-Hardening.bat` (UAC). Never double-click `Bastion-Hardening.ps1` alone under Restricted ExecutionPolicy. |
 | Shared state | Modules are **dot-sourced** into the bootstrap runspace so `$script:` variables and functions are shared. |
 | Fail closed | Startup **hard-fails** if `src\` modules or `src\MANIFEST.sha256` are missing or hashes mismatch. |
-| Encrypt data, not code | DNS undo snapshots and RDP host prior use **DPAPI** (CurrentUser + fixed entropy). Preferences JSON is not secret but gets a tight ACL. Modular load is always plain text. |
+| Encrypt data, not code | DNS undo snapshots, RDP host prior, and CVE undo items use **DPAPI** (CurrentUser + fixed entropy). Preferences, session, and logs stay plaintext with SYSTEM+Administrators ACL. Modular load is always plain text. |
 
 ## Encryption vs modular load (read this)
 
@@ -40,6 +40,7 @@ Handbook-style overview for non-developers: [wiki Modular source](wiki/Modular-s
 | `tools-elevate-self.ps1` / `tools-run-bootstrap.ps1` | **No** | Plain text helpers for the `.bat` |
 | `src\MANIFEST.sha256` | **No** (not encryption) | SHA256 **integrity** hashes; tamper detection only |
 | DNS prior / RDP host prior in undo store | **Yes** | Windows **DPAPI** after a real Apply that recorded them |
+| CVE undo items (`Bastion-CveUndo.json`) | **Yes** | Same **DPAPI** helper (`ItemsProtected`); no plaintext fallback |
 
 If a launch fails after hardening, the cause is almost always **launcher / elevation / ExecutionPolicy / cmd parse**, not "encrypted modules." Modules are intentionally readable.
 
@@ -142,8 +143,10 @@ Bootstrap (`Bastion-Hardening.ps1`) always:
 |-------|------------|---------------|
 | Product source (`src\*.ps1`) | Plain text + SHA256 MANIFEST + GitHub | Compromised download without verifying release/hash; local admin can edit sources and MANIFEST together |
 | DNS undo snapshot / RDP host prior | DPAPI CurrentUser + Bastion entropy string; ACL SYSTEM+Administrators on undo file | Same elevating user (or malware as that user) can decrypt; full account compromise wins |
+| CVE undo items | Same DPAPI helper (`ItemsProtected`); ACL SYSTEM+Administrators | Same residual risk as LastApply blobs |
 | `Bastion-Config.json` (preferences, custom paths) | Not secret; **ACL SYSTEM+Administrators** on save to reduce casual local reads | Admin/same elevated identity can read; not a credential store |
-| Session / browser-state JSON | Live detection snapshots; not secrets | Local readers if ACLs not applied |
+| Session / browser-state JSON | Live detection snapshots; file ACL + directory ACL on Bastion-owned folders | Not a vault; ACL reduces casual local reads |
+| Data directory (leaf `Bastion`) | Directory ACL SYSTEM+Administrators with inheritance | Never applied to legacy flat `C:\Temp` |
 | Browser enterprise policies | Written outside Bastion data dir when you use menu 6 | Standard Windows policy visibility |
 
 **Out of scope for Bastion crypto:** protecting against a hostile Administrator on the same box, kernel malware, or offline disk theft without full-disk encryption (BitLocker is the right control there).

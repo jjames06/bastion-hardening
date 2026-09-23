@@ -28,7 +28,7 @@ See [Discussions #17](https://github.com/jjames06/bastion-hardening/discussions/
 
 ## Where is the code?
 
-Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.Core.ps1`, `Bastion.Apply.ps1`). `Bastion-Hardening.ps1` is a thin elevated bootstrap that dot-sources those modules and verifies **`src\MANIFEST.sha256`**. **Source is never encrypted** (GPLv3 + auditability). `MANIFEST.sha256` is integrity only. **DPAPI encryption applies only to undo data** (DNS snapshot / RDP host prior after Apply), not to modular load. See [Modular source layout](Modular-source) and [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
+Implementation is plain-text PowerShell under **`src\`** (for example `Bastion.Core.ps1`, `Bastion.Apply.ps1`). `Bastion-Hardening.ps1` is a thin elevated bootstrap that dot-sources those modules and verifies **`src\MANIFEST.sha256`**. **Source is never encrypted** (GPLv3 + auditability). `MANIFEST.sha256` is integrity only. **DPAPI encryption applies only to undo data** (DNS snapshot / RDP host prior after Apply, and CVE undo items), not to modular load, logs, or session JSON. See [Modular source layout](Modular-source) and [docs/ARCHITECTURE.md](https://github.com/jjames06/bastion-hardening/blob/main/docs/ARCHITECTURE.md).
 
 ## Why is Bastion modular now? Was it one big script?
 

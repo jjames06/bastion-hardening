@@ -128,7 +128,7 @@ A guided, selective hardening assistant for Windows 10/11 that lets you:
 | **Safety-first** | Restore-point gate, soft failures, honest documentation |
 | **Catalog-only installs** | No free-typed package IDs; never uses `--ignore-security-hash`; preflight does not print the full winget binary path |
 | **Reversible where practical** | Tracked Undo (services, firewall groups, encrypted DNS snapshot, RDP host prior) plus modular Recovery hubs - single main-menu entry |
-| **Honest on-disk state** | Sensitive Apply undo fields (DNS snapshot, RDP prior) are DPAPI-encrypted with a tight ACL; same elevating account can still decrypt (documented) |
+| **Honest on-disk state** | Sensitive undo fields (DNS snapshot, RDP prior, CVE undo items) are DPAPI-encrypted with a tight ACL; Bastion-owned data folders get a SYSTEM + Administrators directory ACL; same elevating account can still decrypt (documented) |
 | **Reviewable source** | Plain-text modules under `src\` (never encrypted); thin bootstrap; per-module integrity MANIFEST |
 
 System Restore remains the strongest rollback path.
@@ -159,7 +159,7 @@ Bastion used to ship as a **single large PowerShell script** (a *monolith*). Tha
 
 - You still Unblock the zip, extract one product folder, and run **`Bastion-Hardening.bat` as administrator**.  
 - Product goals (selective Apply, Dry Run, Recovery, restore-point gate) are the same class of tool.  
-- **Source is never encrypted.** DPAPI applies only to certain **Apply undo** blobs (DNS snapshot / RDP host prior), not to modular load.
+- **Source is never encrypted.** DPAPI applies only to **undo blobs** (DNS snapshot / RDP host prior / CVE undo items), not to modular load, logs, or session JSON.
 
 | Monolith era (through v15.8.x) | Modular era (v15.9.x+) |
 |--------------------------------|-------------------------|
@@ -520,7 +520,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack-release.ps1
 # Upload that file as the GitHub Release asset (name must match bastion-hardening-v*.zip)
 ```
 
-Layout inside the zip: `bastion-hardening-v16.0\Bastion-Hardening.bat` plus helpers (`tools-elevate-self.ps1`, `tools-run-bootstrap.ps1`), `src\Bastion.*.ps1`, and `src\MANIFEST.sha256`. Modular source is plain text; only Apply undo DNS/RDP blobs use DPAPI. **v16.0** is the current tree (known CVE checks + Defender update health).
+Layout inside the zip: `bastion-hardening-v16.0\Bastion-Hardening.bat` plus helpers (`tools-elevate-self.ps1`, `tools-run-bootstrap.ps1`), `src\Bastion.*.ps1`, and `src\MANIFEST.sha256`. Modular source is plain text; DPAPI is only for undo blobs (DNS/RDP and CVE items). **v16.0** is the current tree (known CVE checks + Defender update health).
 
 ---
 

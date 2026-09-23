@@ -24,8 +24,11 @@
 #   product conflict, not a CVE this catalog "fixes".
 #
 # Fail-safes:
-#   Scan is read-only. Remediate always confirms. Registry changes snapshot
-#   prior values into Bastion-CveUndo.json (not secrets; ACL like config).
+#   Scan is read-only. Remediate always confirms. Registry/protocol undo is
+#   DPAPI-wrapped in Bastion-CveUndo.json (ItemsProtected) plus SYSTEM+
+#   Administrators ACL, same pattern as LastApply DNS/RDP blobs. Items are
+#   policy DWORDs and paths, not credentials; wrap so a copied file off this
+#   Windows account is not plaintext. Legacy plaintext Items still read.
 #   Uninstalls and protocol deletes are extra-confirmed. Restore-point
 #   reminder before a batch. Revert restores only what Bastion recorded.
 # =============================================================================
@@ -135,7 +138,9 @@ function Restore-BastionRegDword {
 }
 
 # -----------------------------------------------------------------------------
-# CVE undo file (Bastion-CveUndo.json). Not secrets. Same ACL as config.
+# CVE undo file (Bastion-CveUndo.json).
+# Policy DWORDs and backup paths, not DNS/passwords. DPAPI-wrapped like
+# LastApply secrets so a file copied off this user is not readable JSON.
 # -----------------------------------------------------------------------------
 function Get-BastionCveUndoPath {
     if ($script:cveUndoFile) { return $script:cveUndoFile }
@@ -145,6 +150,15 @@ function Get-BastionCveUndoPath {
 }
 
 function Save-BastionCveUndo {
+    <#
+      Purpose:
+        Persist reversible CVE registry/protocol priors. DPAPI-wrap Items like
+        LastApply DNS/RDP. Never write plaintext Items if Protect fails.
+
+      Side effects:
+        Overwrites Bastion-CveUndo.json only when a blob is produced. On wrap
+        failure, leaves the previous file unchanged (same honesty as Save-UndoData).
+    #>
     param($Batch)
     $path = Get-BastionCveUndoPath
     $dir = Split-Path -Parent $path
@@ -159,28 +173,48 @@ function Save-BastionCveUndo {
             $items = @($Batch)
         }
     }
+    $itemsJson = ($items | ConvertTo-Json -Depth 8)
+    if ([string]::IsNullOrWhiteSpace($itemsJson)) { $itemsJson = "[]" }
+    $blob = $null
+    try { $blob = Protect-BastionBlob -PlainText $itemsJson } catch {}
+    if (-not $blob) {
+        Write-Status "DPAPI wrap for CVE undo failed; leaving previous file unchanged (no plaintext fallback)." "Warn"
+        return
+    }
     $payload = [ordered]@{
-        Timestamp     = (Get-Date).ToString("o")
-        ScriptVersion = $script:Config.ScriptVersion
-        Items         = $items
+        Timestamp       = (Get-Date).ToString("o")
+        ScriptVersion   = $script:Config.ScriptVersion
+        ItemsProtected  = $blob
     }
     ($payload | ConvertTo-Json -Depth 8) | Out-File -LiteralPath $path -Encoding utf8 -Force
-    try {
-        $acl = Get-Acl -LiteralPath $path
-        $acl.SetAccessRuleProtection($true, $false)
-        $sys = New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM","FullControl","Allow")
-        $adm = New-Object System.Security.AccessControl.FileSystemAccessRule("Administrators","FullControl","Allow")
-        $acl.AddAccessRule($sys)
-        $acl.AddAccessRule($adm)
-        Set-Acl -LiteralPath $path -AclObject $acl
-    } catch {}
+    if (Get-Command Set-BastionSensitiveFileAcl -ErrorAction SilentlyContinue) {
+        Set-BastionSensitiveFileAcl -Path $path
+    }
 }
 
 function Get-BastionCveUndo {
+    <#
+      Purpose:
+        Load Bastion-CveUndo.json. Prefer ItemsProtected (DPAPI). Legacy plaintext
+        Items still reads so older files from before this wrap keep working.
+
+      Return:
+        Object with Items array, or $null if missing/unreadable.
+    #>
     $path = Get-BastionCveUndoPath
     if (-not (Test-Path -LiteralPath $path)) { return $null }
     try {
-        return (Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json)
+        $raw = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($raw.ItemsProtected) {
+            $plain = Unprotect-BastionBlob -Base64 ([string]$raw.ItemsProtected)
+            if ($plain) {
+                $decoded = $plain | ConvertFrom-Json
+                $raw | Add-Member -NotePropertyName Items -NotePropertyValue @($decoded) -Force
+            } else {
+                Write-Status "Could not decrypt CVE undo (wrong Windows user or damaged file)" "Warn"
+            }
+        }
+        return $raw
     } catch { return $null }
 }
 
@@ -375,7 +409,48 @@ function Get-BastionCveCatalog {
 # -----------------------------------------------------------------------------
 # Detect implementations
 # Status: Healthy | Exposed | Compensating | Info | Unknown | NotPresent
+# Scan-scoped cache: Get-MpComputerStatus, Get-WindowsOptionalFeature, and
+# firewall group queries are slow. One bag per menu C / Recovery scan.
 # -----------------------------------------------------------------------------
+function Reset-BastionCveScanCache {
+    <#
+      Purpose:
+        Drop per-scan memo for Defender status, SMB1 feature, firewall groups,
+        listen ports, Office presence, VLC, and Defender disk health.
+      When:
+        Start of Invoke-BastionCveScan so remediations after a scan still see
+        the same snapshot, but the next Scan this PC is live again.
+    #>
+    $script:BastionCveScanCache = @{}
+}
+
+function Get-BastionCveCacheSlot {
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [Parameter(Mandatory)][scriptblock]$Producer
+    )
+    if ($null -eq $script:BastionCveScanCache) { $script:BastionCveScanCache = @{} }
+    if ($script:BastionCveScanCache.Contains($Key)) {
+        return $script:BastionCveScanCache[$Key]
+    }
+    $value = & $Producer
+    $script:BastionCveScanCache[$Key] = $value
+    return $value
+}
+
+function Get-BastionCveMpStatus {
+    <#
+      Purpose:
+        One Get-MpComputerStatus per scan. UnDefend, RedSun, and (via Harden)
+        Defender health reuse this slot when the CVE cache is live.
+    #>
+    return (Get-BastionCveCacheSlot -Key "mp" -Producer {
+        $st = $null
+        try { $st = Get-MpComputerStatus -ErrorAction Stop } catch {}
+        $st
+    })
+}
+
 function Test-BastionCveWinSep2026 {
     $os = Get-BastionOsBuildInfo
     $need = $null
@@ -408,8 +483,7 @@ function Test-BastionCveWinSep2026 {
 
 function Test-BastionCveDefenderPlatform {
     param([string]$MinVersion, [string]$Label)
-    $st = $null
-    try { $st = Get-MpComputerStatus -ErrorAction Stop } catch {}
+    $st = Get-BastionCveMpStatus
     if (-not $st) {
         return [pscustomobject]@{ Status = "Unknown"; Detail = "Get-MpComputerStatus failed (third-party antivirus may own the slot)" }
     }
@@ -427,8 +501,7 @@ function Test-BastionCveDefenderPlatform {
 
 function Test-BastionCveDefenderEngine {
     param([string]$MinVersion)
-    $st = $null
-    try { $st = Get-MpComputerStatus -ErrorAction Stop } catch {}
+    $st = Get-BastionCveMpStatus
     if (-not $st) {
         return [pscustomobject]@{ Status = "Unknown"; Detail = "Get-MpComputerStatus failed" }
     }
@@ -443,9 +516,16 @@ function Test-BastionCveDefenderEngine {
     return [pscustomobject]@{ Status = "Exposed"; Detail = ("Engine {0} is below {1}" -f $ver, $MinVersion) }
 }
 
+function Get-BastionCveDefenderHealth {
+    return (Get-BastionCveCacheSlot -Key "health" -Producer {
+        $h = $null
+        try { $h = Get-BastionDefenderUpdateHealth } catch {}
+        $h
+    })
+}
+
 function Test-BastionCveBigDiskBuster {
-    $h = $null
-    try { $h = Get-BastionDefenderUpdateHealth } catch {}
+    $h = Get-BastionCveDefenderHealth
     if (-not $h) {
         return [pscustomobject]@{ Status = "Unknown"; Detail = "Defender update health query failed" }
     }
@@ -462,41 +542,46 @@ function Test-BastionCveBigDiskBuster {
 }
 
 function Get-BastionCveFirewallOpenGroups {
-    $open = New-Object System.Collections.Generic.List[string]
-    $groups = @($script:FirewallGroups)
-    if (-not $groups -or $groups.Count -eq 0) {
-        $groups = @(
-            "File and Printer Sharing",
-            "File and Printer Sharing over SMBDirect",
-            "Network Discovery",
-            "Remote Assistance",
-            "Remote Desktop",
-            "Windows Remote Management",
-            "mDNS"
-        )
-    }
-    foreach ($g in $groups) {
-        try {
-            $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
-            if ($st -and $st.Open) { [void]$open.Add($g) }
-        } catch {}
-    }
-    return @($open.ToArray())
+    return @(Get-BastionCveCacheSlot -Key "fwOpen" -Producer {
+        $open = New-Object System.Collections.Generic.List[string]
+        $groups = @($script:FirewallGroups)
+        if (-not $groups -or $groups.Count -eq 0) {
+            $groups = @(
+                "File and Printer Sharing",
+                "File and Printer Sharing over SMBDirect",
+                "Network Discovery",
+                "Remote Assistance",
+                "Remote Desktop",
+                "Windows Remote Management",
+                "mDNS"
+            )
+        }
+        foreach ($g in $groups) {
+            try {
+                $st = Get-BastionFirewallGroupInboundStatus -DisplayGroup $g
+                if ($st -and $st.Open) { [void]$open.Add($g) }
+            } catch {}
+        }
+        # Unary comma keeps an empty or single-item array from unrolling.
+        , @($open.ToArray())
+    })
 }
 
 function Get-BastionCveSensitiveListenPorts {
-    $ports = New-Object System.Collections.Generic.List[int]
-    try {
-        $conns = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-            Where-Object {
-                ($_.LocalAddress -eq "0.0.0.0" -or $_.LocalAddress -eq "::") -and
-                $_.LocalPort -in 139,445,3389,5985,5986
-            })
-        foreach ($p in ($conns.LocalPort | Sort-Object -Unique)) {
-            [void]$ports.Add([int]$p)
-        }
-    } catch {}
-    return @($ports.ToArray())
+    return @(Get-BastionCveCacheSlot -Key "listen" -Producer {
+        $ports = New-Object System.Collections.Generic.List[int]
+        try {
+            $conns = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+                Where-Object {
+                    ($_.LocalAddress -eq "0.0.0.0" -or $_.LocalAddress -eq "::") -and
+                    $_.LocalPort -in 139,445,3389,5985,5986
+                })
+            foreach ($p in ($conns.LocalPort | Sort-Object -Unique)) {
+                [void]$ports.Add([int]$p)
+            }
+        } catch {}
+        , @($ports.ToArray())
+    })
 }
 
 function Test-BastionCveFirewallLan {
@@ -518,8 +603,15 @@ function Test-BastionCveFirewallLan {
 }
 
 function Test-BastionCveSmbv1 {
+    $f = Get-BastionCveCacheSlot -Key "smb1" -Producer {
+        try {
+            Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction Stop
+        } catch { $null }
+    }
+    if (-not $f) {
+        return [pscustomobject]@{ Status = "Unknown"; Detail = "SMB1Protocol feature query failed" }
+    }
     try {
-        $f = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction Stop
         if ($f.State -eq "Enabled") {
             return [pscustomobject]@{ Status = "Exposed"; Detail = "SMB1Protocol is Enabled" }
         }
@@ -612,23 +704,31 @@ function Get-BastionVlcInstall {
 }
 
 function Test-BastionCveOffice {
-    $c2r = @(
-        (Join-Path ${env:ProgramFiles} "Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"),
-        (Join-Path ${env:ProgramFiles(x86)} "Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe")
-    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
-    $office = $false
-    try {
-        $un = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue
-        $un += Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue
-        foreach ($u in @($un)) {
-            $n = [string]$u.DisplayName
-            if ($n -match "Microsoft (365|Office|Outlook)") { $office = $true; break }
-        }
-    } catch {}
-    if (-not $office -and $c2r.Count -eq 0) {
+    <#
+      Purpose:
+        Detect Office / Microsoft 365 without walking Uninstall\*. Click-to-Run
+        client path plus HKLM Office ClickToRun / 16.0 / 15.0 InstallRoot.
+    #>
+    $info = Get-BastionCveCacheSlot -Key "office" -Producer {
+        $c2r = @(
+            (Join-Path ${env:ProgramFiles} "Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"),
+            (Join-Path ${env:ProgramFiles(x86)} "Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe")
+        ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+        $office = $false
+        try {
+            if (Test-Path -LiteralPath "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun") { $office = $true }
+            if (-not $office) {
+                foreach ($ver in @("16.0","15.0")) {
+                    if (Test-Path -LiteralPath ("HKLM:\SOFTWARE\Microsoft\Office\{0}\Common\InstallRoot" -f $ver)) { $office = $true; break }
+                }
+            }
+        } catch {}
+        [pscustomobject]@{ C2rCount = @($c2r).Count; Office = $office }
+    }
+    if (-not $info.Office -and $info.C2rCount -eq 0) {
         return [pscustomobject]@{ Status = "NotPresent"; Detail = "Microsoft Office / 365 not found" }
     }
-    $detail = if ($c2r.Count -gt 0) { "Click-to-Run client present; finish File > Account > Update Now after Bastion starts it" } else { "Office listed in Apps; use Windows Update or Office Account > Update Now" }
+    $detail = if ($info.C2rCount -gt 0) { "Click-to-Run client present; finish File > Account > Update Now after Bastion starts it" } else { "Office listed in Apps; use Windows Update or Office Account > Update Now" }
     return [pscustomobject]@{ Status = "Info"; Detail = $detail }
 }
 
@@ -698,6 +798,7 @@ function Invoke-BastionCveDetect {
 # -----------------------------------------------------------------------------
 function Invoke-BastionCveScan {
     param([switch]$Quiet)
+    Reset-BastionCveScanCache
     $cat = @(Get-BastionCveCatalog)
     $out = New-Object System.Collections.Generic.List[object]
     $i = 0
@@ -867,6 +968,7 @@ function Invoke-BastionCveRemediate {
             $bak = Join-Path $dir "ms-msdt-follina-backup.reg"
             try {
                 & reg.exe export "HKCR\ms-msdt" $bak /y 2>$null | Out-Null
+                if (Test-Path -LiteralPath $bak) { Set-BastionSensitiveFileAcl -Path $bak }
                 Remove-Item -LiteralPath $key -Recurse -Force -ErrorAction Stop
                 Add-BastionCveUndoItem -List $UndoList -Id $id -Kind "RegExport" -Data @{ Backup = $bak; Key = "HKCR\ms-msdt" }
                 Write-Status ("Removed ms-msdt protocol. Backup: {0}" -f $bak) "Applied"

@@ -6,7 +6,8 @@
 #   Resolve a writable Bastion data directory, bind log/config/undo paths,
 #   load and save Bastion-Config.json preferences, maintain session/browser
 #   state snapshots, and read/write Bastion-LastApply.json with DPAPI for
-#   sensitive DNS and RDP host prior payloads only.
+#   sensitive DNS and RDP host prior payloads. Bastion-CveUndo.json uses the
+#   same Protect-BastionBlob helper (ItemsProtected).
 #
 # LOAD ORDER / ROLE
 #   Loaded after Bastion.Init.ps1 (state/catalogs) and Bastion.Core.ps1 (Write-Log).
@@ -15,7 +16,9 @@
 #
 # DO NOT
 #   - Run this file standalone (depends on Init catalogs and Core logging).
-#   - Encrypt modular source; only undo blobs use DPAPI CurrentUser protection.
+#   - Encrypt modular source; only undo blobs use DPAPI CurrentUser protection
+#     (LastApply DNS/RDP, CVE undo items). Logs, session JSON, and preferences
+#     stay plaintext with SYSTEM+Administrators ACL.
 #   - Invent Bastion-LastApply.json without a completed Apply.
 #   - Treat MANIFEST.sha256 as encryption (integrity hashes only).
 #
@@ -25,6 +28,7 @@
 #   - Protect-BastionBlob / Unprotect-BastionBlob use DataProtectionScope.CurrentUser
 #     plus $script:BastionDpapiEntropy. Wrong Windows user or damaged base64 fails soft.
 #   - Save-UndoData never writes plaintext DnsSnapshot / RdpHostPrior to disk.
+#   - CVE undo (Bastion.Cve.ps1) uses the same helper and also refuses plaintext.
 #   - Deleting the data directory forces a clean seed next run; it does not
 #     invent prior hardening or fake Apply history.
 #
@@ -197,6 +201,9 @@ function Ensure-BastionPaths {
                 New-Item -Path $p -ItemType Directory -Force -ErrorAction Stop | Out-Null
             }
         }
+        # Lock the Bastion-owned data root so logs/session inherit SYSTEM+Admins.
+        # Never ACL a legacy flat C:\Temp (leaf is not "Bastion").
+        Set-BastionSensitiveDirectoryAcl -Path $script:Config.LogDirectory
         if (-not $script:sessionFile) {
             $script:sessionFile = Join-Path $script:Config.LogDirectory "Bastion-Session.json"
         }
@@ -245,6 +252,7 @@ function Save-BrowserPolicyStateFile {
             $data.EchLocks[$k] = [bool]$script:BrowserEchLocks[$k]
         }
         ($data | ConvertTo-Json -Depth 8) | Out-File -LiteralPath $path -Encoding utf8 -Force
+        Set-BastionSensitiveFileAcl -Path $path
         Write-Log ("Browser policy state saved: {0}" -f $path) -NoConsole
     } catch {
         Write-Log ("Browser policy state save failed: {0}" -f $_.Exception.Message) -Level Warning -NoConsole
@@ -326,6 +334,7 @@ function Write-BastionSessionSnapshot {
             Note = "Apply and Dry Run detect live Windows state. Bastion-LastApply.json is only written after a real Apply. Deleting this data directory just forces a clean seed next run - it does not invent prior hardening."
         }
         ($data | ConvertTo-Json -Depth 8) | Out-File -LiteralPath $script:sessionFile -Encoding utf8 -Force
+        Set-BastionSensitiveFileAcl -Path $script:sessionFile
         Write-Log ("Session snapshot written: {0}" -f $script:sessionFile) -NoConsole
     } catch {
         Write-Log ("Session snapshot failed: {0}" -f $_.Exception.Message) -Level Warning -NoConsole
@@ -386,9 +395,11 @@ function Protect-BastionBlob {
       DPAPI-protect a UTF-8 string for the current Windows user; return base64.
     .DESCRIPTION
       WHAT: ProtectedData.Protect with CurrentUser scope and BastionDpapiEntropy.
-      WHY: DNS snapshots and RDP host prior must not sit as plaintext JSON on disk.
+      WHY: DNS snapshots, RDP host prior, and CVE undo items must not sit as
+            plaintext JSON on disk. Same helper for LastApply and CveUndo.
       RETURN: Base64 string, or $null on failure (logged Warning).
-      SECURITY: Only for undo secrets. Never encrypt source modules.
+      SECURITY: Undo blobs only. Never encrypt source modules. Callers must not
+            fall back to writing the plaintext when this returns $null.
     #>
     param([Parameter(Mandatory)][string]$PlainText)
     try {
@@ -412,7 +423,8 @@ function Unprotect-BastionBlob {
       Reverse Protect-BastionBlob for the same Windows user and entropy.
     .DESCRIPTION
       WHAT: Base64 decode then ProtectedData.Unprotect CurrentUser + entropy.
-      WHY: Undo / Recovery must restore prior DNS and RDP host settings.
+      WHY: Undo / Recovery must restore prior DNS, RDP host, and CVE registry
+            values for the same elevating Windows user.
       RETURN: Plain UTF-8 string, or $null (wrong user, empty input, damage).
     #>
     param([Parameter(Mandatory)][string]$Base64)
@@ -465,6 +477,50 @@ function Set-BastionSensitiveFileAcl {
         Set-Acl -LiteralPath $Path -AclObject $acl
     } catch {
         Write-Log ("Set-BastionSensitiveFileAcl failed: {0}" -f $_.Exception.Message) -Level Warning
+    }
+}
+
+function Set-BastionSensitiveDirectoryAcl {
+    <#
+    .SYNOPSIS
+      Restrict a Bastion-owned data folder to SYSTEM + Administrators, with inheritance.
+    .DESCRIPTION
+      WHAT: Same identities as Set-BastionSensitiveFileAcl, plus ContainerInherit
+            and ObjectInherit so new logs, backups, and JSON inherit the ACL.
+      WHY: C:\Temp\Bastion can otherwise be readable by local standard users.
+            Logs may name adapters; session JSON is posture, not a vault, but
+            still operator-private. Directory ACL is the extra control after
+            assessing DPAPI: we encrypt undo blobs, we do not encrypt logs.
+      SAFETY: Only runs when the folder leaf is "Bastion". Never ACL C:\Temp
+            (legacy flat layout) or an unrelated path.
+      RETURN: None. Failures log Warning and leave prior ACL.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return }
+    $leaf = Split-Path -Leaf $Path
+    if ($leaf -ne "Bastion") {
+        Write-Log ("Skipping directory ACL (not a Bastion-owned folder): {0}" -f $Path) -NoConsole
+        return
+    }
+    try {
+        $acl = Get-Acl -LiteralPath $Path
+        $acl.SetAccessRuleProtection($true, $false)
+        foreach ($r in @($acl.Access)) {
+            try { [void]$acl.RemoveAccessRule($r) } catch {}
+        }
+        $inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor `
+            [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+        $prop = [System.Security.AccessControl.PropagationFlags]::None
+        foreach ($id in @("NT AUTHORITY\SYSTEM", "BUILTIN\Administrators")) {
+            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                $id, "FullControl", $inherit, $prop, "Allow"
+            )
+            $acl.AddAccessRule($rule)
+        }
+        Set-Acl -LiteralPath $Path -AclObject $acl
+    } catch {
+        Write-Log ("Set-BastionSensitiveDirectoryAcl failed: {0}" -f $_.Exception.Message) -Level Warning
     }
 }
 
