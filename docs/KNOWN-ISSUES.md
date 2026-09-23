@@ -226,6 +226,18 @@ Also see the [notice above](#before-you-enable-exploitprotection-stricthandle) a
 
 ---
 
+## Defender signatures stale while the service still looks "on"
+
+Public write-ups (Sep 2026, "BigDiskBuster") describe filling the system drive so Defender **platform and definition updates fail** while the antivirus service keeps running. There is no Microsoft patch in those write-ups. Bastion cannot fix Windows Update. It can **show** C: free space, signature age, oversized hidden TEMP files, blocking update policies, and recent 0x80070643-style events, then **offer** to delete those files (you confirm) and request `Update-MpSignature`. Apply (Defender section on) turns on check-signatures-before-scan and requests an update when signatures are already stale and C: has headroom. An **opt-in daily task** (Recovery option **4** on that same screen) logs health and requests an update; it never deletes files.
+
+**Recovery:** Main menu **9 > 6 > Defender > 5**. Security audit (option **2**) also warns when C: is under 5 GiB or signatures are old.
+
+This is a compensating control. Keep headroom on C:. A green shield with week-old signatures is not healthy. If delete fails, a process may still hold the fill file; reboot and try again.
+
+The same row lives in the **v16.0 known CVE checks** catalog (main menu **C**, Recovery **9 → 7**). That catalog also covers September 2026 Windows Update floors, Defender UnDefend/RedSun platform versions, SMBv1, PrintNightmare Point and Print, optional Follina protocol workaround, Wintrust cert padding, WDigest, AlwaysInstallElevated, and VLC 3.0.0–3.0.23. Bastion cannot patch Microsoft kernel CVEs; those rows start Windows Update. See [Cve-checks](wiki/Cve-checks.md).
+
+---
+
 ## LanHygiene (opt-in) and home gateways
 
 **LanHygiene is off by default** and is **not** in Quick Harden. When enabled, Apply changes **the Windows PC running Bastion only**: LLMNR off, WPAD override, mDNS off, NetBIOS-over-TCP off, common NIC power-save properties Disabled when present, optional outbound UDP 137/138/5353 rules.

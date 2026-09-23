@@ -2,7 +2,7 @@
 
 **Selective, state-aware, safety-first Windows hardening for a personal PC you administer.**
 
-This wiki is a short **user handbook** for **Bastion v15.9.8** (modular plain-text `src\` builds; source never encrypted; DPAPI only for Apply undo data; forced black console theme; Help docs color-coded for dark UI). Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). **v15.9.8** is the public recommended build on the [official site](https://www.operationlockedin.com/bastion/download) and [GitHub Latest](https://github.com/jjames06/bastion-hardening/releases/latest). Always start with **`Bastion-Hardening.bat`** (Unblock the zip first; never double-click the `.ps1` alone).
+This wiki is a short **user handbook** for **Bastion v16.0** (modular plain-text `src\` builds; source never encrypted; DPAPI only for Apply undo data; forced black console theme; Help docs color-coded for dark UI). Deeper technical detail ships **in the release zip** under `docs/` and in **in-app Help** (main menu **11**). Always start with **`Bastion-Hardening.bat`** (Unblock the zip first; never double-click the `.ps1` alone).
 
 **Source structure:** Current releases are **modular** (thin bootstrap + `src\Bastion.*.ps1` modules) so the product is easier to **read and review** than the older single large script. See [Modular source layout](Modular-source). Implementation remains plain text under GPLv3; `MANIFEST.sha256` is integrity only.
 
@@ -11,6 +11,7 @@ This wiki is a short **user handbook** for **Bastion v15.9.8** (modular plain-te
 1. [Quick start](Quick-start) - install, restore point, Dry Run, Apply  
 2. [Hardening workflow](Hardening-workflow) - full ordered checklist, section defaults, verify, when things break  
 3. [Recovery cookbook](Recovery-cookbook) - printing, network, games, Defender if you want a feature back  
+3b. [Known CVE checks](Cve-checks) - v16.0 catalog (main menu **C**, Recovery **7**)  
 4. [Games and StrictHandle](Games-and-StrictHandle) - what breaks, how to reverse, how to report  
 5. [FAQ](FAQ) - common questions, honest limits  
 6. [Modular source layout](Modular-source) - why Bastion is no longer one giant script, and how to review it  
@@ -59,7 +60,7 @@ This wiki is a short **user handbook** for **Bastion v15.9.8** (modular plain-te
 - When you know what broke, use **Recovery hubs** (menu **9**) before a full Undo.  
 - System Restore remains the strongest full rollback.
 
-*This handbook aims to match product behavior for **v15.9.8** modular builds. Always use the [official download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest).*
+*This handbook aims to match product behavior for **v16.0** modular builds. Always use the [official download](https://www.operationlockedin.com/bastion/download) or [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest).*
 
 **License:** GNU **GPLv3**. Free to use and modify; distributed modified versions must stay GPLv3 with source (see FAQ).
 

@@ -56,6 +56,9 @@ Each candidate is **write-probed** (create folder if needed, write a short tempo
 | `Bastion-BrowserPolicies-State.json` | Created/updated when browser policy state is saved (every launch after init, and after menu **6** changes) | Wanted modes, live detection, last policy change summary |
 | `Bastion-Log-yyyyMMdd-HHmmss.txt` | Each session | Transcript lines for that run |
 | `Bastion-LastApply.json` | **Only after a real Apply** (Quick Harden / Apply that completes undo tracking) | Timestamp, sections run, tracked undo for services and firewall groups. **DNS snapshot** and **RDP host prior** are **DPAPI-encrypted** (`DnsSnapshotProtected`, `RdpHostPriorProtected`; no plaintext servers or prior RDP values on disk). File ACL restricted to SYSTEM + Administrators when Bastion can set it. |
+| `Bastion-DefenderUpdateHealth.ps1` | **Only if you install** Recovery **9 → 6 → Defender → 5** option **4** | Helper run by the opt-in daily `BastionDefenderUpdateHealth` scheduled task. Logs disk/signature health and may request `Update-MpSignature`. Does not delete files. Removed with option **5**. |
+| `Bastion-CveUndo.json` | **Only after** a CVE remediate that changes registry or the ms-msdt protocol | Prior DWORD values and optional .reg backup path. Not secrets. Recovery **9 → 7** restores these. ACL SYSTEM + Administrators when Bastion can set it. |
+| `ms-msdt-follina-backup.reg` | **Only if** you confirm the Follina protocol workaround on main menu **C** | `reg export` of HKCR\ms-msdt before delete. Recovery **7** imports it back. |
 | `Bastion-Report-*.html` | Only if you export from Help and Reports | Optional HTML snapshot |
 
 ### What is **not** created on first run

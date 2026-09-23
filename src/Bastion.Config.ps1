@@ -167,6 +167,7 @@ function Bind-BastionDataPaths {
     $script:logFile    = Join-Path $LogDirectory ("Bastion-Log-{0}.txt" -f $script:timestamp)
     $script:tempDir    = Join-Path $LogDirectory "BastionInstallers"
     $script:undoFile   = Join-Path $LogDirectory "Bastion-LastApply.json"
+    $script:cveUndoFile = Join-Path $LogDirectory "Bastion-CveUndo.json"
     $script:configFile = Join-Path $LogDirectory "Bastion-Config.json"
     $script:sessionFile = Join-Path $LogDirectory "Bastion-Session.json"
 }

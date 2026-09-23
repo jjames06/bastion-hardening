@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Bastion Hardening Framework v15.9.8 FINAL
+    Bastion Hardening Framework v16.0 FINAL
 
 .DESCRIPTION
     Selective Windows hardening for a personal or small-team workstation.
@@ -32,7 +32,7 @@
     Used by packaging smoke tests; skips menus and data-store full UI path after load.
 
 .NOTES
-    Version 15.9.8 FINAL. System Restore is the strongest rollback. Run elevated.
+    Version 16.0 FINAL. System Restore is the strongest rollback. Run elevated.
     Save as UTF-8 (ASCII subset preferred). Licensed under GNU GPLv3 - see LICENSE
     and NOTICE in the project root.
 
@@ -51,6 +51,8 @@
     v15.9.6: Force black console theme (soft-fail) for consistent dark UI across hosts.
     v15.9.7: Help docs color-coded headings/labels/body for readability on dark theme.
     v15.9.8: Opt-in LanHygiene (LLMNR/WPAD/mDNS/NetBIOS/NIC power-save; no speed lock); Recovery gateway fingerprint (JSON gateway actions only if detected); CFA extra paths.
+    v15.9.9: Folded into 16.0 (never shipped as a public zip).
+    v16.0: Known CVE checks category (main menu C, Recovery hub 7, optional Apply section). Defender update health (BigDiskBuster compensating control). Catalog detects Windows 10/11 issues Bastion can scan and, where a reliable non-exploit fix exists, remediate after confirm.
 #>
 param(
     [switch]$BastionSmokeLoadOnly
@@ -94,6 +96,7 @@ $script:BastionSourceModules = @(
     "Bastion.Dns.ps1",
     "Bastion.Network.ps1",
     "Bastion.Harden.ps1",
+    "Bastion.Cve.ps1",
     "Bastion.Apply.ps1",
     "Bastion.Recovery.ps1",
     "Bastion.Menus.ps1"
@@ -113,7 +116,10 @@ $script:BastionRequiredCommands = @(
     "Show-MainMenu",
     "Wait-ForKey",
     "Invoke-BastionLanHygiene",
-    "Get-BastionLanHygieneStatus"
+    "Get-BastionLanHygieneStatus",
+    "Get-BastionDefenderUpdateHealth",
+    "Show-CveChecksMenu",
+    "Invoke-BastionCveScan"
 )
 
 # -----------------------------------------------------------------------------
