@@ -342,6 +342,33 @@ function Get-BastionCveCatalog {
             AutoOnApply = $false
             CanRevert   = $false
         }
+        [pscustomobject]@{
+            Id          = "OFFICE-SEP2026"
+            Title       = "September 2026 Microsoft Office updates"
+            Cves        = @("CVE-2026-78509","CVE-2026-78510")
+            Category    = "Office"
+            Honesty     = "Outlook Reading Pane and Word rendering bugs need Microsoft's Office update. Bastion starts Click-to-Run when present. You finish Update Now and restart Outlook/Word."
+            AutoOnApply = $true
+            CanRevert   = $false
+        }
+        [pscustomobject]@{
+            Id          = "SMB-COMPRESSION"
+            Title       = "SMBv3 compression (SMBGhost-class)"
+            Cves        = @("CVE-2020-0796")
+            Category    = "SMB"
+            Honesty     = "Sets LanmanServer DisableCompression=1. Extra hardening after Microsoft's 2020 patch. Reverse from Recovery hub 7 or a System Restore Point from before the change."
+            AutoOnApply = $true
+            CanRevert   = $true
+        }
+        [pscustomobject]@{
+            Id          = "RDP-NLA"
+            Title       = "Remote Desktop Network Level Authentication"
+            Cves        = @("RDP NLA")
+            Category    = "Remote Desktop"
+            Honesty     = "Sets UserAuthentication=1 on RDP-Tcp. Does not replace Windows Update or locking the Remote Desktop firewall group."
+            AutoOnApply = $true
+            CanRevert   = $true
+        }
     )
 }
 
@@ -584,6 +611,48 @@ function Get-BastionVlcInstall {
     return $null
 }
 
+function Test-BastionCveOffice {
+    $c2r = @(
+        (Join-Path ${env:ProgramFiles} "Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe")
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+    $office = $false
+    try {
+        $un = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue
+        $un += Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue
+        foreach ($u in @($un)) {
+            $n = [string]$u.DisplayName
+            if ($n -match "Microsoft (365|Office|Outlook)") { $office = $true; break }
+        }
+    } catch {}
+    if (-not $office -and $c2r.Count -eq 0) {
+        return [pscustomobject]@{ Status = "NotPresent"; Detail = "Microsoft Office / 365 not found" }
+    }
+    $detail = if ($c2r.Count -gt 0) { "Click-to-Run client present; finish File > Account > Update Now after Bastion starts it" } else { "Office listed in Apps; use Windows Update or Office Account > Update Now" }
+    return [pscustomobject]@{ Status = "Info"; Detail = $detail }
+}
+
+function Test-BastionCveSmbCompression {
+    $p = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+    $v = Get-BastionRegDword -Path $p -Name "DisableCompression"
+    if ($v -eq 1) {
+        return [pscustomobject]@{ Status = "Healthy"; Detail = "DisableCompression=1" }
+    }
+    return [pscustomobject]@{ Status = "Exposed"; Detail = "SMBv3 compression is not disabled (CVE-2020-0796 remaining hardening)" }
+}
+
+function Test-BastionCveRdpNla {
+    $p = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
+    $v = Get-BastionRegDword -Path $p -Name "UserAuthentication"
+    if ($v -eq 1) {
+        return [pscustomobject]@{ Status = "Healthy"; Detail = "RDP Network Level Authentication is on (UserAuthentication=1)" }
+    }
+    if ($null -eq $v) {
+        return [pscustomobject]@{ Status = "Exposed"; Detail = "UserAuthentication is not set; enable NLA before hosting Remote Desktop" }
+    }
+    return [pscustomobject]@{ Status = "Exposed"; Detail = ("UserAuthentication={0}" -f $v) }
+}
+
 function Test-BastionCveVlc {
     $vlc = Get-BastionVlcInstall
     if (-not $vlc) {
@@ -616,6 +685,9 @@ function Invoke-BastionCveDetect {
         "WDIGEST"            { return Test-BastionCveWdigest }
         "ALWAYSINSTALLELEVATED" { return Test-BastionCveAlwaysInstallElevated }
         "VLC-2026"           { return Test-BastionCveVlc }
+        "OFFICE-SEP2026"     { return Test-BastionCveOffice }
+        "SMB-COMPRESSION"    { return Test-BastionCveSmbCompression }
+        "RDP-NLA"            { return Test-BastionCveRdpNla }
         default              { return [pscustomobject]@{ Status = "Unknown"; Detail = "No detector" } }
     }
 }
@@ -661,6 +733,38 @@ function Invoke-BastionCveScan {
 # Remediations (confirm happens in the menu unless -NoConfirm for Apply auto
 # items that are already gated by Apply YES).
 # -----------------------------------------------------------------------------
+function Write-CveManualFinishBanner {
+    param(
+        [ValidateSet("WindowsUpdate","Office","Defender")]
+        [string]$Kind
+    )
+    Write-Host ""
+    Write-Host "  --------------------------------------------------------------" -ForegroundColor Cyan
+    Write-Host "  Please finish this on the computer. Bastion cannot do the last step." -ForegroundColor Cyan
+    Write-Host "  --------------------------------------------------------------" -ForegroundColor Cyan
+    switch ($Kind) {
+        "WindowsUpdate" {
+            Write-Host "    1. Windows Settings > Windows Update should now be open." -ForegroundColor White
+            Write-Host "    2. Click Download / Install if a package is listed." -ForegroundColor White
+            Write-Host "    3. Restart if Windows asks." -ForegroundColor White
+            Write-Host "    4. Come back to Bastion main menu C, option 1, to re-scan." -ForegroundColor White
+        }
+        "Office" {
+            Write-Host "    1. Click-to-Run update was requested if OfficeC2RClient.exe exists." -ForegroundColor White
+            Write-Host "    2. In any Office app: File > Account > Update Options > Update Now." -ForegroundColor White
+            Write-Host "    3. Restart Outlook and Word when it finishes (Reading Pane bugs need that)." -ForegroundColor White
+            Write-Host "    4. Re-scan from main menu C, option 1." -ForegroundColor White
+        }
+        "Defender" {
+            Write-Host "    1. If the console did not confirm success, open Windows Security." -ForegroundColor White
+            Write-Host "    2. Virus and threat protection > Check for updates." -ForegroundColor White
+            Write-Host "    3. Wait until it finishes, then re-scan from main menu C, option 1." -ForegroundColor White
+        }
+    }
+    Write-Host "  A System Restore Point from before this change (menu 13 or R) can roll the PC back if you created one." -ForegroundColor DarkGray
+    Write-Host ""
+}
+
 function Invoke-BastionStartWindowsUpdateScan {
     $started = $false
     $uso = Join-Path $env:SystemRoot "System32\UsoClient.exe"
@@ -675,11 +779,12 @@ function Invoke-BastionStartWindowsUpdateScan {
     }
     try {
         Start-Process "ms-settings:windowsupdate" | Out-Null
-        Write-Status "Opened Windows Update settings. Complete the download there and reboot if Windows asks." "Info"
+        Write-Status "Opened Windows Update settings." "Applied"
         $started = $true
     } catch {
         Write-Status ("Could not open Settings: {0}" -f $_.Exception.Message) "Warn"
     }
+    Write-CveManualFinishBanner -Kind WindowsUpdate
     return $started
 }
 
@@ -699,10 +804,12 @@ function Invoke-BastionCveRemediate {
         }
         "DEFENDER-UNDEFEND" {
             Invoke-BastionDefenderSignatureUpdate -NoConfirm:$NoConfirm
+            Write-CveManualFinishBanner -Kind Defender
             return
         }
         "DEFENDER-REDSUN" {
             Invoke-BastionDefenderSignatureUpdate -NoConfirm:$NoConfirm
+            Write-CveManualFinishBanner -Kind Defender
             return
         }
         "BIGDISKBUSTER" {
@@ -711,6 +818,7 @@ function Invoke-BastionCveRemediate {
                 Invoke-BastionClearSuspectedFillFiles -Health $h
             }
             Invoke-BastionDefenderSignatureUpdate -NoConfirm:$NoConfirm
+            Write-CveManualFinishBanner -Kind Defender
             return
         }
         "SMBV1" {
@@ -794,6 +902,42 @@ function Invoke-BastionCveRemediate {
             Add-BastionCveUndoItem -List $UndoList -Id $id -Kind "RegDword" -Data @{ Path = $p1; Name = "AlwaysInstallElevated"; Prior = $a }
             Add-BastionCveUndoItem -List $UndoList -Id $id -Kind "RegDword" -Data @{ Path = $p2; Name = "AlwaysInstallElevated"; Prior = $b }
             Write-Status "AlwaysInstallElevated set to 0 in HKLM and HKCU." "Applied"
+            return
+        }
+        "OFFICE-SEP2026" {
+            $clients = @(
+                (Join-Path ${env:ProgramFiles} "Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"),
+                (Join-Path ${env:ProgramFiles(x86)} "Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe")
+            ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+            $ok = $false
+            foreach ($c in $clients) {
+                try {
+                    Start-Process -FilePath $c -ArgumentList "/update","user" -WindowStyle Hidden | Out-Null
+                    Write-Status ("Started {0} /update user" -f $c) "Applied"
+                    $ok = $true
+                    break
+                } catch {
+                    Write-Status ("OfficeC2RClient: {0}" -f $_.Exception.Message) "Warn"
+                }
+            }
+            if (-not $ok) {
+                Write-Status "Click-to-Run client not started. Use File > Account > Update Now in any Office app, or Windows Update for MSI Office." "Warn"
+            }
+            Write-CveManualFinishBanner -Kind Office
+            return
+        }
+        "SMB-COMPRESSION" {
+            $path = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+            $prior = Set-BastionRegDword -Path $path -Name "DisableCompression" -Value 1
+            Add-BastionCveUndoItem -List $UndoList -Id $id -Kind "RegDword" -Data @{ Path = $path; Name = "DisableCompression"; Prior = $prior }
+            Write-Status "LanmanServer DisableCompression=1." "Applied"
+            return
+        }
+        "RDP-NLA" {
+            $path = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
+            $prior = Set-BastionRegDword -Path $path -Name "UserAuthentication" -Value 1
+            Add-BastionCveUndoItem -List $UndoList -Id $id -Kind "RegDword" -Data @{ Path = $path; Name = "UserAuthentication"; Prior = $prior }
+            Write-Status "RDP UserAuthentication=1 (Network Level Authentication)." "Applied"
             return
         }
         "VLC-2026" {
@@ -909,6 +1053,7 @@ function Show-CveChecksMenu {
         Write-Host "  Honest scope" -ForegroundColor Yellow
         Write-Host "    Bastion cannot patch Microsoft kernel or Defender platform bugs." -ForegroundColor DarkGray
         Write-Host "    Those rows start Windows Update or a Defender signature update." -ForegroundColor DarkGray
+        Write-Host "    If Settings or Office Update opens, finish Download / Update Now yourself, then restart if asked." -ForegroundColor Cyan
         Write-Host "    Registry/protocol/app rows are compensating controls you can reverse from Recovery > 7." -ForegroundColor DarkGray
         Write-Host "    No exploit payloads. Personal PC you administer only." -ForegroundColor DarkGray
         Write-Host ""
