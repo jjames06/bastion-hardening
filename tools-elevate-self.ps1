@@ -22,7 +22,7 @@
   SECURITY NOTES
     - UAC consent is explicit (RunAs). User must approve the prompt.
     - Modular Bastion source remains plain text (GPLv3).
-    - DPAPI is only for undo data after Apply, never for this helper.
+    - DPAPI is only for undo data after Apply / CVE remediate, never for this helper.
 
 .PARAMETER BatPath
   Full path to Bastion-Hardening.bat (or any bat to elevate). Mandatory.

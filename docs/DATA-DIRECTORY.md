@@ -57,7 +57,7 @@ Each candidate is **write-probed** (create folder if needed, write a short tempo
 | `Bastion-Log-yyyyMMdd-HHmmss.txt` | Each session | Transcript lines for that run |
 | `Bastion-LastApply.json` | **Only after a real Apply** (Quick Harden / Apply that completes undo tracking) | Timestamp, sections run, tracked undo for services and firewall groups. **DNS snapshot** and **RDP host prior** are **DPAPI-encrypted** (`DnsSnapshotProtected`, `RdpHostPriorProtected`; no plaintext servers or prior RDP values on disk). File ACL restricted to SYSTEM + Administrators when Bastion can set it. |
 | `Bastion-DefenderUpdateHealth.ps1` | **Only if you install** Recovery **9 → 6 → Defender → 5** option **4** | Helper run by the opt-in daily `BastionDefenderUpdateHealth` scheduled task. Logs disk/signature health and may request `Update-MpSignature`. Does not delete files. Removed with option **5**. |
-| `Bastion-CveUndo.json` | **Only after** a CVE remediate that changes registry or the ms-msdt protocol | Prior DWORD values and optional .reg backup path. Not secrets. Recovery **9 → 7** restores these. ACL SYSTEM + Administrators when Bastion can set it. |
+| `Bastion-CveUndo.json` | **Only after** a CVE remediate that changes registry or the ms-msdt protocol | Prior DWORD values (and optional .reg backup path). **ItemsProtected** is DPAPI CurrentUser, same pattern as LastApply DNS/RDP. Values are policy integers, not credentials; wrap so a copied file off this Windows account is not plaintext. Recovery **9 → 7** restores these. ACL SYSTEM + Administrators. Legacy plaintext `Items` still reads. |
 | `ms-msdt-follina-backup.reg` | **Only if** you confirm the Follina protocol workaround on main menu **C** | `reg export` of HKCR\ms-msdt before delete. Recovery **7** imports it back. |
 | `Bastion-Report-*.html` | Only if you export from Help and Reports | Optional HTML snapshot |
 
@@ -128,11 +128,28 @@ Full section behavior is documented in the in-app Help (menu **11**) and the mai
 
 | Mechanism | What it does | What it does **not** claim |
 |-----------|--------------|----------------------------|
-| **Windows DPAPI** (`CurrentUser` of the elevating account) + Bastion-fixed entropy | DNS snapshot and RDP host prior are unreadable as plaintext in `Bastion-LastApply.json` | Not a password manager; not remote attestation |
-| **File ACL** (SYSTEM + Administrators) | Stops standard local users from reading the undo file when ACL apply succeeds | Does not stop a full admin compromise of the same machine/account |
-| Same elevating user | Bastion can decrypt and restore (Undo / Network recovery option **4**) | A different Windows user, or a stolen offline copy without that user profile/keys, cannot decrypt |
+| **Windows DPAPI** (`CurrentUser` of the elevating account) + Bastion-fixed entropy | DNS snapshot and RDP host prior in `Bastion-LastApply.json`, and CVE undo **ItemsProtected** in `Bastion-CveUndo.json`, are unreadable as plaintext | Not a password manager; not remote attestation |
+| **File ACL** (SYSTEM + Administrators) | Stops standard local users from reading undo / config / session / browser-state files when ACL apply succeeds | Does not stop a full admin compromise of the same machine/account |
+| **Directory ACL** (same identities, with inheritance) | When the data folder leaf is `Bastion`, new logs and JSON inherit SYSTEM + Administrators | Never applied to legacy flat `C:\Temp` (that would lock the whole temp drive) |
+| Same elevating user | Bastion can decrypt and restore (Undo / Network recovery option **4** / Recovery hub **7**) | A different Windows user, or a stolen offline copy without that user profile/keys, cannot decrypt |
 
-If encryption fails on save, Bastion **does not** fall back to writing plaintext DNS or RDP prior; those fields are simply not stored, and restore is unavailable until a later successful Apply.
+If encryption fails on save, Bastion **does not** fall back to writing plaintext DNS, RDP prior, or CVE undo items; the previous file is left unchanged.
+
+### What we encrypt vs what we do not
+
+Assessed against the same DPAPI helper used for LastApply:
+
+| On disk | Protection | Why |
+|---------|------------|-----|
+| DNS snapshot / RDP host prior | **DPAPI** + file ACL | Prior adapter servers and RDP host values |
+| CVE undo items | **DPAPI** + file ACL | Policy DWORDs and the Follina backup path; wrap so a copied file is not readable JSON |
+| `ms-msdt-follina-backup.reg` | File ACL only | Protocol-handler export, not a credential. Recovery imports it with `reg.exe`; wrapping it would need a decrypt-to-temp step |
+| Config / session / browser-state JSON | File ACL + directory ACL | Preferences and posture, not secrets |
+| Session logs and HTML reports | Directory ACL (inheritance) | Operator needs them readable for support. They may name adapters; they are not a vault |
+| Home-gateway / CPE password | **Never stored** | Session-only `Read-Host`; discarded after the optional JSON action |
+| `src\*.ps1` product source | **Never encrypted** | GPLv3; `MANIFEST.sha256` is integrity only |
+
+BitLocker (full-disk) remains the right control for offline disk theft. Bastion DPAPI does not replace it.
 
 ### Config ACL (preferences, not secrets)
 

@@ -56,7 +56,9 @@ Full inventory: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 | First run | Seeds config defaults; rewrites session/browser-state snapshots from **live** detection |
 | Apply history file | `Bastion-LastApply.json` only after a **real** Apply |
 | DNS / RDP undo secrets | DNS snapshot and RDP host prior are **DPAPI-encrypted** in that file; ACL SYSTEM + Administrators. Same elevating account can decrypt; full account compromise still can. See [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) |
+| CVE undo | `Bastion-CveUndo.json` **ItemsProtected** uses the same DPAPI helper. No plaintext fallback if wrap fails. Legacy plaintext `Items` still reads. |
 | Config preferences | `Bastion-Config.json` is not a secret store (section toggles, custom paths); on save Bastion applies the same **SYSTEM + Administrators** ACL to reduce casual local reads |
+| Data directory | When the folder leaf is `Bastion`, a SYSTEM + Administrators directory ACL with inheritance covers logs and JSON. Legacy flat `C:\Temp` is never ACL'd as a whole. |
 | Product source | Plain-text `src\*.ps1` + integrity MANIFEST; encrypt **data**, never code (GPLv3) |
 | Display privacy | Winget preflight / Audit do not echo the full winget executable path (often under a user profile). Data-directory path still appears on the main menu by design. |
 | Encrypted Client Hello (ECH) | Never written unless you opt in under Strict in menu **6** - see [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) |

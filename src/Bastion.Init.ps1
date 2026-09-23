@@ -23,8 +23,9 @@
 # SECURITY NOTES
 #   - Source is plain text. Reviewers should read it freely.
 #   - DPAPI (Protect-BastionBlob / Unprotect-BastionBlob in Bastion.Config.ps1)
-#     protects only sensitive undo payloads (DNS snapshot, RDP host prior),
-#     never this module and never the winget catalog or section docs.
+#     protects only sensitive undo payloads (DNS snapshot, RDP host prior,
+#     CVE undo items in Bastion-CveUndo.json). Never this module, never the
+#     winget catalog, never logs or session JSON.
 #   - $script:BastionDpapiEntropy is a fixed salt for CurrentUser DPAPI; it is
 #     not a secret key and does not replace OS credential isolation.
 #   - Sensitive paths and install roots are validated later (Programs module);
@@ -598,6 +599,7 @@ $script:SuggestionRegistry = @(
 # DPAPI optional entropy for undo secrets (not a password; not for source files)
 # -----------------------------------------------------------------------------
 # Used only by Protect-BastionBlob / Unprotect-BastionBlob in Bastion.Config.ps1
-# for DNS snapshots and RDP host prior values inside Bastion-LastApply.json.
-# Changing this string breaks decryption of existing undo blobs for this user.
+# for DNS snapshots and RDP host prior (Bastion-LastApply.json) and for
+# ItemsProtected in Bastion-CveUndo.json. Changing this string breaks
+# decryption of existing undo blobs for this user.
 $script:BastionDpapiEntropy = [System.Text.Encoding]::UTF8.GetBytes("BastionHardening.ProtectedState.v15.8")
