@@ -344,7 +344,7 @@ $script:SectionDocs = [ordered]@{
         Intent  = "Optionally run the known Windows 10/11 CVE catalog during Apply (same detectors as main menu C). Prefer the standalone menu so you can read live status first."
         Changes = "When enabled on Apply: for Exposed rows marked Apply-safe, start a Windows Update scan, request Defender signature/platform update, disable SMBv1 if still on, set PrintNightmare / Wintrust / WDigest / AlwaysInstallElevated hardening. Does not uninstall VLC or delete the ms-msdt protocol during Apply (those stay on menu C with extra confirm)."
         Impact  = "Windows Update Settings may open. Printer driver installs from the network then need an administrator. Rare old Authenticode installers may fail to verify. SMBv1-only NAS will fail."
-        Revert  = "Recovery > 7 CVE checks: restore recorded registry/protocol values. Windows Update packages and SMBv1 feature state are not undone here. System Restore remains the strongest rollback."
+        Revert  = "Exact reverse: Bastion-Hardening.bat as Administrator, main menu 9, then 7, then 2, then Yes. That restores Bastion-CveUndo.json only (Point and Print, Wintrust padding, WDigest, AlwaysInstallElevated, ms-msdt backup). It does not uninstall a Microsoft update, re-enable SMBv1, or reinstall VLC. Daily Defender health task: Recovery 9, then 6, then Defender, then 5, then 5, then Yes. System Restore (menu 13 or R) remains the strongest full rollback."
         Notes   = "Off by default. Not in Quick Harden. Bastion cannot patch Microsoft kernel CVEs; those rows only start an update scan. No exploit payloads."
     }
     "PowerShellAuditing" = @{
