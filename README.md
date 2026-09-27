@@ -13,7 +13,7 @@ Version **16.0**
 </p>
 
 <p align="center">
-  <a href="https://www.operationlockedin.com"><strong>Official site</strong></a> - <a href="https://www.operationlockedin.com/bastion/download"><strong>Download</strong></a> - <a href="#how-to-install-properly"><strong>Install guide</strong></a> - <a href="docs/wiki/Home.md"><strong>Handbook</strong></a> - <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> - <a href="#known-issues"><strong>Known issues</strong></a> - <a href="#browser-policies"><strong>Browser / ECH</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> - <a href="SECURITY.md"><strong>Security</strong></a>
+  <a href="https://www.operationlockedin.com"><strong>Official site</strong></a> - <a href="https://www.operationlockedin.com/bastion/download"><strong>Download</strong></a> - <a href="#how-to-install-properly"><strong>Install guide</strong></a> - <a href="docs/wiki/Home.md"><strong>Handbook</strong></a> - <a href="https://www.operationlockedin.com/bastion/windows-september-2026"><strong>September 2026 update</strong></a> - <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> - <a href="#known-issues"><strong>Known issues</strong></a> - <a href="#browser-policies"><strong>Browser / ECH</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> - <a href="SECURITY.md"><strong>Security</strong></a>
 </p>
 
 **Further reading in this repo**
@@ -22,6 +22,7 @@ Version **16.0**
 |----------|--------|
 | [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In studio); Bastion product pages and download |
 | [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** - Quick start, Hardening workflow, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
+| [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026) | KB5124008 / KB5129195, what Bastion does, DNS Client 7023 field note. Handbook copy: [docs/wiki/Windows-September-2026.md](docs/wiki/Windows-September-2026.md) |
 | [docs/wiki/Hardening-workflow.md](docs/wiki/Hardening-workflow.md) | Handbook: ordered first Apply checklist, section defaults, verify, recovery links |
 | [docs/wiki/LAN-hygiene.md](docs/wiki/LAN-hygiene.md) | Opt-in workstation LAN leaks; Recovery fingerprints the live gateway (no assumed ISP modem) |
 | [GitHub Wiki](https://github.com/jjames06/bastion-hardening/wiki) | Same handbook on the Wiki tab (synced from `docs/wiki/`) |
