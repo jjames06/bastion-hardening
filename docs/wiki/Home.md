@@ -24,7 +24,8 @@ This wiki is a short **user handbook** for **Bastion v16.0** (modular plain-text
 |------|---------|
 | [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In) - Bastion pages, support, donate |
 | [Download Bastion](https://www.operationlockedin.com/bastion/download) | **Recommended download** - resolves the same GitHub Latest zip |
-| [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026) | KB5124008, KB5129195, DNS Client 7023 field note. Handbook: [Windows-September-2026](Windows-September-2026) |
+| [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026) | Full write-up on the site (KB5124008, KB5129195, DNS Client 7023) |
+| [Wiki handbook: September 2026](Windows-September-2026) | Same topic in this wiki |
 | [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest) | GitHub release assets (`bastion-hardening-v*.zip`) |
 | [Repository README](https://github.com/jjames06/bastion-hardening#readme) | Install detail, screenshots, critical warnings |
 | [Discussions](https://github.com/jjames06/bastion-hardening/discussions) | Testing feedback, download guide, game reports |
