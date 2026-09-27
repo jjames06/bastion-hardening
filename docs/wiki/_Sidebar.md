@@ -10,5 +10,6 @@
 * [Modular source layout](Modular-source)
 * [Official site](https://www.operationlockedin.com)
 * [Download](https://www.operationlockedin.com/bastion/download)
+* [September 2026 update](https://www.operationlockedin.com/bastion/windows-september-2026)
 * [Latest release](https://github.com/jjames06/bastion-hardening/releases/latest)
 * [Discussions](https://github.com/jjames06/bastion-hardening/discussions)
