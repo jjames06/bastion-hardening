@@ -246,7 +246,7 @@ The same row lives in the **v16.0 known CVE checks** catalog (main menu **C**, R
 
 **What Bastion does *not* do:** DNS Apply never sets the DNS Client logon account and never stops Dnscache. HighRiskServices does not include Dnscache. VPN adapters are excluded from DNS Apply. A connected VPN overriding adapter DNS is expected ([SECURITY.md](../SECURITY.md)).
 
-**What to do** (full staged write-up: [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026))
+**What to do** (full staged write-up: [September 2026 Windows update](wiki/Windows-September-2026.md))
 
 1. Confirm names are dead: `ping` by IP works, `ping` by name fails, `nslookup` to 127.0.0.1 has no UDP 53 listener. Store, Windows Update, DISM **0x800f0915**, and troubleshooters fail until names work.
 2. Do **not** start with `netsh winsock reset`, `netsh int ip reset`, or `Restart-Service Dnscache`. Do not uninstall KB5124008.
@@ -256,7 +256,7 @@ The same row lives in the **v16.0 known CVE checks** catalog (main menu **C**, R
 6. If Store and Update stay dead after names still will not hold, **Keep Files** reinstall restored this computer. Reinstall programs. Take 5129195 when Update offers it.
 7. Domain-joined PCs with `MachineIdentityIsolation = 2`: set to `0`, restart, then `Test-ComputerSecureChannel -Repair`.
 
-Public write-up: [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026). Handbook: [Windows-September-2026](wiki/Windows-September-2026.md).
+Full handbook: [September 2026 Windows update](wiki/Windows-September-2026.md).
 
 ---
 
