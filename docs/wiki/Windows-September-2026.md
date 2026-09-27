@@ -87,34 +87,53 @@ This sequence is the path that actually restored a personal Windows 11 25H2 comp
 
 ### Commands to copy
 
-Open Command Prompt or Windows PowerShell as Administrator where the block says so. Copy one block, paste it, read the result, then go to the next. Use one network path (Wi-Fi or Ethernet, not both) before you start. Disconnect the VPN only while you test the physical path. GitHub shows a copy control on the top-right of each fence.
+Open Command Prompt or Windows PowerShell as Administrator where the group says so. Copy **one** fence, paste it, read the result, then copy the next. Use one network path (Wi-Fi or Ethernet, not both) before you start. Disconnect the VPN only while you test the physical path. GitHub shows a copy control on the top-right of each fence.
 
 **1. See if names are dead** (Command Prompt)
 
+If 9.9.9.9 replies and google.com does not, the link is up and DNS is not. If nslookup shows Server 127.0.0.1, a local stub is in the way.
+
 ```
 ping -n 4 9.9.9.9
+```
+
+```
 ping -n 4 google.com
+```
+
+```
 nslookup google.com
+```
+
+```
 nslookup google.com 9.9.9.9
 ```
 
-If 9.9.9.9 replies and google.com does not, the link is up and DNS is not. If nslookup shows Server 127.0.0.1, a local stub is in the way.
-
 **2. See which adapter is up, and whether DNS Client is running** (Windows PowerShell)
+
+Status should be Up on only one of Wi-Fi or Ethernet. DNS Client should be Running, start type Automatic.
 
 ```
 Get-NetAdapter | Where-Object Status -eq 'Up' | Format-Table Name, Status, LinkSpeed
+```
+
+```
 Get-Service Dnscache | Format-List Name, Status, StartType
 ```
 
 **3. Point the active adapter at Quad9, then flush the cache** (Windows PowerShell, Run as administrator)
 
-Sets 9.9.9.9 and 149.112.112.112 on every Up adapter that is not a VPN or virtual NIC.
+The first command sets 9.9.9.9 and 149.112.112.112 on every Up adapter that is not a VPN or virtual NIC. Then flush. Then confirm nslookup no longer shows 127.0.0.1.
 
 ```
-$up = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch 'VPN|Wintun|WireGuard|Hyper-V|vEthernet|Bluetooth' }
-$up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses 9.9.9.9,149.112.112.112 }
+Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch 'VPN|Wintun|WireGuard|Hyper-V|vEthernet|Bluetooth' } | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses 9.9.9.9,149.112.112.112 }
+```
+
+```
 ipconfig /flushdns
+```
+
+```
 nslookup google.com
 ```
 
@@ -124,6 +143,9 @@ Run these only after `ping google.com` works. `0x800f0915` means DISM still cann
 
 ```
 DISM /Online /Cleanup-Image /RestoreHealth
+```
+
+```
 sfc /scannow
 ```
 
@@ -133,6 +155,9 @@ A home workgroup PC can skip this. If either command prints `2`, follow Microsof
 
 ```
 Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name MachineIdentityIsolation -ErrorAction SilentlyContinue
+```
+
+```
 Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" -Name MachineIdentityIsolation -ErrorAction SilentlyContinue
 ```
 
@@ -140,7 +165,13 @@ Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" -
 
 ```
 netsh winsock reset
+```
+
+```
 netsh int ip reset
+```
+
+```
 Restart-Service Dnscache
 ```
 
