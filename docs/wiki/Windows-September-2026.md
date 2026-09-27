@@ -87,79 +87,129 @@ This sequence is the path that actually restored a personal Windows 11 25H2 comp
 
 ### Commands to copy
 
-Open Command Prompt or Windows PowerShell as Administrator where the group says so. Copy **one** fence, paste it, read the result, then copy the next. Use one network path (Wi-Fi or Ethernet, not both) before you start. Disconnect the VPN only while you test the physical path. GitHub shows a copy control on the top-right of each fence.
+Copy **one** fence at a time. Paste it, read the Expected line, then go to the next. Where a command says `YOUR-ADAPTER`, replace that with the **Name** from group 2. Do not guess. Use one network path (Wi-Fi or Ethernet, not both). Disconnect the VPN only while you test the physical path. These commands do not assume which public DNS you use. GitHub shows a copy control on the top-right of each fence.
 
 **1. See if names are dead** (Command Prompt)
 
-If 9.9.9.9 replies and google.com does not, the link is up and DNS is not. If nslookup shows Server 127.0.0.1, a local stub is in the way.
+`9.9.9.9` is only a test address (Quad9). Any public IP that answers ping is enough to prove the link is up.
 
 ```
 ping -n 4 9.9.9.9
 ```
 
+Expected: four replies with time in milliseconds. If this fails, the internet path is down. Stop here and fix the link (cable, Wi-Fi, modem) before DNS.
+
 ```
 ping -n 4 google.com
 ```
 
+Expected if DNS works: four replies. Expected if names are dead: could not find host, or a timeout, while `9.9.9.9` still replied.
+
 ```
 nslookup google.com
 ```
+
+Look at the **Server** line. If it is `127.0.0.1` or `::1`, a local stub (VPN, filter, or DoH proxy) is in the way. If it times out with no listener on UDP 53, that stub is dead.
 
 ```
 nslookup google.com 9.9.9.9
 ```
 
-**2. See which adapter is up, and whether DNS Client is running** (Windows PowerShell)
+This asks Quad9 directly by IP as a test. Expected: an Address list for google.com. That proves a public resolver still works even when Windows default lookup does not. You may use `1.1.1.1` instead of `9.9.9.9` if you prefer Cloudflare as the test target.
 
-Status should be Up on only one of Wi-Fi or Ethernet. DNS Client should be Running, start type Automatic.
+**2. Write down the adapter Name, then check DNS Client** (Windows PowerShell)
+
+You need the **Name** from the first command for group 3. Typical names are `Wi-Fi` or `Ethernet`.
 
 ```
 Get-NetAdapter | Where-Object Status -eq 'Up' | Format-Table Name, Status, LinkSpeed
 ```
 
+Expected: one row you are using, Status **Up**. Copy the **Name** cell exactly, including spaces and capital letters. You will paste it into group 3 in place of `YOUR-ADAPTER`. If both Wi-Fi and Ethernet are Up, unplug one or turn one off, then run this again. Ignore VPN, Wintun, Bluetooth, and vEthernet rows.
+
 ```
 Get-Service Dnscache | Format-List Name, Status, StartType
 ```
 
-**3. Point the active adapter at Quad9, then flush the cache** (Windows PowerShell, Run as administrator)
-
-The first command sets 9.9.9.9 and 149.112.112.112 on every Up adapter that is not a VPN or virtual NIC. Then flush. Then confirm nslookup no longer shows 127.0.0.1.
+Expected: Status **Running**, StartType **Automatic**. If Status is Stopped, Event Viewer (Windows Logs, System) often shows event **7023 Access denied**. Do not `Restart-Service Dnscache` as the first fix.
 
 ```
-Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch 'VPN|Wintun|WireGuard|Hyper-V|vEthernet|Bluetooth' } | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses 9.9.9.9,149.112.112.112 }
+Get-DnsClientServerAddress -AddressFamily IPv4 | Format-Table InterfaceAlias, ServerAddresses
 ```
+
+Expected on a healthy path: a public resolver or your router IP. Problem: `127.0.0.1`, `::1`, or blank on the adapter you wrote down. Disconnect the VPN and run this again if you still see `127.0.0.1`.
+
+**3. Set a public resolver on YOUR adapter, then flush** (Windows PowerShell, Run as administrator)
+
+Replace `YOUR-ADAPTER` with the **Name** from group 2, keep the quotes. Copy **exactly one** of the four set commands, then flush, then nslookup. The field PC used Quad9. Cloudflare, Google, or automatic DHCP are equally valid. Do not run all four set commands.
+
+```
+Set-DnsClientServerAddress -InterfaceAlias "YOUR-ADAPTER" -ServerAddresses 9.9.9.9,149.112.112.112
+```
+
+Optional. Quad9. Example: if group 2 showed Name `Wi-Fi`, this becomes `InterfaceAlias "Wi-Fi"`. Expected: no error. If it says the alias was not found, the Name does not match. Run group 2 again.
+
+```
+Set-DnsClientServerAddress -InterfaceAlias "YOUR-ADAPTER" -ServerAddresses 1.1.1.1,1.0.0.1
+```
+
+Optional. Cloudflare. Use this instead of Quad9, not in addition to it.
+
+```
+Set-DnsClientServerAddress -InterfaceAlias "YOUR-ADAPTER" -ServerAddresses 8.8.8.8,8.8.4.4
+```
+
+Optional. Google Public DNS. Use this instead of Quad9 or Cloudflare, not in addition.
+
+```
+Set-DnsClientServerAddress -InterfaceAlias "YOUR-ADAPTER" -ResetServerAddresses
+```
+
+Optional. Returns that adapter to automatic DNS from DHCP (usually your router). Use this if you do not want a public resolver.
 
 ```
 ipconfig /flushdns
 ```
 
+Expected: Successfully flushed the DNS Resolver Cache.
+
 ```
 nslookup google.com
 ```
 
+Expected: Server is no longer `127.0.0.1`. You should see addresses for google.com. Then retry `ping google.com`. If Server is still `127.0.0.1`, the VPN stub is still in the way. Disconnect the VPN.
+
 **4. After names work: Windows image health** (Command Prompt, Run as administrator)
 
-Run these only after `ping google.com` works. `0x800f0915` means DISM still cannot reach a source.
+Run these only after `ping google.com` works. If names are still dead, DISM cannot reach Microsoft.
 
 ```
 DISM /Online /Cleanup-Image /RestoreHealth
 ```
 
+Expected when names work: The restore operation completed successfully. Failure `0x800f0915` means DISM could not reach a source. Restore names first. An ISO source can still fail.
+
 ```
 sfc /scannow
 ```
 
+Expected: Windows Resource Protection did not find any integrity violations, or it found files and repaired them. It can report no violations even when DISM failed with `0x800f0915`.
+
 **5. Domain-joined computers only: Isolation value** (Windows PowerShell, Run as administrator)
 
-A home workgroup PC can skip this. If either command prints `2`, follow Microsoft's set-to-0 steps in stage 7 below.
+A home workgroup PC can skip this entire group. You do not need output from earlier groups.
 
 ```
 Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name MachineIdentityIsolation -ErrorAction SilentlyContinue
 ```
 
+Expected on a home PC: no output, or the property is missing. If MachineIdentityIsolation equals **2**, follow stage 7 below (set to 0, restart, repair the secure channel).
+
 ```
 Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" -Name MachineIdentityIsolation -ErrorAction SilentlyContinue
 ```
+
+Same as the previous command, for the policy key. Expected: no output, or not 2. If it is 2, treat it the same as the LSA value.
 
 **Do not run these first.** They can drop the only working path while DNS Client is in Access denied.
 
@@ -167,13 +217,19 @@ Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" -
 netsh winsock reset
 ```
 
+Do not run this first. It rebuilds Winsock and can drop the only working path.
+
 ```
 netsh int ip reset
 ```
 
+Do not run this first. It resets the TCP/IP stack and can drop the session.
+
 ```
 Restart-Service Dnscache
 ```
+
+Do not run this first. When event 7023 Access denied is present, this restart fails.
 
 ### 1. Recognise the pattern
 
@@ -209,7 +265,7 @@ Windows must have a running DNS Client and a reachable resolver that is not a de
 
 1. Open `services.msc`. Find DNS Client (Dnscache). It should be Running, start type Automatic. Event Viewer, Windows Logs, System, event 7023 with Access denied means the service failed to start.
 2. On the computer in this report the service had been NetworkService and then failed. Changing the logon account to LocalSystem was attempted under pressure. That is not the first recommendation. Keep Files reinstall is what put the service back to Running and Automatic.
-3. Set IPv4 DNS on the active adapter to a public resolver by IP (Quad9 9.9.9.9 and 149.112.112.112, or Cloudflare 1.1.1.1 and 1.0.0.1). Empty IPv4 DNS plus leftover IPv6 site-local fec0 placeholders on ghost adapters will send lookups the wrong way.
+3. Set IPv4 DNS on the active adapter to a public resolver by IP, or return it to automatic DHCP. Quad9, Cloudflare, and Google are all valid. Empty IPv4 DNS plus leftover IPv6 site-local fec0 placeholders on ghost adapters will send lookups the wrong way.
 4. `ipconfig /flushdns` is safe. Confirm `nslookup google.com` no longer uses 127.0.0.1, then retry `ping google.com`.
 5. Leave VPN custom DNS for when the tunnel is connected. Test the physical path with the VPN disconnected.
 
