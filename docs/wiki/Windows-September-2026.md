@@ -1,69 +1,164 @@
 # September 2026 Windows update
 
-This handbook page matches the product page [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026). English is the technical record. Bastion **v16.0** does not install Microsoft packages and does not change the DNS Client logon account.
+English is the technical record for this handbook page. It is not a Microsoft support article. It does not claim that Bastion caused the outage. Bastion **v16.0** does not install Microsoft packages and does not change the DNS Client logon account.
 
-## What this is
+Published 26 September 2026.
 
-The 8 September 2026 Windows security update (**KB5124008**, Windows 11 25H2 build **26200.9445** / 24H2 **26100.9445**) is what broke name resolution and several VPN paths on a personal Windows 11 computer that also ran Bastion and a consumer VPN.
+## What this page is
 
-Microsoft has confirmed Always On VPN failures and domain-trust failures after that package. Microsoft has **not** listed DNS Client event **7023** (Access denied) as a known issue. That last symptom is a field observation, recorded so operators can recognise it.
+The 8 September 2026 Windows security update is what broke name resolution and several VPN paths on the personal Windows 11 computer used to maintain Bastion. Bastion did not write the DNS Client service account, did not stop the DNS Client service, and did not install that Microsoft package.
+
+A consumer VPN that takes over DNS while connected, together with Bastion's optional encrypted DNS on physical adapters and a strict inbound firewall, is a demanding environment for that update. That combination did not write the regression. It is the combination that fails first when Windows networking misfires.
+
+Microsoft has confirmed Always On VPN failures and domain-trust failures after the 8 September cumulative update. Microsoft has not listed DNS Client event 7023 (Access denied) as a known issue. That symptom is recorded here so other people who run Bastion can recognise it.
 
 ## What Microsoft shipped
 
-- **8 September 2026:** KB5124008. Public reporting described two Windows elevation-of-privilege flaws listed as exploited: CVE-2026-85880 (ALPC) and CVE-2026-81963 (Windows Update Stack).
-- **14 September 2026:** out-of-band **KB5129195** (25H2 **26200.9457**, 24H2 **26100.9457**). Repairs Remote Desktop Services hangs, Plan9 folder shares for some Linux guests, and part of USB Audio Class 1.0. Also includes CVE-2026-62721 (User-Mode Power Service).
+On 8 September 2026 Microsoft released Knowledge Base article 5124008 for Windows 11 versions 24H2 and 25H2. That package moves 25H2 to OS build 26200.9445 and 24H2 to 26100.9445. Public reporting described a record set of Common Vulnerabilities and Exposures identifiers, including two Windows elevation-of-privilege flaws that Microsoft listed as exploited in the wild: CVE-2026-85880 in Advanced Local Procedure Call, and CVE-2026-81963 in the Windows Update Stack.
 
-Bastion menu **C**, row **WIN-SEP2026**, treats **UBR 9457 / KB5129195** as the healthy floor for 25H2 and 24H2. Bastion starts a Windows Update scan and opens Settings. You finish Download and restart if Windows asks.
+On 14 September 2026 Microsoft released an out-of-band cumulative update, Knowledge Base article 5129195, which moves 25H2 to 26200.9457 and 24H2 to 26100.9457. That package repairs Remote Desktop Services instability from the 8 September update, restores Plan9 folder shares for some Linux virtual machines, partly repairs USB Audio Class 1.0 in multichannel modes, and includes protection for CVE-2026-62721 in Windows User-Mode Power Service. Windows 11 version 26H1 received Knowledge Base article 5129194. Windows 10 version 22H2 received Knowledge Base article 5129236.
+
+Bastion version 16.0 already treats those out-of-band floors as the healthy line in the known CVE catalogue (main menu **C**, row **WIN-SEP2026**). A 25H2 computer still on 26200.9445 is reported Exposed until Knowledge Base 5129195 is installed, or the update build revision is 9457 or higher. Bastion starts a Windows Update scan and opens Settings. It does not silently install the package.
 
 ## What Microsoft has confirmed
 
-- **Always On VPN** profiles that automatically fail over between IKEv2 and SSTP can stay in Connecting or report that the specified port is already in use. Workaround: pin one protocol.
-- **Machine Identity Isolation** honoured at registry value **2** can break domain trust on domain controllers below Windows Server 2025 DFL. Workaround: set the value to **0**, restart, then `Test-ComputerSecureChannel -Repair`. A home workgroup PC without those keys is not on that path.
-- RDS, Plan9/WSL shares, and part of USB Audio Class 1.0 are addressed by **KB5129195**.
+### Always On VPN
 
-## What showed up on a personal PC
+After Knowledge Base 5124008 (25H2 and 24H2) or 5124012 (26H1), Always On VPN profiles that automatically fail over between IKEv2 and SSTP can stay in Connecting, retry without succeeding, or report that the specified port is already in use. Microsoft's temporary workaround is to pin the profile to a single protocol. That is an enterprise Always On VPN issue. A consumer VPN client is a different product. The same cumulative update is the package that changed the Windows networking stack.
 
-Ping by numeric address still worked and names did not. `nslookup` to `127.0.0.1` had no listener on UDP 53. DNS Client logged **7023 Access denied**. DISM / Windows Update then failed with **0x800f0915**. Direct queries to a public resolver by IP still answered.
+### Machine Identity Isolation and domain trust
 
-A connected consumer VPN that replaces system DNS can leave a dead local stub if the Windows DNS Client cannot start. Bastion optional DNS-over-HTTPS on physical adapters does not set the DNS Client ObjectName. VPN adapters are excluded from DNS Apply. A connected VPN overriding DNS is expected. See [SECURITY.md](https://github.com/jjames06/bastion-hardening/blob/main/SECURITY.md).
+On domain-joined computers, Knowledge Base 5124008 began honouring Machine Identity Isolation when the registry value is 2 (enforcement). That feature is only supported with Windows Server 2025 domain functional level. Workstations against older domain controllers can lose their secure channel. Microsoft's workaround is to set the value to 0, restart, then repair the secure channel. A home computer that is not domain-joined, and that does not have those registry values, is not on that path.
 
-Using Ethernet and Wi-Fi at the same time is a separate local problem. Use one path.
+### Remote Desktop, USB audio, and Plan9 shares
+
+Remote Desktop Services could hang after the 8 September update. That class of failure is resolved by Knowledge Base 5129195. USB Audio Class 1.0 devices could fail to start. Eight-channel and 3D modes are partly fixed in the same out-of-band package. Host folder shares into some Hyper-V Linux guests using Plan9, including some Windows Subsystem for Linux setups, failed until 5129195.
+
+### File History
+
+Some computers could not create or update File History backups after Knowledge Base 5124008, including a false Reconnect your drive message. Microsoft listed a later September package (Knowledge Base 5124010 and updates on or after 22 September 2026) as the repair for that class of failure.
+
+## What showed up on a personal computer
+
+This report is from one Windows 11 Pro 25H2 computer used to maintain Bastion. It had Bastion applied, a consumer VPN connected at times, and both a wired adapter and a wireless adapter. It is not a client site, an office domain, or a named internet provider.
+
+After Knowledge Base 5124008 installed, ping by numeric address still worked and names did not. nslookup aimed at 127.0.0.1 had no listener on UDP port 53. The DNS Client service (Dnscache) logged event 7023 with Access denied (Win32 exit code 5). Windows Update and DISM RestoreHealth then failed with 0x800f0915 because the computer could not reach Microsoft's source over a broken name path.
+
+Direct queries to a public resolver by IP still answered. That pattern is a dead local stub and a dead DNS Client, not a dead internet link. Changing the DNS Client logon account, resetting adapter DNS, and similar live repairs were attempted under pressure. Several of those commands can drop the only working path. The recovery that restored Windows features on this computer was Keep Files reinstall, then putting programs back. That is a last resort, not the first step.
+
+After that reinstall the DNS Client was Running and Automatic again. The computer was still on build 26200.9445 (Knowledge Base 5124008) until Windows Update could offer Knowledge Base 5129195. Machine Identity Isolation keys on this computer were absent, so the domain-trust known issue was not the path that hit it.
+
+A separate local problem, not caused by the cumulative update, was using Ethernet and Wi-Fi at the same time. Windows then reported no internet and bounced routes, and the wireless radio stayed on a slow 2.4 GHz channel. Use one path at a time: wireless or wired, not both.
+
+## What current Bastion versions change
+
+The published product version is 16.0. Unpublished 15.9.9 work was folded into 16.0. Always start with `Bastion-Hardening.bat` from the official zip.
+
+| Version | Status | What it is |
+|---------|--------|------------|
+| **16.0** | Current | Known CVE checks (main menu **C**, Recovery hub **7**). WIN-SEP2026 floor for 25H2 and 24H2 is update build revision 9457 (Knowledge Base 5129195). Defender update health. Modular source with MANIFEST integrity. GNU GPLv3. |
+| **15.9.8** | Superseded | Optional LAN hygiene on the Windows computer only. Recovery home-gateway fingerprint after you confirm. No assumed modem brand. Prefer 16.0. |
+| **15.9.7 through 15.9.0** | Superseded | Modular layout, launch fixes, dark console, and Help colours. 15.9.1 was retracted. Prefer 16.0. |
+| **15.8.x and earlier 15.x** | Best-effort | Monolith era through 15.8.4. Prefer 16.0 for CVE checks and Defender update health. |
+
+### What Bastion does
+
+- Optional DNS Apply writes the IPv4 resolver addresses you chose (Quad9 by default, or Cloudflare, Google, or OpenDNS) on eligible physical adapters, and it registers Windows DNS-over-HTTPS the same way Settings, Edit DNS does. VPN, WSL, Docker, loopback, and similar virtual adapters are excluded from that list.
+- A connected VPN is expected to override those adapter DNS settings while the tunnel is up. That is documented in Bastion's security policy as expected behaviour, not a Bastion defect. See [SECURITY.md](https://github.com/jjames06/bastion-hardening/blob/main/SECURITY.md).
+- Firewall Apply sets inbound Block and outbound Allow, and it disables inbound groups such as File and Printer Sharing, Network Discovery, Remote Desktop, and Windows Remote Management. It does not add outbound blocks for DNS.
+- High-risk services Bastion can disable include Print Spooler, Server (SMB sharing), UPnP, and related items. The DNS Client (Dnscache) is not in that list. Bastion does not rewrite the DNS Client ObjectName, does not set Machine Identity Isolation, and does not install Knowledge Base 5124008.
+- Recovery hub 3 can reset DNS to automatic or restore the encrypted prior-DNS snapshot from the last Apply. Recovery hub 7 reverses CVE-catalogue registry writes Bastion recorded. Neither hub uninstalls a Microsoft cumulative update. System Restore (main menu **13** or **R**) remains the strongest full rollback.
+
+## What caused it
+
+The 8 September 2026 cumulative update (Knowledge Base 5124008 on 25H2 and 24H2) is the package that moved the computer in this report to 26200.9445. Microsoft has already confirmed that it broke Always On VPN automatic protocol failover and, where Isolation was set to enforcement, domain trust. Independent reports describe a networking-stack regression rather than a bad Intune profile.
+
+A consumer VPN that replaces system DNS while connected can point lookups at a local stub on 127.0.0.1, flush the resolver cache, and leave no listener on UDP 53 if the Windows DNS Client cannot start. When names fail and numeric ping still works, that is the signature.
+
+DNS Client event 7023 Access denied means the service failed to start. On the computer in this report it had been running as NetworkService. That is a Windows service permission failure after the cumulative update, not a Bastion Apply line. The Bastion DNS, services, and Apply modules do not set the DNS Client logon account.
+
+Bastion's optional DNS-over-HTTPS on physical adapters, inbound firewall posture, and a computer that had wired, wireless, and VPN paths up at once made Windows Network Connectivity Status Indicator and VPN reconnect logic less forgiving. Those settings did not create Knowledge Base 5124008.
+
+Keep Files reinstall of Windows put DNS Client back to Running and Automatic on this computer. After that, install Knowledge Base 5129195 when Windows Update offers it, and use one network path. VPN privacy features that add cover traffic or extra hops reduce speed by design. That is separate from a wireless radio parked on 2.4 GHz.
 
 ## How to recover
 
-Work these stages in order. The full sentences live on the [site page](https://www.operationlockedin.com/bastion/windows-september-2026). This is the path that restored a personal Windows 11 25H2 PC after names failed, a VPN stub sat on 127.0.0.1 with no UDP 53 listener, DNS Client logged **7023 Access denied**, and Microsoft Store, Windows Update, DISM (**0x800f0915**), and network troubleshooters all failed.
+This sequence is the path that actually restored a personal Windows 11 25H2 computer after Knowledge Base 5124008. Names failed, ping by IP still worked, a consumer VPN local stub sat on 127.0.0.1 with nothing listening on UDP 53, DNS Client logged event 7023 Access denied, and Microsoft Store, Windows Update, DISM, and the built-in network troubleshooters all failed because they need names. Work the stages in order. Do not skip to Keep Files until names are dead and DISM cannot reach a source.
 
 ### 1. Recognise the pattern
 
-- `ping 9.9.9.9` works, `ping google.com` fails: names are dead, the link is not.
-- `nslookup google.com` showing Server **127.0.0.1** with no listener on UDP 53 is a dead local stub.
-- `nslookup google.com 9.9.9.9` still answering means the public resolver works.
+Confirm it is a name-resolution failure, not a dead internet link.
 
-### 2. Do not start with stack resets
+1. ping a public address by number (for example 9.9.9.9). If that replies, the path to the internet is up.
+2. ping a name such as google.com. If that fails while the number works, Windows cannot resolve names.
+3. Open Command Prompt and run `nslookup google.com` with no extra switches. If Server is 127.0.0.1 or ::1, a local stub (VPN, filter, or DoH proxy) is in the way. If there is no listener on UDP 53, that stub is dead.
+4. `nslookup google.com 9.9.9.9` (or another public resolver by IP) still answering while the default lookup fails means the public resolver works and the local resolver does not.
+5. Microsoft Store, Windows Update, and DISM RestoreHealth need names. They will look offline, spin, or return 0x800f0915 even though ping by IP works. Built-in network troubleshooters fail for the same reason.
 
-Skip `netsh winsock reset`, `netsh int ip reset`, and `Restart-Service Dnscache` as first moves. Do not uninstall **KB5124008**. Do not dual-home Ethernet and Wi-Fi.
+### 2. Stop before the commands that drop the last path
 
-### 3. One network path
+Several common resets make a half-working session worse.
 
-Unplug Ethernet or turn Wi-Fi off. Disconnect the VPN only to test the physical path. Bastion Recovery **9 → 3** can restore prior DNS or DHCP. Hub **7** does not uninstall Microsoft updates.
+1. Do not start with `netsh winsock reset` or `netsh int ip reset`. Those rebuild the stack and can drop the only working path.
+2. Do not `Restart-Service Dnscache` as a first move. On this failure the service often logs 7023 Access denied (Win32 5) and will not restart.
+3. Do not ResetServerAddresses on an adapter that already has a working public resolver by IP.
+4. Do not uninstall Knowledge Base 5124008 to chase DNS. That package closes elevation-of-privilege bugs Microsoft listed as exploited.
+5. Do not leave Ethernet and Wi-Fi up together. Dual-home plus a VPN makes Network Connectivity Status Indicator report no internet and bounce routes.
 
-### 4. DNS Client and adapter DNS
+### 3. Use one network path
 
-DNS Client should be Running / Automatic. Event **7023 Access denied** means it failed to start. Point the active adapter at a public resolver **by IP**. `ipconfig /flushdns` is safe. Empty IPv4 DNS plus leftover IPv6 `fec0` placeholders on ghost adapters send lookups the wrong way.
+Pick wireless or wired. Leave the other disconnected until names work.
 
-Changing the DNS Client logon account to LocalSystem was attempted under pressure. Keep Files is what put the service back to Running.
+1. Unplug Ethernet or turn Wi-Fi off. Do not leave both connected.
+2. If a VPN is connected, disconnect it only long enough to test the physical path. While the tunnel is up, its DNS is expected to win. Privacy features such as cover traffic and extra hops reduce speed by design; they are not a broken radio.
+3. If you use Bastion, Recovery hub 3 can restore prior DNS from the last Apply snapshot or return adapters to automatic DNS. Recovery hub 7 does not uninstall Microsoft updates.
 
-### 5. Store, Windows Update, DISM
+### 4. Get names working on the physical adapter
 
-Restore names first. Then take **KB5129195** (build **9457**). DISM **0x800f0915** means no source. `sfc /scannow` can still report no integrity violations. An ISO source can still fail. Store and `wsreset` need names.
+Windows must have a running DNS Client and a reachable resolver that is not a dead 127.0.0.1 stub.
 
-### 6. Keep Files when Store and Update stay dead
+1. Open `services.msc`. Find DNS Client (Dnscache). It should be Running, start type Automatic. Event Viewer, Windows Logs, System, event 7023 with Access denied means the service failed to start.
+2. On the computer in this report the service had been NetworkService and then failed. Changing the logon account to LocalSystem was attempted under pressure. That is not the first recommendation. Keep Files reinstall is what put the service back to Running and Automatic.
+3. Set IPv4 DNS on the active adapter to a public resolver by IP (Quad9 9.9.9.9 and 149.112.112.112, or Cloudflare 1.1.1.1 and 1.0.0.1). Empty IPv4 DNS plus leftover IPv6 site-local fec0 placeholders on ghost adapters will send lookups the wrong way.
+4. `ipconfig /flushdns` is safe. Confirm `nslookup google.com` no longer uses 127.0.0.1, then retry `ping google.com`.
+5. Leave VPN custom DNS for when the tunnel is connected. Test the physical path with the VPN disconnected.
 
-Settings → System → Recovery → Reset this PC → **Keep my files**. Reinstall programs from official sources. Install **KB5129195** when Update offers it. Use one path.
+### 5. Microsoft Store, Windows Update, and DISM
 
-### 7. Domain-joined only
+These features cannot repair themselves while names are dead.
 
-Isolation registry **= 2**: set to **0**, restart, `Test-ComputerSecureChannel -Repair`. Always On VPN auto IKEv2/SSTP: pin one protocol.
+1. Restore name resolution first. Then open Settings, Windows Update, and take Knowledge Base 5129195 (25H2 and 24H2 build 9457) or later.
+2. If `DISM /Online /Cleanup-Image /RestoreHealth` returns 0x800f0915, it could not reach a source. `sfc /scannow` may still report no integrity violations. That combination means the component store cannot talk to Microsoft, not that every file is fine.
+3. Mounting a matching Windows 11 ISO and pointing DISM at it can still fail when the servicing stack and name path are both damaged. Treat ISO repair as optional, not a guarantee.
+4. Microsoft Store and `wsreset.exe` need names and Windows Update. They will not recover until DNS works, or until Keep Files reinstall replaces the Store components.
+
+### 6. Keep Files reinstall when Store and Update stay dead
+
+When DNS Client will not stay healthy, DISM cannot reach a source, and Store plus Windows Update remain broken, Keep Files is the recovery that restored this computer.
+
+1. Use Settings, System, Recovery, Reset this PC, Keep my files. That reinstalls Windows, keeps personal files, and removes most installed programs.
+2. After the reinstall, DNS Client should be Running and Automatic again. The build may still be 26200.9445 (Knowledge Base 5124008) until Windows Update can offer 5129195.
+3. Reinstall programs from official sources. Reinstall the VPN if you use one. Re-download Bastion from [GitHub Latest](https://github.com/jjames06/bastion-hardening/releases/latest) if you still want it.
+4. Use one network path. Install Knowledge Base 5129195 when Windows Update offers it. System Restore from before the cumulative update is the other full rollback if you created a point and still have it.
+
+### 7. Domain-joined computers only
+
+A home workgroup PC without these registry values can skip this stage.
+
+1. If `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\MachineIdentityIsolation` or the DeviceGuard policy value is 2, Microsoft's documented workaround is to set it to 0, restart, then `Test-ComputerSecureChannel -Repair`.
+2. Always On VPN that automatically fails over between IKEv2 and SSTP should be pinned to one protocol until Microsoft ships a permanent fix.
+
+## Sources
+
+- [Microsoft Learn: Windows 11 version 25H2 known issues (Knowledge Base 5124008)](https://learn.microsoft.com/en-us/windows/release-health/status-windows-11-25h2)
+- [Microsoft Support: Knowledge Base 5124008](https://support.microsoft.com/help/5124008)
+- [Microsoft Support: Knowledge Base 5129195 out-of-band](https://support.microsoft.com/help/5129195)
+- [BleepingComputer: Microsoft September 2026 updates break Always On VPN](https://www.bleepingcomputer.com/news/microsoft/microsoft-september-2026-windows-updates-break-always-on-vpn-connections/)
+- [BleepingComputer: Knowledge Base 5124008 domain trust / Machine Identity Isolation](https://www.bleepingcomputer.com/news/microsoft/windows-11-kb5124008-update-breaks-domain-trust-for-some-users/)
+- [Microsoft Q&A: Always On VPN fails after Knowledge Base 5124008](https://learn.microsoft.com/en-us/answers/questions/5998351/always-on-vpn-fails-after-installing-kb5124008-on)
+- [The Hacker News: September 2026 Patch Tuesday including CVE-2026-85880 and CVE-2026-81963](https://thehackernews.com/2026/09/microsoft-patches-record-974-flaws.html)
+- [Known CVE checks](Cve-checks) (WIN-SEP2026 floor is Knowledge Base 5129195 on 25H2)
+- [SECURITY.md](https://github.com/jjames06/bastion-hardening/blob/main/SECURITY.md) (VPN override of DNS is expected)
 
 ## Related
 
