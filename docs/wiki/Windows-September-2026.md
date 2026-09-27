@@ -8,7 +8,7 @@ Published 26 September 2026.
 
 ## Fix names now
 
-If ping by IP works and names fail, Microsoft Store, Windows Update, and DISM will fail too. Copy the commands in order. Do not start with `netsh winsock reset`. Do not skip to Keep Files until names are dead and DISM cannot reach a source.
+If ping by IP works and names fail, Microsoft Store, Windows Update, and DISM will fail too. Copy the commands in order. Do not start with `netsh winsock reset`. Do not skip to Keep Files until names are dead and DISM cannot reach a source. For an offline copy, use the browser Print dialog (Save as PDF or paper).
 
 ### Commands to copy
 
