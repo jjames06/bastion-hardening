@@ -693,6 +693,10 @@ function Open-UrlSafe([string]$Url) {
         Write-Host "  No URL to open." -ForegroundColor Yellow
         return
     }
+    if ($Url -notmatch '^https://[A-Za-z0-9.-]+') {
+        Write-Host "  Refusing to open a URL that is not https." -ForegroundColor Yellow
+        return
+    }
     try {
         Start-Process $Url -ErrorAction Stop | Out-Null
     } catch {
