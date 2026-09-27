@@ -246,12 +246,15 @@ The same row lives in the **v16.0 known CVE checks** catalog (main menu **C**, R
 
 **What Bastion does *not* do:** DNS Apply never sets the DNS Client logon account and never stops Dnscache. HighRiskServices does not include Dnscache. VPN adapters are excluded from DNS Apply. A connected VPN overriding adapter DNS is expected ([SECURITY.md](../SECURITY.md)).
 
-**What to do**
+**What to do** (full staged write-up: [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026))
 
-1. Keep KB5124008 (it closes elevation bugs Microsoft listed as exploited). Install **KB5129195** (or later) so 25H2/24H2 reach UBR 9457. Bastion menu **C** row WIN-SEP2026 already uses that floor.
-2. Use **one** network path (Wi-Fi or Ethernet). Dual-home plus a VPN makes NCSI lie.
-3. Recovery **9 → 3 Network** to restore prior DNS or DHCP. Do not start with `netsh winsock reset` on the only working session.
-4. Domain-joined PCs with `MachineIdentityIsolation = 2`: Microsoft's workaround is set to `0`, restart, then `Test-ComputerSecureChannel -Repair`.
+1. Confirm names are dead: `ping` by IP works, `ping` by name fails, `nslookup` to 127.0.0.1 has no UDP 53 listener. Store, Windows Update, DISM **0x800f0915**, and troubleshooters fail until names work.
+2. Do **not** start with `netsh winsock reset`, `netsh int ip reset`, or `Restart-Service Dnscache`. Do not uninstall KB5124008.
+3. Use **one** network path. Disconnect the VPN only to test the physical adapter.
+4. DNS Client Running/Automatic; Event **7023** is Access denied. Point the active adapter at a public resolver **by IP**. `ipconfig /flushdns` is safe.
+5. Then install **KB5129195** (UBR 9457). Bastion menu **C** row WIN-SEP2026 already uses that floor. Recovery **9 → 3** restores prior DNS or DHCP.
+6. If Store and Update stay dead after names still will not hold, **Keep Files** reinstall restored this computer. Reinstall programs. Take 5129195 when Update offers it.
+7. Domain-joined PCs with `MachineIdentityIsolation = 2`: set to `0`, restart, then `Test-ComputerSecureChannel -Repair`.
 
 Public write-up: [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026). Handbook: [Windows-September-2026](wiki/Windows-September-2026.md).
 

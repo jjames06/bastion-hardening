@@ -31,15 +31,39 @@ Using Ethernet and Wi-Fi at the same time is a separate local problem. Use one p
 
 ## How to recover
 
-1. Leave **KB5124008** installed. Install **KB5129195** (or later) so 25H2/24H2 reach UBR **9457**.
-2. If ping by IP works and names fail, check whether DNS Client is Running. Do not start with `netsh winsock reset` on the only working session.
-3. Recovery **9 → 3 Network** to restore prior DNS or DHCP.
-4. Use one network path (wireless or wired).
-5. Domain-joined PCs with Isolation **= 2**: follow Microsoft's set-to-0 steps. Home workgroup PCs can skip that.
+Work these stages in order. The full sentences live on the [site page](https://www.operationlockedin.com/bastion/windows-september-2026). This is the path that restored a personal Windows 11 25H2 PC after names failed, a VPN stub sat on 127.0.0.1 with no UDP 53 listener, DNS Client logged **7023 Access denied**, and Microsoft Store, Windows Update, DISM (**0x800f0915**), and network troubleshooters all failed.
 
-Keep Files reinstall restored DNS Client on the computer used for this report. That is a last resort.
+### 1. Recognise the pattern
 
-Full sentences, sources, and the version table: [operationlockedin.com/bastion/windows-september-2026](https://www.operationlockedin.com/bastion/windows-september-2026).
+- `ping 9.9.9.9` works, `ping google.com` fails: names are dead, the link is not.
+- `nslookup google.com` showing Server **127.0.0.1** with no listener on UDP 53 is a dead local stub.
+- `nslookup google.com 9.9.9.9` still answering means the public resolver works.
+
+### 2. Do not start with stack resets
+
+Skip `netsh winsock reset`, `netsh int ip reset`, and `Restart-Service Dnscache` as first moves. Do not uninstall **KB5124008**. Do not dual-home Ethernet and Wi-Fi.
+
+### 3. One network path
+
+Unplug Ethernet or turn Wi-Fi off. Disconnect the VPN only to test the physical path. Bastion Recovery **9 → 3** can restore prior DNS or DHCP. Hub **7** does not uninstall Microsoft updates.
+
+### 4. DNS Client and adapter DNS
+
+DNS Client should be Running / Automatic. Event **7023 Access denied** means it failed to start. Point the active adapter at a public resolver **by IP**. `ipconfig /flushdns` is safe. Empty IPv4 DNS plus leftover IPv6 `fec0` placeholders on ghost adapters send lookups the wrong way.
+
+Changing the DNS Client logon account to LocalSystem was attempted under pressure. Keep Files is what put the service back to Running.
+
+### 5. Store, Windows Update, DISM
+
+Restore names first. Then take **KB5129195** (build **9457**). DISM **0x800f0915** means no source. `sfc /scannow` can still report no integrity violations. An ISO source can still fail. Store and `wsreset` need names.
+
+### 6. Keep Files when Store and Update stay dead
+
+Settings → System → Recovery → Reset this PC → **Keep my files**. Reinstall programs from official sources. Install **KB5129195** when Update offers it. Use one path.
+
+### 7. Domain-joined only
+
+Isolation registry **= 2**: set to **0**, restart, `Test-ComputerSecureChannel -Repair`. Always On VPN auto IKEv2/SSTP: pin one protocol.
 
 ## Related
 
