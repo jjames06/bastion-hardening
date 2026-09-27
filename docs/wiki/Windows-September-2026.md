@@ -87,149 +87,185 @@ This sequence is the path that actually restored a personal Windows 11 25H2 comp
 
 ### Commands to copy
 
-Copy **one** fence at a time. Paste it, read the Expected line, then go to the next. Where a command says `YOUR-ADAPTER`, replace that with the **Name** from group 2. Do not guess. Use one network path (Wi-Fi or Ethernet, not both). Disconnect the VPN only while you test the physical path. These commands do not assume which public DNS you use. GitHub shows a copy control on the top-right of each fence.
+Copy **one** command at a time. Paste it, read **Expected**, then go to the next. Where a command says `YOUR-ADAPTER`, replace that with the **Name** from group 2. Do not guess. Use one network path (Wi-Fi or Ethernet, not both). Disconnect the VPN only while you test the physical path. These commands do not assume which public DNS you use.
 
-**1. See if names are dead** (Command Prompt)
+#### 1. See if names are dead
 
-`9.9.9.9` is only a test address (Quad9). Any public IP that answers ping is enough to prove the link is up.
+Shell: **Command Prompt**. `9.9.9.9` is only a test address (Quad9). Any public IP that answers ping is enough to prove the link is up.
 
-```
+Command 1 of 4:
+
+```text
 ping -n 4 9.9.9.9
 ```
 
-Expected: four replies with time in milliseconds. If this fails, the internet path is down. Stop here and fix the link (cable, Wi-Fi, modem) before DNS.
+> **Expected:** Four replies with time in milliseconds. If this fails, the internet path is down. Stop here and fix the link (cable, Wi-Fi, modem) before DNS.
 
-```
+Command 2 of 4:
+
+```text
 ping -n 4 google.com
 ```
 
-Expected if DNS works: four replies. Expected if names are dead: could not find host, or a timeout, while `9.9.9.9` still replied.
+> **Expected:** If DNS works, four replies. If names are dead: could not find host, or a timeout, while `9.9.9.9` still replied.
 
-```
+Command 3 of 4:
+
+```text
 nslookup google.com
 ```
 
-Look at the **Server** line. If it is `127.0.0.1` or `::1`, a local stub (VPN, filter, or DoH proxy) is in the way. If it times out with no listener on UDP 53, that stub is dead.
+> **Expected:** Look at the **Server** line. If it is `127.0.0.1` or `::1`, a local stub (VPN, filter, or DoH proxy) is in the way. If it times out with no listener on UDP 53, that stub is dead.
 
-```
+Command 4 of 4:
+
+```text
 nslookup google.com 9.9.9.9
 ```
 
-This asks Quad9 directly by IP as a test. Expected: an Address list for google.com. That proves a public resolver still works even when Windows default lookup does not. You may use `1.1.1.1` instead of `9.9.9.9` if you prefer Cloudflare as the test target.
+> **Expected:** An Address list for google.com. This asks Quad9 by IP as a **test only**. It proves a public resolver still works even when Windows default lookup does not. You may use `1.1.1.1` instead of `9.9.9.9` if you prefer Cloudflare as the test target.
 
-**2. Write down the adapter Name, then check DNS Client** (Windows PowerShell)
+#### 2. Write down the adapter Name, then check DNS Client
 
-You need the **Name** from the first command for group 3. Typical names are `Wi-Fi` or `Ethernet`.
+Shell: **Windows PowerShell**. You need the **Name** from the first command for group 3. Typical names are `Wi-Fi` or `Ethernet`.
 
-```
+Command 1 of 3:
+
+```powershell
 Get-NetAdapter | Where-Object Status -eq 'Up' | Format-Table Name, Status, LinkSpeed
 ```
 
-Expected: one row you are using, Status **Up**. Copy the **Name** cell exactly, including spaces and capital letters. You will paste it into group 3 in place of `YOUR-ADAPTER`. If both Wi-Fi and Ethernet are Up, unplug one or turn one off, then run this again. Ignore VPN, Wintun, Bluetooth, and vEthernet rows.
+> **Expected:** One row you are using, Status **Up**. Copy the **Name** cell exactly, including spaces and capital letters. You will paste it into group 3 in place of `YOUR-ADAPTER`. If both Wi-Fi and Ethernet are Up, unplug one or turn one off, then run this again. Ignore VPN, Wintun, Bluetooth, and vEthernet rows.
 
-```
+Command 2 of 3:
+
+```powershell
 Get-Service Dnscache | Format-List Name, Status, StartType
 ```
 
-Expected: Status **Running**, StartType **Automatic**. If Status is Stopped, Event Viewer (Windows Logs, System) often shows event **7023 Access denied**. Do not `Restart-Service Dnscache` as the first fix.
+> **Expected:** Status **Running**, StartType **Automatic**. If Status is Stopped, Event Viewer (Windows Logs, System) often shows event **7023 Access denied**. Do not run `Restart-Service Dnscache` as the first fix.
 
-```
+Command 3 of 3:
+
+```powershell
 Get-DnsClientServerAddress -AddressFamily IPv4 | Format-Table InterfaceAlias, ServerAddresses
 ```
 
-Expected on a healthy path: a public resolver or your router IP. Problem: `127.0.0.1`, `::1`, or blank on the adapter you wrote down. Disconnect the VPN and run this again if you still see `127.0.0.1`.
+> **Expected:** A public resolver or your router IP on a healthy path. Problem: `127.0.0.1`, `::1`, or blank on the adapter you wrote down. Disconnect the VPN and run this again if you still see `127.0.0.1`.
 
-**3. Set a public resolver on YOUR adapter, then flush** (Windows PowerShell, Run as administrator)
+#### 3. Set a public resolver on YOUR adapter, then flush
 
-Replace `YOUR-ADAPTER` with the **Name** from group 2, keep the quotes. Copy **exactly one** of the four set commands, then flush, then nslookup. The field PC used Quad9. Cloudflare, Google, or automatic DHCP are equally valid. Do not run all four set commands.
+Shell: **Windows PowerShell (Run as administrator)**. Replace `YOUR-ADAPTER` with the **Name** from group 2, keep the quotes. Copy **exactly one** of the four set commands, then flush, then nslookup. The field PC used Quad9. Cloudflare, Google, or automatic DHCP are equally valid. Do not run all four set commands.
 
-```
+Command 1 of 6 (optional, Quad9):
+
+```powershell
 Set-DnsClientServerAddress -InterfaceAlias "YOUR-ADAPTER" -ServerAddresses 9.9.9.9,149.112.112.112
 ```
 
-Optional. Quad9. Example: if group 2 showed Name `Wi-Fi`, this becomes `InterfaceAlias "Wi-Fi"`. Expected: no error. If it says the alias was not found, the Name does not match. Run group 2 again.
+> **Expected:** No error. Example: if group 2 showed Name `Wi-Fi`, this becomes `InterfaceAlias "Wi-Fi"`. If it says the alias was not found, the Name does not match. Run group 2 again.
 
-```
+Command 2 of 6 (optional, Cloudflare):
+
+```powershell
 Set-DnsClientServerAddress -InterfaceAlias "YOUR-ADAPTER" -ServerAddresses 1.1.1.1,1.0.0.1
 ```
 
-Optional. Cloudflare. Use this instead of Quad9, not in addition to it.
+> **Expected:** No error. Use this **instead of** Quad9, not in addition.
 
-```
+Command 3 of 6 (optional, Google Public DNS):
+
+```powershell
 Set-DnsClientServerAddress -InterfaceAlias "YOUR-ADAPTER" -ServerAddresses 8.8.8.8,8.8.4.4
 ```
 
-Optional. Google Public DNS. Use this instead of Quad9 or Cloudflare, not in addition.
+> **Expected:** No error. Use this **instead of** Quad9 or Cloudflare, not in addition.
 
-```
+Command 4 of 6 (optional, automatic DHCP):
+
+```powershell
 Set-DnsClientServerAddress -InterfaceAlias "YOUR-ADAPTER" -ResetServerAddresses
 ```
 
-Optional. Returns that adapter to automatic DNS from DHCP (usually your router). Use this if you do not want a public resolver.
+> **Expected:** No error. Returns that adapter to automatic DNS from DHCP (usually your router). Use this if you do not want a public resolver.
 
-```
+Command 5 of 6 (always, after you chose one set command):
+
+```text
 ipconfig /flushdns
 ```
 
-Expected: Successfully flushed the DNS Resolver Cache.
+> **Expected:** Successfully flushed the DNS Resolver Cache.
 
-```
+Command 6 of 6 (always, after flush):
+
+```text
 nslookup google.com
 ```
 
-Expected: Server is no longer `127.0.0.1`. You should see addresses for google.com. Then retry `ping google.com`. If Server is still `127.0.0.1`, the VPN stub is still in the way. Disconnect the VPN.
+> **Expected:** Server is no longer `127.0.0.1`. You should see addresses for google.com. Then retry `ping google.com`. If Server is still `127.0.0.1`, the VPN stub is still in the way. Disconnect the VPN.
 
-**4. After names work: Windows image health** (Command Prompt, Run as administrator)
+#### 4. After names work: Windows image health
 
-Run these only after `ping google.com` works. If names are still dead, DISM cannot reach Microsoft.
+Shell: **Command Prompt (Run as administrator)**. Run these only after `ping google.com` works. If names are still dead, DISM cannot reach Microsoft.
 
-```
+Command 1 of 2:
+
+```text
 DISM /Online /Cleanup-Image /RestoreHealth
 ```
 
-Expected when names work: The restore operation completed successfully. Failure `0x800f0915` means DISM could not reach a source. Restore names first. An ISO source can still fail.
+> **Expected:** The restore operation completed successfully. Failure `0x800f0915` means DISM could not reach a source. Restore names first. An ISO source can still fail.
 
-```
+Command 2 of 2:
+
+```text
 sfc /scannow
 ```
 
-Expected: Windows Resource Protection did not find any integrity violations, or it found files and repaired them. It can report no violations even when DISM failed with `0x800f0915`.
+> **Expected:** Windows Resource Protection did not find any integrity violations, or it found files and repaired them. It can report no violations even when DISM failed with `0x800f0915`.
 
-**5. Domain-joined computers only: Isolation value** (Windows PowerShell, Run as administrator)
+#### 5. Domain-joined computers only: Isolation value
 
-A home workgroup PC can skip this entire group. You do not need output from earlier groups.
+Shell: **Windows PowerShell (Run as administrator)**. A home workgroup PC can skip this entire group.
 
-```
+Command 1 of 2:
+
+```powershell
 Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name MachineIdentityIsolation -ErrorAction SilentlyContinue
 ```
 
-Expected on a home PC: no output, or the property is missing. If MachineIdentityIsolation equals **2**, follow stage 7 below (set to 0, restart, repair the secure channel).
+> **Expected:** On a home PC, no output, or the property is missing. If MachineIdentityIsolation equals **2**, follow stage 7 below (set to 0, restart, repair the secure channel).
 
-```
+Command 2 of 2:
+
+```powershell
 Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" -Name MachineIdentityIsolation -ErrorAction SilentlyContinue
 ```
 
-Same as the previous command, for the policy key. Expected: no output, or not 2. If it is 2, treat it the same as the LSA value.
+> **Expected:** Same as the previous command, for the policy key. No output, or not 2. If it is 2, treat it the same as the LSA value.
 
-**Do not run these first.** They can drop the only working path while DNS Client is in Access denied.
+#### Do not run these first
 
-```
+These can drop the only working path while DNS Client is in Access denied.
+
+```text
 netsh winsock reset
 ```
 
-Do not run this first. It rebuilds Winsock and can drop the only working path.
+> **Do not run first.** Rebuilds Winsock and can drop the only working path.
 
-```
+```text
 netsh int ip reset
 ```
 
-Do not run this first. It resets the TCP/IP stack and can drop the session.
+> **Do not run first.** Resets the TCP/IP stack and can drop the session.
 
-```
+```text
 Restart-Service Dnscache
 ```
 
-Do not run this first. When event 7023 Access denied is present, this restart fails.
+> **Do not run first.** When event 7023 Access denied is present, this restart fails.
 
 ### 1. Recognise the pattern
 
