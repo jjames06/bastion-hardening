@@ -85,6 +85,65 @@ Keep Files reinstall of Windows put DNS Client back to Running and Automatic on 
 
 This sequence is the path that actually restored a personal Windows 11 25H2 computer after Knowledge Base 5124008. Names failed, ping by IP still worked, a consumer VPN local stub sat on 127.0.0.1 with nothing listening on UDP 53, DNS Client logged event 7023 Access denied, and Microsoft Store, Windows Update, DISM, and the built-in network troubleshooters all failed because they need names. Work the stages in order. Do not skip to Keep Files until names are dead and DISM cannot reach a source.
 
+### Commands to copy
+
+Open Command Prompt or Windows PowerShell as Administrator where the block says so. Copy one block, paste it, read the result, then go to the next. Use one network path (Wi-Fi or Ethernet, not both) before you start. Disconnect the VPN only while you test the physical path. GitHub shows a copy control on the top-right of each fence.
+
+**1. See if names are dead** (Command Prompt)
+
+```
+ping -n 4 9.9.9.9
+ping -n 4 google.com
+nslookup google.com
+nslookup google.com 9.9.9.9
+```
+
+If 9.9.9.9 replies and google.com does not, the link is up and DNS is not. If nslookup shows Server 127.0.0.1, a local stub is in the way.
+
+**2. See which adapter is up, and whether DNS Client is running** (Windows PowerShell)
+
+```
+Get-NetAdapter | Where-Object Status -eq 'Up' | Format-Table Name, Status, LinkSpeed
+Get-Service Dnscache | Format-List Name, Status, StartType
+```
+
+**3. Point the active adapter at Quad9, then flush the cache** (Windows PowerShell, Run as administrator)
+
+Sets 9.9.9.9 and 149.112.112.112 on every Up adapter that is not a VPN or virtual NIC.
+
+```
+$up = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch 'VPN|Wintun|WireGuard|Hyper-V|vEthernet|Bluetooth' }
+$up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses 9.9.9.9,149.112.112.112 }
+ipconfig /flushdns
+nslookup google.com
+```
+
+**4. After names work: Windows image health** (Command Prompt, Run as administrator)
+
+Run these only after `ping google.com` works. `0x800f0915` means DISM still cannot reach a source.
+
+```
+DISM /Online /Cleanup-Image /RestoreHealth
+sfc /scannow
+```
+
+**5. Domain-joined computers only: Isolation value** (Windows PowerShell, Run as administrator)
+
+A home workgroup PC can skip this. If either command prints `2`, follow Microsoft's set-to-0 steps in stage 7 below.
+
+```
+Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name MachineIdentityIsolation -ErrorAction SilentlyContinue
+Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" -Name MachineIdentityIsolation -ErrorAction SilentlyContinue
+```
+
+**Do not run these first.** They can drop the only working path while DNS Client is in Access denied.
+
+```
+netsh winsock reset
+netsh int ip reset
+Restart-Service Dnscache
+```
+
 ### 1. Recognise the pattern
 
 Confirm it is a name-resolution failure, not a dead internet link.
