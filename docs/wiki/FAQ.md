@@ -14,7 +14,7 @@
 
 ## Which file do I download?
 
-Prefer **v16.0** modular (known CVE checks on main menu **C**; Defender update health; opt-in LanHygiene; Recovery gateway fingerprint). GitHub Latest is the last published zip until a new tag is cut.
+Prefer **v16.0** modular (known CVE checks on main menu **C**; Defender update health; FIREWALL-LAN; opt-in LanHygiene; Recovery gateway fingerprint). GitHub Releases currently publishes only the **v16.0** zip.
 
 - **Official site / GitHub Latest:** https://www.operationlockedin.com/bastion/download and https://github.com/jjames06/bastion-hardening/releases/latest  
 
@@ -106,7 +106,7 @@ All Bastion public resolvers (Quad9, Cloudflare, Cloudflare security, Google, Op
 
 Menu **D** alone still does not change Windows until Apply (**A** or main **8**).
 
-If you are on **v15.8.1-15.8.3** (or any build before Settings-matching DoH) and Settings still says **Unencrypted**, prefer upgrading to **v15.9.9** modular (includes the DoH Encrypted path since **v15.8.4**) and re-Apply DNS (or Network -> restore snapshot / Apply preferred). Manual fallback (old builds only): adapter -> DNS -> **Edit** -> DNS over HTTPS -> **On (automatic template)** -> Fallback off -> Save.
+If you are on **v15.8.1-15.8.3** (or any build before Settings-matching DoH) and Settings still says **Unencrypted**, prefer upgrading to **v16.0** modular (includes the DoH Encrypted path since **v15.8.4**) and re-Apply DNS (or Network -> restore snapshot / Apply preferred). Manual fallback (old builds only): adapter -> DNS -> **Edit** -> DNS over HTTPS -> **On (automatic template)** -> Fallback off -> Save.
 
 ## Does Bastion need my ISP modem?
 

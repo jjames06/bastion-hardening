@@ -24,6 +24,7 @@ Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know wh
 | Cannot host or reach Windows shares | **9 → 3 →** LAN/discovery **and** **9 → 2** Services | Open File and Printer Sharing if needed; re-enable `LanmanServer` if it is disabled |
 | Cannot RDP / Remote Assistance / WinRM | **9 → 3 →** Remote access | Enable the firewall group you need; for a full RDP host also allow system RDP and TermService. Lock remote access again when you are idle |
 | Name resolution wrong after Bastion DNS | **9 → 3 →** Reset DNS **or** Restore prior DNS | Option **3** resets eligible adapters to automatic (DHCP). Option **4** restores the encrypted pre-Apply snapshot when present (best-effort). Menu **D** intent is unchanged; the next DNS Apply may set public DNS again. A VPN may override DNS while connected |
+| Names fail, ping by IP works, after September 2026 Windows Update | Main **C** row WIN-SEP2026, then **9 → 3** Network | See [September 2026 Windows update](Windows-September-2026). Install KB5129195. Check DNS Client. Use one network path. Do not start with `netsh winsock reset`. |
 | Browser sites broken after policies | **9 → 4** or main **6** | Set that browser to **Default** (best-effort). System Restore remains the surest rollback |
 | ms-gamingoverlay "get an app" dialog | **9 → 5 →** Game Bar | Silence Game DVR (or re-enable flags and install Xbox Game Bar from the Store) |
 | Game or program fails after Apply (instant exit) | **9 → 6 →** StrictHandle | See [Games and StrictHandle](Games-and-StrictHandle) |

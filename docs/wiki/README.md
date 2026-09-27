@@ -8,6 +8,8 @@ User-facing handbook (Quick start, Hardening workflow, Recovery, StrictHandle, F
 | Quick start | [Quick-start.md](Quick-start.md) |
 | Hardening workflow | [Hardening-workflow.md](Hardening-workflow.md) |
 | Recovery cookbook | [Recovery-cookbook.md](Recovery-cookbook.md) |
+| Known CVE checks | [Cve-checks.md](Cve-checks.md) |
+| September 2026 Windows update | [Windows-September-2026.md](Windows-September-2026.md) |
 | LAN hygiene | [LAN-hygiene.md](LAN-hygiene.md) |
 | Games and StrictHandle | [Games-and-StrictHandle.md](Games-and-StrictHandle.md) |
 | FAQ | [FAQ.md](FAQ.md) |

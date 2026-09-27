@@ -72,7 +72,7 @@ Verified by the maintainer on a personal daily-driver PC (not a lab matrix of ev
 
 | OS | Build | Arch | Bastion | Notes |
 |----|-------|------|---------|--------|
-| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v15.9.9** | GPLv3; Defender update health (disk, signature age, TEMP fill files, opt-in daily task); LanHygiene opt-in; Recovery gateway fingerprint; CFA extra paths; modular `src\`; as of 2026-09-23 |
+| **Windows 11 Pro** | **10.0.26200** (build **26200**) | 64-bit | **v16.0** | GPLv3; known CVE checks (menu C); Defender update health; FIREWALL-LAN; LanHygiene opt-in; Recovery gateway fingerprint; modular `src\`; as of 2026-09-26 |
 
 Also intended for **Windows 10** (same script surface). If you run Bastion on a build not listed here, please report success or issues in [Discussions -> Testing feedback](https://github.com/jjames06/bastion-hardening/discussions) or [Issues](https://github.com/jjames06/bastion-hardening/issues).
 
@@ -200,14 +200,14 @@ Best for most people. Prefer one of these **official** sources only (not random 
 | **Official site (recommended)** | [www.operationlockedin.com/bastion/download](https://www.operationlockedin.com/bastion/download) - uses `/api/bastion/download` to resolve the same GitHub Latest zip |
 | **GitHub Releases** | [github.com/jjames06/bastion-hardening/releases/latest](https://github.com/jjames06/bastion-hardening/releases/latest) |
 
-Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). Older pinned tags such as [v15.3](https://github.com/jjames06/bastion-hardening/releases/tag/v15.3) / v15.2 remain on GitHub if you need them.
+Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). GitHub Releases currently publishes only **v16.0**.
 
-1. Download **`bastion-hardening-v15.9.9.zip`** (or the current Latest asset `bastion-hardening-v*.zip`) from the official site or GitHub Latest.
+1. Download **`bastion-hardening-v16.0.zip`** from the official site or GitHub Latest.
 2. **Always Unblock the zip before extract** (Mark-of-the-Web): right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**.  
    Skipping this is a common cause of *running scripts is disabled on this system* after extract.
 3. Extract the zip to a location **you** control, for example `C:\Tools\`.  
    Official release zips expand to a **single folder** such as  
-   `bastion-hardening-v15.9.9\` with all product files already together inside.  
+   `bastion-hardening-v16.0\` with all product files already together inside.  
    Avoid extracting into `C:\Windows` or Program Files.
 4. Open that folder and confirm these files sit together:
 
@@ -472,7 +472,7 @@ Dry Run, Apply, and Recovery use the same guidance. Full detail: [docs/KNOWN-ISS
 
 Public write-ups (Sep 2026, "BigDiskBuster") describe filling C: so Defender **platform and definition updates fail** while the service still looks running. There is no Microsoft patch in those write-ups. Bastion cannot fix Windows Update.
 
-**What Bastion does (v15.9.9):** Security audit and Dry Run report free space, signature age, oversized hidden TEMP files, blocking update policies, and recent 0x80070643-style events. Recovery **9 → 6 → Defender → 5** can delete listed TEMP files after you confirm and request `Update-MpSignature`. Apply (Defender section on) turns on check-signatures-before-scan and requests an update when signatures are already stale and C: has headroom. Option **4** on that Recovery screen installs an **opt-in** daily health task; it never deletes files.
+**What Bastion does (v16.0):** Security audit and Dry Run report free space, signature age, oversized hidden TEMP files, blocking update policies, and recent 0x80070643-style events. Recovery **9 → 6 → Defender → 5** can delete listed TEMP files after you confirm and request `Update-MpSignature`. Apply (Defender section on) turns on check-signatures-before-scan and requests an update when signatures are already stale and C: has headroom. Option **4** on that Recovery screen installs an **opt-in** daily health task; it never deletes files. Main menu **C** also scans this PC against the known CVE catalogue, including September 2026 Windows Update floors.
 
 Keep headroom on C:. A green shield with week-old signatures is not healthy.
 
