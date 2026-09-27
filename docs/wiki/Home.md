@@ -12,6 +12,7 @@ This wiki is a short **user handbook** for **Bastion v16.0** (modular plain-text
 2. [Hardening workflow](Hardening-workflow) - full ordered checklist, section defaults, verify, when things break  
 3. [Recovery cookbook](Recovery-cookbook) - printing, network, games, Defender if you want a feature back  
 3b. [Known CVE checks](Cve-checks) - v16.0 catalog (main menu **C**, Recovery **7**)  
+3c. [September 2026 Windows update](Windows-September-2026) - KB5124008, KB5129195, DNS Client 7023 field note  
 4. [Games and StrictHandle](Games-and-StrictHandle) - what breaks, how to reverse, how to report  
 5. [FAQ](FAQ) - common questions, honest limits  
 6. [Modular source layout](Modular-source) - why Bastion is no longer one giant script, and how to review it  
@@ -43,6 +44,7 @@ This wiki is a short **user handbook** for **Bastion v16.0** (modular plain-text
 
 | Need | Where |
 |------|--------|
+| September 2026 Windows update | [September 2026 Windows update](Windows-September-2026) and the [site page](https://www.operationlockedin.com/bastion/windows-september-2026) |
 | Running Bastion right now | In-app **Help** (menu **11**) |
 | Ordered first Apply checklist | [Hardening workflow](Hardening-workflow) |
 | Handbook / FAQ / Recovery recipes | **This wiki** |

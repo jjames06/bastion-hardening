@@ -238,6 +238,25 @@ The same row lives in the **v16.0 known CVE checks** catalog (main menu **C**, R
 
 ---
 
+## September 2026 Windows Update (KB5124008) plus a consumer VPN
+
+**Symptom:** After the 8 September 2026 cumulative update (KB5124008, Windows 11 25H2 build 26200.9445 / 24H2 26100.9445), names fail while ping by IP still works. DNS Client (Dnscache) may log event 7023 Access denied. `nslookup` to 127.0.0.1 may have no listener on UDP 53. Windows Update / DISM can then fail with 0x800f0915.
+
+**What Microsoft has confirmed for that package:** Always On VPN automatic IKEv2/SSTP failover ("port already in use"); Machine Identity Isolation enforcement (registry value 2) breaking domain trust on older DCs; RDS hangs, Plan9/WSL shares, and part of USB Audio Class 1.0 (those three are addressed by out-of-band **KB5129195**, build 9457). Microsoft has **not** listed DNS Client 7023 as a known issue. That last symptom is a field observation.
+
+**What Bastion does *not* do:** DNS Apply never sets the DNS Client logon account and never stops Dnscache. HighRiskServices does not include Dnscache. VPN adapters are excluded from DNS Apply. A connected VPN overriding adapter DNS is expected ([SECURITY.md](../SECURITY.md)).
+
+**What to do**
+
+1. Keep KB5124008 (it closes elevation bugs Microsoft listed as exploited). Install **KB5129195** (or later) so 25H2/24H2 reach UBR 9457. Bastion menu **C** row WIN-SEP2026 already uses that floor.
+2. Use **one** network path (Wi-Fi or Ethernet). Dual-home plus a VPN makes NCSI lie.
+3. Recovery **9 → 3 Network** to restore prior DNS or DHCP. Do not start with `netsh winsock reset` on the only working session.
+4. Domain-joined PCs with `MachineIdentityIsolation = 2`: Microsoft's workaround is set to `0`, restart, then `Test-ComputerSecureChannel -Repair`.
+
+Public write-up: [September 2026 Windows update](https://www.operationlockedin.com/bastion/windows-september-2026). Handbook: [Windows-September-2026](wiki/Windows-September-2026.md).
+
+---
+
 ## LanHygiene (opt-in) and home gateways
 
 **LanHygiene is off by default** and is **not** in Quick Harden. When enabled, Apply changes **the Windows PC running Bastion only**: LLMNR off, WPAD override, mDNS off, NetBIOS-over-TCP off, common NIC power-save properties Disabled when present, optional outbound UDP 137/138/5353 rules.

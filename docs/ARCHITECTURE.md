@@ -173,7 +173,7 @@ Expected: "Elevated console ready", then main menu (or use `tools-run-bootstrap.
 
 ## Version
 
-Product-facing version is **16.0** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). **16.0** adds the known CVE checks category (main menu **C**, Recovery hub **7**, optional Apply section) plus Defender update health. Always start with the `.bat`, never the `.ps1` alone.
+Product-facing version is **16.0** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). **16.0** adds the known CVE checks category (main menu **C**, Recovery hub **7**, optional Apply section) plus Defender update health. The current zip also includes FIREWALL-LAN (SMBDirect), Office Click-to-Run reminder, SMBv3 DisableCompression, RDP NLA, finish-it-yourself banners, DPAPI-wrapped CVE undo, and Bastion-folder ACLs. Product version stays **16.0**. Always start with the `.bat`, never the `.ps1` alone.
 
 **Public site note:** Official site download and GitHub **Latest** follow the last published zip. This tree is modular **16.0** (plain-text `src\`, MANIFEST integrity; source never encrypted).
 
