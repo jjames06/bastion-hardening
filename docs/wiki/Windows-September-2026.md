@@ -14,6 +14,9 @@ If ping by IP works and names fail, Microsoft Store, Windows Update, and DISM wi
 
 Copy **one** command at a time. Paste it, read **Expected**, then go to the next. Where a command says `YOUR-ADAPTER`, replace that with the **Name** from group 2. Do not guess. Use one network path (Wi-Fi or Ethernet, not both). Disconnect the VPN only while you test the physical path. These commands do not assume which public DNS you use.
 
+<details open>
+<summary><strong>1. See if names are dead</strong> (Command Prompt)</summary>
+
 #### 1. See if names are dead
 
 Shell: **Command Prompt**. `9.9.9.9` is only a test address (Quad9). Any public IP that answers ping is enough to prove the link is up.
@@ -50,6 +53,11 @@ nslookup google.com 9.9.9.9
 
 > **Expected:** An Address list for google.com. This asks Quad9 by IP as a **test only**. It proves a public resolver still works even when Windows default lookup does not. You may use `1.1.1.1` instead of `9.9.9.9` if you prefer Cloudflare as the test target.
 
+</details>
+
+<details>
+<summary><strong>2. Write down the adapter Name, then check DNS Client</strong> (Windows PowerShell)</summary>
+
 #### 2. Write down the adapter Name, then check DNS Client
 
 Shell: **Windows PowerShell**. You need the **Name** from the first command for group 3. Typical names are `Wi-Fi` or `Ethernet`.
@@ -77,6 +85,11 @@ Get-DnsClientServerAddress -AddressFamily IPv4 | Format-Table InterfaceAlias, Se
 ```
 
 > **Expected:** A public resolver or your router IP on a healthy path. Problem: `127.0.0.1`, `::1`, or blank on the adapter you wrote down. Disconnect the VPN and run this again if you still see `127.0.0.1`.
+
+</details>
+
+<details>
+<summary><strong>3. Set a public resolver on YOUR adapter, then flush</strong> (Windows PowerShell, Run as administrator)</summary>
 
 #### 3. Set a public resolver on YOUR adapter, then flush
 
@@ -130,6 +143,11 @@ nslookup google.com
 
 > **Expected:** Server is no longer `127.0.0.1`. You should see addresses for google.com. Then retry `ping google.com`. If Server is still `127.0.0.1`, the VPN stub is still in the way. Disconnect the VPN.
 
+</details>
+
+<details>
+<summary><strong>4. After names work: Windows image health</strong> (Command Prompt, Run as administrator)</summary>
+
 #### 4. After names work: Windows image health
 
 Shell: **Command Prompt (Run as administrator)**. Run these only after `ping google.com` works. If names are still dead, DISM cannot reach Microsoft.
@@ -150,6 +168,11 @@ sfc /scannow
 
 > **Expected:** Windows Resource Protection did not find any integrity violations, or it found files and repaired them. It can report no violations even when DISM failed with `0x800f0915`.
 
+</details>
+
+<details>
+<summary><strong>5. Domain-joined computers only: Isolation value</strong> (Windows PowerShell, Run as administrator)</summary>
+
 #### 5. Domain-joined computers only: Isolation value
 
 Shell: **Windows PowerShell (Run as administrator)**. A home workgroup PC can skip this entire group.
@@ -169,6 +192,11 @@ Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" -
 ```
 
 > **Expected:** Same as the previous command, for the policy key. No output, or not 2. If it is 2, treat it the same as the LSA value.
+
+</details>
+
+<details open>
+<summary><strong>Do not run these first</strong></summary>
 
 #### Do not run these first
 
@@ -255,6 +283,11 @@ A home workgroup PC without these registry values can skip this stage.
 1. If `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\MachineIdentityIsolation` or the DeviceGuard policy value is 2, Microsoft's documented workaround is to set it to 0, restart, then `Test-ComputerSecureChannel -Repair`.
 2. Always On VPN that automatically fails over between IKEv2 and SSTP should be pinned to one protocol until Microsoft ships a permanent fix.
 
+</details>
+
+<details>
+<summary><strong>Background</strong> (what Microsoft shipped, the field report, Bastion versions)</summary>
+
 ## Background
 
 Read this after names work, or if you need to know what Microsoft confirmed and what Bastion does. It is not required to run the commands above.
@@ -335,6 +368,8 @@ DNS Client event 7023 Access denied means the service failed to start. On the co
 Bastion's optional DNS-over-HTTPS on physical adapters, inbound firewall posture, and a computer that had wired, wireless, and VPN paths up at once made Windows Network Connectivity Status Indicator and VPN reconnect logic less forgiving. Those settings did not create Knowledge Base 5124008.
 
 Keep Files reinstall of Windows put DNS Client back to Running and Automatic on this computer. After that, install Knowledge Base 5129195 when Windows Update offers it, and use one network path. VPN privacy features that add cover traffic or extra hops reduce speed by design. That is separate from a wireless radio parked on 2.4 GHz.
+
+</details>
 
 ## Sources
 
