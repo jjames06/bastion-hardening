@@ -1,4 +1,12 @@
 #Requires -Version 5.1
+# CODEMAP FILE: tools-run-bootstrap.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Unblock-File on the extracted tree (Mark of the Web) then launch Bastion-Hardening.ps1 with Process Bypass.
+# Called by: Bastion-Hardening.bat.
+# Calls: Unblock-File, powershell.exe -ExecutionPolicy Bypass.
+# Invariants: Keep in the zip root next to the bat.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 <#
 .SYNOPSIS
   Elevated launch helper for Bastion-Hardening.bat.

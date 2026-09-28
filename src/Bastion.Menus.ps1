@@ -1,3 +1,11 @@
+# CODEMAP FILE: src/Bastion.Menus.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Interactive UI. Most menus save preferences only. Windows changes when Apply (8) or the documented NOW paths run (browsers, uninstall, DNS A, Recovery).
+# Called by: Load order last. Bootstrap calls the main loop after all modules exist.
+# Calls: Read-MenuChoice, Save-BastionConfig, domain modules.
+# Invariants: Dry Run before Apply on a machine you have not snapshotted. Do not add a 'point at hostname' item — that is Rampart.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # =============================================================================
 # Bastion.Menus.ps1 - modular domain (v15.9.0)
 # =============================================================================

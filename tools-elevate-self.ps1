@@ -1,4 +1,12 @@
 #Requires -Version 5.1
+# CODEMAP FILE: tools-elevate-self.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Relaunch the current script elevated via UAC (used if someone starts the .ps1 directly).
+# Called by: Bastion-Hardening.ps1 when not elevated.
+# Calls: Start-Process -Verb RunAs.
+# Invariants: High-IL SID check, not net session.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 <#
 .SYNOPSIS
   Elevate Bastion-Hardening.bat via UAC and wait (used only by the .bat).

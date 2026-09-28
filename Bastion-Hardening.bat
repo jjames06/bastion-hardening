@@ -1,4 +1,12 @@
 @echo off
+rem CODEMAP FILE: Bastion-Hardening.bat
+rem Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+rem Role: Official end-user launcher. Self-elevates, Unblock-File / MOTW, starts Bastion-Hardening.ps1 with Process Bypass.
+rem Called by: Double-click from the unzipped release.
+rem Calls: tools-run-bootstrap.ps1, then Bastion-Hardening.ps1.
+rem Invariants: Do not use 'net session' as the only elevation check (LanmanServer may be disabled after Apply). Keep beside src\ and the ps1.
+rem Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+rem Map: docs/CODEMAP.md — read that file first for the run/load graph.
 setlocal EnableExtensions
 title Bastion Hardening Framework
 cd /d "%~dp0"

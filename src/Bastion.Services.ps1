@@ -1,3 +1,11 @@
+# CODEMAP FILE: src/Bastion.Services.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: High-risk and Xbox service lists, firewall groups, scheduled-task paths. Disable/restore with undo.
+# Called by: Apply Services, Dry Run, Recovery.
+# Calls: sc.exe / Get-Service / netsh as documented in functions.
+# Invariants: LanmanServer may be disabled; that is why the .bat must not rely on net session. Spooler has SkipSpoolerThisApply.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # Bastion.Services.ps1 - modular domain (v15.9.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.

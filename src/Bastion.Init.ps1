@@ -1,8 +1,17 @@
+# CODEMAP FILE: src/Bastion.Init.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: First module. Declares $script: paths, stats, catalogs, DPAPI entropy salt. No functions.
+# Called by: Bastion-Hardening.ps1 load order 1.
+# Calls: None (assignments only). Config re-resolves LogDirectory after load.
+# Invariants: Do not run standalone. $script:BastionDpapiEntropy is a salt, not a key. Reviewers should read this freely (GPLv3).
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # =============================================================================
 # Bastion.Init.ps1 - script-scoped state, catalogs, and section documentation
 # =============================================================================
 #
 # PURPOSE
+#   See docs/CODEMAP.md for load order and how this sits next to Rampart/the site.
 #   Declares all $script: state and static catalogs used by the rest of Bastion.
 #   This is the first module loaded by Bastion-Hardening.ps1 so later modules
 #   can read and mutate the same runspace-wide variables.
