@@ -22,6 +22,7 @@ Version **16.0**
 |----------|--------|
 | [docs/CODEMAP.md](docs/CODEMAP.md) | File-by-file map. Start here if you did not write this code. Every \`src\\Bastion.*.ps1\` has a matching header. |
 | [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In); Bastion product pages and download |
+| [Rampart](https://github.com/jjames06/Rampart) | Sister program: read-only public-surface check of a hostname you operate |
 | [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** - Quick start, Hardening workflow, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
 | [September 2026 Windows update](https://github.com/jjames06/bastion-hardening/wiki/Windows-September-2026) | Full handbook: KB5124008, KB5129195, what Bastion does, DNS Client 7023, staged recovery. Source file: [docs/wiki/Windows-September-2026.md](docs/wiki/Windows-September-2026.md) |
 | [docs/wiki/Hardening-workflow.md](docs/wiki/Hardening-workflow.md) | Handbook: ordered first Apply checklist, section defaults, verify, recovery links |

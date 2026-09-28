@@ -2,7 +2,7 @@
 
 Selective Windows 10/11 hardening for a PC you administer. GNU GPLv3. Version **16.0**.
 
-Not Rampart (hostname checker) and not the practice website. This program never points at a URL.
+Not Rampart (hostname checker, [jjames06/Rampart](https://github.com/jjames06/Rampart)) and not the practice website. This program never points at a URL.
 
 Every `src\Bastion.*.ps1`, the bootstrap, the `.bat`, and `tools\*.ps1` starts with a `CODEMAP FILE:` header. Domain modules already had function-level comment-based help (`Purpose` / `When called` / `Side effects` / `Undo`); those remain under the file header.
 
