@@ -1,4 +1,12 @@
 #Requires -Version 5.1
+# CODEMAP FILE: tools/New-BastionSourceManifest.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Rebuild src/MANIFEST.sha256 after editing any Bastion.*.ps1.
+# Called by: Operator before pack-release.ps1.
+# Calls: Get-FileHash SHA256.
+# Invariants: If you change source and skip this, bootstrap will refuse to load. Integrity, not encryption.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 <#
 .SYNOPSIS
   Regenerate src\MANIFEST.sha256 for Bastion plain-text modules.

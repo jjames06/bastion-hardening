@@ -1,3 +1,11 @@
+# CODEMAP FILE: src/Bastion.Programs.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Catalog-only winget installs (no free-typed package IDs) and uninstall-on-confirm.
+# Called by: Programs menu, Apply install queue, Uninstall menu 10.
+# Calls: winget with IDs from the catalog in Init.
+# Invariants: Never accept a raw package ID from the operator. Catalog is the allowlist.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # Bastion.Programs.ps1 - modular domain (v15.9.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.

@@ -1,4 +1,12 @@
 ﻿#Requires -Version 5.1
+# CODEMAP FILE: tools/pack-release.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Build dist/bastion-hardening-v16.0.zip with src, bat, licence, docs/wiki. Smoke-load the ps1.
+# Called by: Operator for GitHub release assets.
+# Calls: New-BastionSourceManifest, Compress-Archive, BastionSmokeLoadOnly.
+# Invariants: Do not bump 16.0 here unless a numbered release is intended. Do not include tools/archive monolith.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 <#
 .SYNOPSIS
   Build the official Bastion release zip so Extract creates one folder.

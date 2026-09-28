@@ -1,3 +1,11 @@
+# CODEMAP FILE: src/Bastion.Browsers.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Per-browser policy modes and optional ECH locks. Writes on confirm (NOW), not only at Apply.
+# Called by: Menu 6, Apply Browsers section, Recovery.
+# Calls: policy registry for Chrome/Edge/Firefox as catalogued.
+# Invariants: ECH is never default. See docs/BROWSER-POLICIES-AND-ECH.md. Do not invent enterprise policy you did not test.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # =============================================================================
 # Bastion.Browsers.ps1 - modular domain (v15.9.0)
 # =============================================================================

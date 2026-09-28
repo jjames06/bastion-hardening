@@ -1,8 +1,17 @@
+# CODEMAP FILE: src/Bastion.Network.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Optional workstation LAN hygiene (outbound leak-ish settings). Recovery fingerprints the live gateway; it does not assume a Bell GigaHub.
+# Called by: Apply Network section (opt-in), Recovery.
+# Calls: Local adapter/gateway queries.
+# Invariants: Opt-in. Do not scan the LAN. Do not claim a specific ISP modem. Handbook: docs/wiki/LAN-hygiene.md.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # =============================================================================
 # Bastion.Network.ps1 - LAN hygiene (generic) + optional home-gateway probe
 # =============================================================================
 #
 # PURPOSE
+#   See docs/CODEMAP.md for load order and how this sits next to Rampart/the site.
 #   Workstation-side LAN leak and NIC power-save hardening that works on any
 #   personal Windows 10/11 PC. Optional Recovery helper fingerprints the
 #   default gateway over HTTP; vendor-specific CPE actions run ONLY when the

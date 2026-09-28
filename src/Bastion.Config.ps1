@@ -1,8 +1,17 @@
+# CODEMAP FILE: src/Bastion.Config.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Bastion-Config.json load/save, ACL on the config file, DPAPI Protect/Unprotect for undo blobs (DNS snapshot, RDP prior, CVE undo).
+# Called by: Load order 3. Apply/Recovery/Menus persist through here.
+# Calls: Windows DPAPI CurrentUser.
+# Invariants: Never DPAPI the source modules or winget catalog. Config JSON is preferences, not secrets, except the protected undo payloads.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # =============================================================================
 # Bastion.Config.ps1 - data directory, durable config, and protected undo I/O
 # =============================================================================
 #
 # PURPOSE
+#   See docs/CODEMAP.md for load order and how this sits next to Rampart/the site.
 #   Resolve a writable Bastion data directory, bind log/config/undo paths,
 #   load and save Bastion-Config.json preferences, maintain session/browser
 #   state snapshots, and read/write Bastion-LastApply.json with DPAPI for

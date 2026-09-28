@@ -1,8 +1,17 @@
+# CODEMAP FILE: src/Bastion.Core.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Log, menu primitives, Open-UrlSafe, write helpers, pause/header. Shared by every later module.
+# Called by: Load order 2. Menus and Apply call these constantly.
+# Calls: Init state. Open-UrlSafe starts the default handler for a URL the caller already chose.
+# Invariants: ASCII punctuation in UI. Callers must pass fixed product URLs, not untrusted free text.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # =============================================================================
 # Bastion.Core.ps1 - console UX primitives, logging, and input helpers
 # =============================================================================
 #
 # PURPOSE
+#   See docs/CODEMAP.md for load order and how this sits next to Rampart/the site.
 #   Shared presentation and logging layer used by menus, Apply, Recovery, and
 #   domain modules. No hardening mutations live here; this module only writes
 #   to console, log file, and optional Application event log.

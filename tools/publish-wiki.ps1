@@ -1,4 +1,12 @@
-﻿# =============================================================================
+﻿# CODEMAP FILE: tools/publish-wiki.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Sync docs/wiki to the GitHub wiki remote.
+# Called by: Operator after handbook edits.
+# Calls: git.
+# Invariants: Wiki remote is separate from the code repo.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
+# =============================================================================
 # publish-wiki.ps1
 # =============================================================================
 # Publish docs/wiki Markdown pages to the GitHub Wiki remote (*.wiki.git).
