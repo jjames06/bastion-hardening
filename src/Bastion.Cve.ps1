@@ -1,3 +1,11 @@
+# CODEMAP FILE: src/Bastion.Cve.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Workstation CVE catalog Bastion can DETECT on this PC, and reversible remediations where they exist. Main menu C. Optional Apply section off by default.
+# Called by: Menu C, Recovery hub 7, optional Apply CveChecks.
+# Calls: Defender update health from Harden. Windows Update scan start. Registry compensating controls.
+# Invariants: Cannot patch kernel/ALPC/Update Stack. No exploit payloads. Third-party AV turning Defender RTP off is a product conflict, not a CVE 'fix'.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # =============================================================================
 # Bastion.Cve.ps1 - known Windows 10/11 CVE checks (v16.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).

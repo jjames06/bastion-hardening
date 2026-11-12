@@ -1,3 +1,11 @@
+# CODEMAP FILE: src/Bastion.Recovery.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Undo using Config snapshots: services, firewall, DNS/DoH, RDP, StrictHandle exceptions, CVE remediations, browser policies.
+# Called by: Recovery menus. Strongest rollback remains System Restore.
+# Calls: Unprotect-BastionBlob, domain helpers.
+# Invariants: If undo JSON is missing, say so; do not invent a prior DNS. Gateway fingerprint is live, not a hardcoded modem.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # =============================================================================
 # Bastion.Recovery.ps1 - modular domain (v15.9.0)
 # =============================================================================

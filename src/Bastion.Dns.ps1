@@ -1,3 +1,11 @@
+# CODEMAP FILE: src/Bastion.Dns.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Preferred DNS provider catalog, per-interface DoH (DohFlags=17 + template), apply/restore of DNS. Snapshot is DPAPI-protected in undo.
+# Called by: DNS menu, Apply DNS section, Recovery restore prior DNS.
+# Calls: Config Protect-BastionBlob. Windows DNS client APIs / registry.
+# Invariants: Choosing a preference in the menu does not change Windows until Apply DNS (A) or Apply sections. DoH labels must match Settings > Edit DNS.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # Bastion.Dns.ps1 - modular domain (v15.9.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.

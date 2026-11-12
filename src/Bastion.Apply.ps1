@@ -1,3 +1,11 @@
+# CODEMAP FILE: src/Bastion.Apply.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: ONLY module that should persist most system changes after Dry Run: Security Audit, Apply, Quick Harden, System Restore Point create/check.
+# Called by: Menus 7/8/Quick. Pack smoke does not Apply.
+# Calls: Services, Dns, Harden, Programs, Browsers. Save-UndoData after Apply.
+# Invariants: Preview counters dryWould/dryAlready/drySkip must not write. SkipSpoolerThisApply is a safety latch. System Restore is the strongest rollback.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 # Bastion.Apply.ps1 - modular domain (v15.9.0)
 # Dot-sourced by Bastion-Hardening.ps1 into the same runspace ($script: scope).
 # Plain text GPLv3 source - never encrypt. Do not run standalone.

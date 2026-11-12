@@ -1,4 +1,12 @@
 #Requires -Version 5.1
+# CODEMAP FILE: Bastion-Hardening.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Thin elevated bootstrap. Dot-sources src\Bastion.*.ps1 in fixed order into THIS runspace so $script: state is shared. Then enters menus (or smoke-load).
+# Called by: Bastion-Hardening.bat. Direct .ps1 double-click often dies on Restricted policy.
+# Calls: Every src\Bastion.*.ps1 via $script:BastionSourceModules. Verifies src\MANIFEST.sha256.
+# Invariants: Never encrypt modules. MANIFEST is integrity, not encryption. DPAPI is undo data only. -BastionSmokeLoadOnly for pack tests.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 <#
 .SYNOPSIS
     Bastion Hardening Framework v16.0 FINAL

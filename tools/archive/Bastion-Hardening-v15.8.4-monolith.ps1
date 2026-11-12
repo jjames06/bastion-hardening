@@ -1,4 +1,12 @@
 #Requires -RunAsAdministrator
+# CODEMAP FILE: tools/archive/Bastion-Hardening-v15.8.4-monolith.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Frozen pre-modular Bastion (v15.8.4) kept so reviewers can diff the split. Not shipped in the user zip.
+# Called by: Humans reading git history / Split script.
+# Calls: N/A — do not execute on a production PC.
+# Invariants: Archive only. Current product is the modular src\ tree.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 <#
 .SYNOPSIS
     Bastion Hardening Framework v15.8.4 FINAL

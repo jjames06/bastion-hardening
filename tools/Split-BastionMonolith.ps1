@@ -1,4 +1,12 @@
 #Requires -Version 5.1
+# CODEMAP FILE: tools/Split-BastionMonolith.ps1
+# Product: Bastion Hardening Framework v16.0 — selective Windows 10/11 hardening
+# Role: Historical one-time splitter that created the modular src\ layout from v15.8.4 monolith. Do not run against current tree.
+# Called by: Nobody on a current checkout.
+# Calls: Archive monolith in tools/archive.
+# Invariants: Kept for audit history. Running it now would destroy the modular files.
+# Sisters: Rampart inspects a public hostname; this program never points at a URL. bastion-web hosts the official zip. Do not encrypt these modules (GPLv3 + independent audit).
+# Map: docs/CODEMAP.md — read that file first for the run/load graph.
 <#
 .SYNOPSIS
   One-shot modular restructure: extract Bastion monolith into src\*.ps1 modules.
