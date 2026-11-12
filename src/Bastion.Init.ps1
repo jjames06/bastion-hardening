@@ -23,8 +23,9 @@
 # SECURITY NOTES
 #   - Source is plain text. Reviewers should read it freely.
 #   - DPAPI (Protect-BastionBlob / Unprotect-BastionBlob in Bastion.Config.ps1)
-#     protects only sensitive undo payloads (DNS snapshot, RDP host prior),
-#     never this module and never the winget catalog or section docs.
+#     protects only sensitive undo payloads (DNS snapshot, RDP host prior,
+#     CVE undo items in Bastion-CveUndo.json). Never this module, never the
+#     winget catalog, never logs or session JSON.
 #   - $script:BastionDpapiEntropy is a fixed salt for CurrentUser DPAPI; it is
 #     not a secret key and does not replace OS credential isolation.
 #   - Sensitive paths and install roots are validated later (Programs module);
@@ -40,7 +41,7 @@
 # Resolve-BastionLogDirectory may reuse a writable legacy path (flat C:\Temp)
 # or fall back to ProgramData / LOCALAPPDATA / TEMP when C:\Temp is unusable.
 $script:Config = @{
-    ScriptVersion = "15.9.8"
+    ScriptVersion = "16.0"
     # Preferred new-store root; Resolve-BastionLogDirectory may reuse legacy C:\Temp or fall back.
     LogDirectory  = "C:\Temp\Bastion"
     # Windows Event Log source name used by Write-Log (Application log).
@@ -258,6 +259,8 @@ $script:DefaultSections = [ordered]@{
     "RdpHostLock"          = $false
     # Opt-in: workstation LAN leak/NIC power-save hygiene. Not CPE firmware. Not Quick Harden.
     "LanHygiene"           = $false
+    # Opt-in: known Windows 10/11 CVE scan + safe remediations. Prefer main menu C. Not Quick Harden.
+    "CveChecks"            = $false
 }
 
 # Subset used by "Quick Harden" style presets (core mitigations without opt-ins).
@@ -281,7 +284,7 @@ foreach ($k in $script:DefaultSections.Keys) {
 $script:SectionDocs = [ordered]@{
     "Firewall" = @{
         Intent  = "Reduce unsolicited inbound exposure while keeping normal outbound traffic working (browsing, VPN, Windows Update)."
-        Changes = "Enables the firewall on Domain, Private, and Public profiles; sets DefaultInboundAction=Block and leaves DefaultOutboundAction=Allow; disables inbound rule groups for File and Printer Sharing, Network Discovery, Remote Assistance, Remote Desktop, Windows Remote Management, and mDNS when those groups are present and enabled."
+        Changes = "Enables the firewall on Domain, Private, and Public profiles; sets DefaultInboundAction=Block and leaves DefaultOutboundAction=Allow; disables inbound rule groups for File and Printer Sharing, File and Printer Sharing over SMBDirect (when present), Network Discovery, Remote Assistance, Remote Desktop, Windows Remote Management, and mDNS when those groups are present and enabled."
         Impact  = "Inbound discovery, SMB sharing, RDP, and WinRM from the network are blocked unless you later re-enable specific rules. Outbound apps continue to work. Does not by itself change fDenyTSConnections or TermService (see optional RdpHostLock)."
         Revert  = "Recovery > 3 Network: Remote access (RDP/Assistance/WinRM) and LAN/discovery (File Sharing, Network Discovery, mDNS) with live OPEN/LOCKED status. Recovery > 1 Undo restores tracked groups from last Apply. Or use wf.msc / System Restore."
         Notes   = "Verify with Get-NetFirewallProfile and Get-NetFirewallRule. Full RDP host needs OPEN Remote Desktop group + system allow + TermService. Dry Run and Audit report the RDP triad (firewall group, system policy, TermService)."
@@ -336,11 +339,18 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Off by default. Firewall Apply already locks the Remote Desktop inbound group. Use this only if you also want the OS host switch denied."
     }
     "Defender" = @{
-        Intent  = "Turn on stronger Microsoft Defender workstation protections that are often left off by default."
-        Changes = "Enables Network Protection and Controlled Folder Access when Defender is available; refreshes a CFA allow-list for known catalog app paths and a few common system paths."
-        Impact  = "Suspicious network connections and untrusted apps writing to protected folders are more likely to be blocked. Rare false positives may need an allow path."
-        Revert  = "Recovery > 6 Security mitigations > Defender: soften NP and/or CFA, or re-harden with allow-path refresh. Or Windows Security UI."
-        Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings. Allow a trusted app via Windows Security > Ransomware protection > Allow an app, or let Bastion refresh ExtraCfaPaths."
+        Intent  = "Turn on stronger Microsoft Defender workstation protections that are often left off by default, and keep signature updates from silently starving."
+        Changes = "Enables Network Protection and Controlled Folder Access when Defender is available; refreshes a CFA allow-list for known catalog app paths and a few common system paths; turns on CheckForSignaturesBeforeRunningScan; if signatures are more than two days old and C: has headroom, requests Update-MpSignature. Does not delete TEMP files during Apply."
+        Impact  = "Suspicious network connections and untrusted apps writing to protected folders are more likely to be blocked. Rare false positives may need an allow path. A stale-signature update needs network and free disk."
+        Revert  = "Recovery > 6 Security mitigations > Defender: soften NP and/or CFA, re-harden with allow-path refresh, or option 5 for disk/signature health (optional daily task). Or Windows Security UI."
+        Notes   = "Requires Microsoft Defender features online. Third-party antivirus may limit or replace these settings and may turn real-time protection off. Allow a trusted app via Windows Security > Ransomware protection > Allow an app, or let Bastion refresh ExtraCfaPaths. Disk-fill update starvation has no Microsoft patch as of Sep 2026; Bastion is a compensating control (detect, clean with confirm, request update). Broader CVE catalog: main menu C / Recovery > 7."
+    }
+    "CveChecks" = @{
+        Intent  = "Optionally run the known Windows 10/11 CVE catalog during Apply (same detectors as main menu C). Prefer the standalone menu so you can read live status first."
+        Changes = "When enabled on Apply: for Exposed rows marked Apply-safe, start a Windows Update scan, request Defender signature/platform update, disable SMBv1 if still on, set PrintNightmare / Wintrust / WDigest / AlwaysInstallElevated hardening. Does not uninstall VLC or delete the ms-msdt protocol during Apply (those stay on menu C with extra confirm)."
+        Impact  = "Windows Update Settings may open. Printer driver installs from the network then need an administrator. Rare old Authenticode installers may fail to verify. SMBv1-only NAS will fail."
+        Revert  = "Exact reverse: Bastion-Hardening.bat as Administrator, main menu 9, then 7, then 2, then Yes. That restores Bastion-CveUndo.json only (Point and Print, Wintrust padding, WDigest, AlwaysInstallElevated, ms-msdt backup). FIREWALL-LAN group locks: Recovery 9, then 3 Network (Remote access or LAN / discovery). It does not uninstall a Microsoft update, re-enable SMBv1, or reinstall VLC. Daily Defender health task: Recovery 9, then 6, then Defender, then 5, then 5, then Yes. System Restore (menu 13 or R) remains the strongest full rollback."
+        Notes   = "Off by default. Not in Quick Harden. Bastion cannot patch Microsoft kernel CVEs; those rows only start an update scan. No exploit payloads."
     }
     "PowerShellAuditing" = @{
         Intent  = "Record PowerShell script block activity for later investigation if malware uses scripts."
@@ -350,7 +360,7 @@ $script:SectionDocs = [ordered]@{
         Notes   = "Pairs well with process creation auditing if you enable that separately outside Bastion."
     }
     "ExploitProtection" = @{
-        Intent  = "Apply a mild system exploit mitigation profile, including system-wide StrictHandle, with automatic per-app exceptions only for paths Bastion already knows (today: discovered Wow*.exe including retail Wow.exe and Classic Era WowClassic.exe)."
+        Intent  = "Apply a mild system exploit mitigation profile, including system-wide StrictHandle, with automatic per-app exceptions only for paths Bastion already knows (today: discovered Wow*.exe including retail Wow.exe, Classic Era WowClassic.exe, and Forever-family clients such as WowB.exe)."
         Changes = "Enables DEP, SEHOP, BottomUp, HighEntropy, and StrictHandle system-wide. Then turns StrictHandle OFF only for discovered exception EXEs (currently Wow*.exe / loader-sibling EXEs plus any StrictHandleExceptionPaths you list in Bastion-Config.json)."
         Impact  = "Most processes get stricter handle checks. Programs without an exception may fail to start. World of Warcraft retail and Classic Era are documented examples that broke under system StrictHandle (Eidolon / INVALID_HANDLE in the loader DLL) and are now auto-excepted when found. CS2 was tested OK. Other titles are unknown until reported - no exception means they may still break. Installing Classic after Apply requires a refresh."
         Revert  = "Recovery > 6 > StrictHandle: (1) disable system StrictHandle and reboot, or (2) add full .exe path under StrictHandleExceptionPaths and refresh exceptions. Report so we can ship an automatic exception. Then re-enable system StrictHandle when ready. System Restore remains bulletproof."
@@ -526,8 +536,11 @@ $script:LanDiscoveryFirewallGroups = @(
 )
 
 # Full list Bastion disables under the Firewall section when rules exist and are on.
+# SMBDirect is the RDMA/SMB path on SKUs that ship it; lock it with File and Printer Sharing.
 $script:FirewallGroups = @(
-    "File and Printer Sharing","Network Discovery","Remote Assistance",
+    "File and Printer Sharing",
+    "File and Printer Sharing over SMBDirect",
+    "Network Discovery","Remote Assistance",
     "Remote Desktop","Windows Remote Management","mDNS"
 )
 
@@ -548,6 +561,10 @@ $script:BastionScheduledTaskPaths = @(
     "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
     "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
 )
+
+# Opt-in daily Defender signature/disk health task (Recovery > 6 > Defender > 5). Not in Quick Harden.
+$script:BastionDefenderHealthTaskPath = "\"
+$script:BastionDefenderHealthTaskName = "BastionDefenderUpdateHealth"
 
 # Regex used when removing Copilot / Office Hub style user Appx packages.
 $script:CopilotM365PackageMatch = 'Copilot|MicrosoftOfficeHub|Microsoft.Copilot'
@@ -586,6 +603,7 @@ $script:SuggestionRegistry = @(
 # DPAPI optional entropy for undo secrets (not a password; not for source files)
 # -----------------------------------------------------------------------------
 # Used only by Protect-BastionBlob / Unprotect-BastionBlob in Bastion.Config.ps1
-# for DNS snapshots and RDP host prior values inside Bastion-LastApply.json.
-# Changing this string breaks decryption of existing undo blobs for this user.
+# for DNS snapshots and RDP host prior (Bastion-LastApply.json) and for
+# ItemsProtected in Bastion-CveUndo.json. Changing this string breaks
+# decryption of existing undo blobs for this user.
 $script:BastionDpapiEntropy = [System.Text.Encoding]::UTF8.GetBytes("BastionHardening.ProtectedState.v15.8")

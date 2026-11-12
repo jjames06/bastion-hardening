@@ -4,16 +4,18 @@
 
 | Version | Supported |
 |---------|-----------|
-| 15.9.8  | Yes (current modular) - opt-in LanHygiene; Recovery home-gateway fingerprint (JSON gateway protocol only if detected); CFA extra paths; always use `.bat` |
-| 15.9.7  | Superseded - Help color-coded docs; prefer 15.9.8 |
-| 15.9.6  | Superseded - forced black console theme (Black bg + Gray fg, soft-fail); prefer 15.9.8 |
-| 15.9.5  | Superseded - High-IL bat elevation; goto-safe launcher; tools-run-bootstrap; LanmanServer-disabled launch; prefer 15.9.8 |
-| 15.9.4  | Superseded - whoami SID + Unblock-File; still hit `. was unexpected` on some elevated re-launches; prefer 15.9.8 |
-| 15.9.3  | Superseded - banner path + MANIFEST integrity; use 15.9.8 |
-| 15.9.2  | Superseded - launch hardening; use 15.9.8 |
-| 15.9.0  | Superseded - modular plain-text `src\` + MANIFEST + script-scope load; use 15.9.8 |
-| 15.9.1  | Retracted (tag/release removed; fix folded into 15.9.0 then 15.9.8) |
-| 15.8.4  | Superseded monolith - prefer modular 15.9.8; best-effort |
+| 16.0    | Yes (current modular) - Known CVE checks (main menu C, Recovery hub 7); Defender update health; always use `.bat` |
+| 15.9.9  | Unpublished (folded into 16.0) |
+| 15.9.8  | Superseded - opt-in LanHygiene; Recovery home-gateway fingerprint; CFA extra paths; prefer 16.0 |
+| 15.9.7  | Superseded - Help color-coded docs; prefer 15.9.9 |
+| 15.9.6  | Superseded - forced black console theme (Black bg + Gray fg, soft-fail); prefer 15.9.9 |
+| 15.9.5  | Superseded - High-IL bat elevation; goto-safe launcher; tools-run-bootstrap; LanmanServer-disabled launch; prefer 15.9.9 |
+| 15.9.4  | Superseded - whoami SID + Unblock-File; still hit `. was unexpected` on some elevated re-launches; prefer 15.9.9 |
+| 15.9.3  | Superseded - banner path + MANIFEST integrity; use 15.9.9 |
+| 15.9.2  | Superseded - launch hardening; use 15.9.9 |
+| 15.9.0  | Superseded - modular plain-text `src\` + MANIFEST + script-scope load; use 15.9.9 |
+| 15.9.1  | Retracted (tag/release removed; fix folded into 15.9.0 then 15.9.9) |
+| 15.8.4  | Superseded monolith - prefer modular 15.9.9; best-effort |
 | 15.8.3  | Best-effort until you upgrade |
 | 15.8.2  | Best-effort until you upgrade |
 | 15.8.1  | Best-effort until you upgrade |
@@ -54,7 +56,9 @@ Full inventory: [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md).
 | First run | Seeds config defaults; rewrites session/browser-state snapshots from **live** detection |
 | Apply history file | `Bastion-LastApply.json` only after a **real** Apply |
 | DNS / RDP undo secrets | DNS snapshot and RDP host prior are **DPAPI-encrypted** in that file; ACL SYSTEM + Administrators. Same elevating account can decrypt; full account compromise still can. See [docs/DATA-DIRECTORY.md](docs/DATA-DIRECTORY.md) |
+| CVE undo | `Bastion-CveUndo.json` **ItemsProtected** uses the same DPAPI helper. No plaintext fallback if wrap fails. Legacy plaintext `Items` still reads. |
 | Config preferences | `Bastion-Config.json` is not a secret store (section toggles, custom paths); on save Bastion applies the same **SYSTEM + Administrators** ACL to reduce casual local reads |
+| Data directory | When the folder leaf is `Bastion`, a SYSTEM + Administrators directory ACL with inheritance covers logs and JSON. Legacy flat `C:\Temp` is never ACL'd as a whole. |
 | Product source | Plain-text `src\*.ps1` + integrity MANIFEST; encrypt **data**, never code (GPLv3) |
 | Display privacy | Winget preflight / Audit do not echo the full winget executable path (often under a user profile). Data-directory path still appears on the main menu by design. |
 | Encrypted Client Hello (ECH) | Never written unless you opt in under Strict in menu **6** - see [docs/BROWSER-POLICIES-AND-ECH.md](docs/BROWSER-POLICIES-AND-ECH.md) |

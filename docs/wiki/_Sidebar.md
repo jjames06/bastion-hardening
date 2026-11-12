@@ -2,6 +2,8 @@
 * [Quick start](Quick-start)
 * [Hardening workflow](Hardening-workflow)
 * [Recovery cookbook](Recovery-cookbook)
+* [Known CVE checks](Cve-checks)
+* [September 2026 Windows update](Windows-September-2026)
 * [LAN hygiene](LAN-hygiene)
 * [Games and StrictHandle](Games-and-StrictHandle)
 * [FAQ](FAQ)

@@ -6,7 +6,7 @@
 
 | Program | Status |
 |---------|--------|
-| **World of Warcraft** (retail `Wow.exe`, Classic Era `WowClassic.exe`) | Documented **example** that broke under system StrictHandle (Eidolon / `INVALID_HANDLE` in the loader DLL). Bastion **auto-excepts** discovered `Wow*.exe` when found. Installing Classic after Apply needs a refresh. |
+| **World of Warcraft** (retail `Wow.exe`, Classic Era `WowClassic.exe`, Forever / Classic Beta `Wow*.exe`) | Documented **example** that broke under system StrictHandle (Eidolon / `INVALID_HANDLE` in the loader DLL). Bastion **auto-excepts** discovered `Wow*.exe` when found, including `_classic_beta_` (Forever Beta) and any later `_forever_` product folder. Installing Classic or Forever after Apply needs a refresh. |
 | **Counter-Strike 2** | Maintainer-tested - **not** an issue under the same profile. |
 | **Other titles** | **Unknown.** No Bastion exception means they **may still break** until reported and we ship one. |
 
@@ -14,7 +14,7 @@ WoW is **not** the only possible break. It is the case we fully documented and a
 
 ## If a program breaks after Apply
 
-1. **If you just installed WoW Classic** (or another flavor) after a prior Apply: Recovery **9 → 6 → StrictHandle → refresh known exception EXEs**. That keeps system StrictHandle ON and adds `WowClassic.exe`. Then relaunch the game (reboot only if it still fails).  
+1. **If you just installed WoW Classic or Forever** (or another flavor) after a prior Apply: Recovery **9 → 6 → StrictHandle → refresh known exception EXEs**. That keeps system StrictHandle ON and adds the new `Wow*.exe`. Then relaunch the game (reboot only if it still fails).  
 2. **Unknown titles (preferred reverse):** main menu **9 → 6 Security mitigations → StrictHandle → disable system StrictHandle**, then **reboot**.  
    Or keep system protection: add the full `.exe` path under `StrictHandleExceptionPaths` in `Bastion-Config.json`, then refresh exceptions / re-Apply.  
 3. **Confirm** the program works again.  
@@ -34,7 +34,7 @@ Set-ProcessMitigation -System -Disable StrictHandle
 ## What Bastion does on Apply
 
 1. Enables system-wide mild mitigations including **StrictHandle**.  
-2. Turns StrictHandle **OFF only** for **known exception EXEs** (discovered `Wow*.exe` including Classic Era `WowClassic.exe`, plus any EXE next to a `*_loader.dll`, plus any full paths in `StrictHandleExceptionPaths`).  
+2. Turns StrictHandle **OFF only** for **known exception EXEs** (discovered `Wow*.exe` including Classic Era `WowClassic.exe` and Forever-family clients, plus any EXE next to a `*_loader.dll`, plus any full paths in `StrictHandleExceptionPaths`).  
 3. Leaves StrictHandle **ON** for everything else.
 
 ## Where you see this guidance in-product

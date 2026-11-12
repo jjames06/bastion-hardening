@@ -29,7 +29,7 @@ Handbook-style overview for non-developers: [wiki Modular source](wiki/Modular-s
 | Single entry | Users **always** launch `Bastion-Hardening.bat` (UAC). Never double-click `Bastion-Hardening.ps1` alone under Restricted ExecutionPolicy. |
 | Shared state | Modules are **dot-sourced** into the bootstrap runspace so `$script:` variables and functions are shared. |
 | Fail closed | Startup **hard-fails** if `src\` modules or `src\MANIFEST.sha256` are missing or hashes mismatch. |
-| Encrypt data, not code | DNS undo snapshots and RDP host prior use **DPAPI** (CurrentUser + fixed entropy). Preferences JSON is not secret but gets a tight ACL. Modular load is always plain text. |
+| Encrypt data, not code | DNS undo snapshots, RDP host prior, and CVE undo items use **DPAPI** (CurrentUser + fixed entropy). Preferences, session, and logs stay plaintext with SYSTEM+Administrators ACL. Modular load is always plain text. |
 
 ## Encryption vs modular load (read this)
 
@@ -40,13 +40,14 @@ Handbook-style overview for non-developers: [wiki Modular source](wiki/Modular-s
 | `tools-elevate-self.ps1` / `tools-run-bootstrap.ps1` | **No** | Plain text helpers for the `.bat` |
 | `src\MANIFEST.sha256` | **No** (not encryption) | SHA256 **integrity** hashes; tamper detection only |
 | DNS prior / RDP host prior in undo store | **Yes** | Windows **DPAPI** after a real Apply that recorded them |
+| CVE undo items (`Bastion-CveUndo.json`) | **Yes** | Same **DPAPI** helper (`ItemsProtected`); no plaintext fallback |
 
 If a launch fails after hardening, the cause is almost always **launcher / elevation / ExecutionPolicy / cmd parse**, not "encrypted modules." Modules are intentionally readable.
 
 ## Runtime layout
 
 ```
-bastion-hardening-v15.9.8\   (folder name matches the release tag)
+bastion-hardening-v16.0\   (folder name matches the release tag)
   Bastion-Hardening.bat      # UAC launcher; High-IL whoami check; goto-safe; calls helpers
   tools-elevate-self.ps1     # UAC re-launch helper (avoids nested parentheses in cmd)
   tools-run-bootstrap.ps1    # Unblock-File + Process Bypass + & Bastion-Hardening.ps1
@@ -63,7 +64,8 @@ bastion-hardening-v15.9.8\   (folder name matches the release tag)
     Bastion.Browsers.ps1     # Firefox / Chromium policies + ECH packs
     Bastion.Dns.ps1          # adapter DNS, DoH, snapshots, restore
     Bastion.Network.ps1      # opt-in LanHygiene + Recovery gateway fingerprint
-    Bastion.Harden.ps1       # OneDrive, bloat, CFA, StrictHandle, registry, RDP host
+    Bastion.Harden.ps1       # OneDrive, bloat, CFA, StrictHandle, registry, RDP host, Defender update health
+    Bastion.Cve.ps1          # Known Windows 10/11 CVE catalog, scan, remediate, Recovery hub 7
     Bastion.Apply.ps1        # DryRun, SelfTest/Audit, Apply, QuickHarden, restore points
     Bastion.Recovery.ps1     # Recovery hubs (network, services, mitigations, ...)
     Bastion.Menus.ps1        # Main menu, section/program/DNS/browser/help/uninstall
@@ -110,10 +112,11 @@ Bootstrap (`Bastion-Hardening.ps1`) always:
 | 6 | `Bastion.Browsers.ps1` | Per-browser policy modes and optional ECH |
 | 7 | `Bastion.Dns.ps1` | Live DNS, DoH interface keys, snapshot apply/restore |
 | 8 | `Bastion.Network.ps1` | Opt-in LanHygiene; Recovery gateway fingerprint (no assumed ISP modem) |
-| 9 | `Bastion.Harden.ps1` | Hardening section helpers (OneDrive, bloat, CFA, StrictHandle, RDP host, ...) |
-| 10 | `Bastion.Apply.ps1` | Dry Run, Audit, Apply, Quick Harden, restore points |
-| 11 | `Bastion.Recovery.ps1` | Recovery menus and targeted undo helpers |
-| 12 | `Bastion.Menus.ps1` | Interactive menus including `Show-MainMenu` |
+| 9 | `Bastion.Harden.ps1` | Hardening section helpers (OneDrive, bloat, CFA, StrictHandle, RDP host, Defender update health) |
+| 10 | `Bastion.Cve.ps1` | Known Windows 10/11 CVE catalog; main menu C; Recovery hub 7 |
+| 11 | `Bastion.Apply.ps1` | Dry Run, Audit, Apply, Quick Harden, restore points |
+| 12 | `Bastion.Recovery.ps1` | Recovery menus and targeted undo helpers |
+| 13 | `Bastion.Menus.ps1` | Interactive menus including `Show-MainMenu` |
 
 4. Optional smoke: `-BastionSmokeLoadOnly` prints version and exits 0 after a successful import (requires elevation; friendly admin gate if not elevated).
 5. Resolves/binds the data directory, `Ensure-BastionPaths`, `Initialize-BastionDataStore`, then `Show-MainMenu`.
@@ -140,8 +143,10 @@ Bootstrap (`Bastion-Hardening.ps1`) always:
 |-------|------------|---------------|
 | Product source (`src\*.ps1`) | Plain text + SHA256 MANIFEST + GitHub | Compromised download without verifying release/hash; local admin can edit sources and MANIFEST together |
 | DNS undo snapshot / RDP host prior | DPAPI CurrentUser + Bastion entropy string; ACL SYSTEM+Administrators on undo file | Same elevating user (or malware as that user) can decrypt; full account compromise wins |
+| CVE undo items | Same DPAPI helper (`ItemsProtected`); ACL SYSTEM+Administrators | Same residual risk as LastApply blobs |
 | `Bastion-Config.json` (preferences, custom paths) | Not secret; **ACL SYSTEM+Administrators** on save to reduce casual local reads | Admin/same elevated identity can read; not a credential store |
-| Session / browser-state JSON | Live detection snapshots; not secrets | Local readers if ACLs not applied |
+| Session / browser-state JSON | Live detection snapshots; file ACL + directory ACL on Bastion-owned folders | Not a vault; ACL reduces casual local reads |
+| Data directory (leaf `Bastion`) | Directory ACL SYSTEM+Administrators with inheritance | Never applied to legacy flat `C:\Temp` |
 | Browser enterprise policies | Written outside Bastion data dir when you use menu 6 | Standard Windows policy visibility |
 
 **Out of scope for Bastion crypto:** protecting against a hostile Administrator on the same box, kernel malware, or offline disk theft without full-disk encryption (BitLocker is the right control there).
@@ -156,7 +161,7 @@ Elevated:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Bastion-Hardening.ps1 -BastionSmokeLoadOnly
 ```
 
-Expected: `Bastion smoke load OK v15.9.8 (commands verified)` (version string follows `ScriptVersion`) and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
+Expected: `Bastion smoke load OK v16.0 (commands verified)` (version string follows `ScriptVersion`) and exit 0. After load, commands such as `Show-MainMenu` must exist in the runspace (script-scope dot-source + explicit command probe).
 
 Bat path smoke (elevated host, LanmanServer may be stopped/disabled):
 
@@ -168,9 +173,9 @@ Expected: "Elevated console ready", then main menu (or use `tools-run-bootstrap.
 
 ## Version
 
-Product-facing version is **15.9.8** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). **15.9.8** adds opt-in **LanHygiene** (workstation LAN leaks / NIC power-save; no ISP CPE flash; no NIC speed lock) and Recovery home-gateway fingerprinting (JSON-CGI / TR-181 commands only if the live default gateway matches). Prefer **15.9.7** only if you have not upgraded. Always start with the `.bat`, never the `.ps1` alone.
+Product-facing version is **16.0** (`$script:Config.ScriptVersion` in `Bastion.Init.ps1`, bootstrap header, README, SECURITY supported table, pack-release default). **16.0** adds the known CVE checks category (main menu **C**, Recovery hub **7**, optional Apply section) plus Defender update health. The current zip also includes FIREWALL-LAN (SMBDirect), Office Click-to-Run reminder, SMBv3 DisableCompression, RDP NLA, finish-it-yourself banners, DPAPI-wrapped CVE undo, and Bastion-folder ACLs. Product version stays **16.0**. Always start with the `.bat`, never the `.ps1` alone.
 
-**Public site note:** Official site download and GitHub **Latest** recommend modular **15.9.8** (plain-text `src\`, MANIFEST integrity; source never encrypted).
+**Public site note:** Official site download and GitHub **Latest** follow the last published zip. This tree is modular **16.0** (plain-text `src\`, MANIFEST integrity; source never encrypted).
 
 ## Related docs
 

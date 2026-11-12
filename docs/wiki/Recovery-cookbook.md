@@ -11,7 +11,8 @@ Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know wh
 | **3** | Network | RDP, Remote Assistance, or WinRM; LAN sharing, discovery, or mDNS; DNS reset to DHCP; **restore prior DNS**; **LAN hygiene reverse**; **home gateway probe** (fingerprint only unless a known CPE GUI is detected) |
 | **4** | Browser policies | Sites break after Strict or ECH settings; set that browser back to **Default** |
 | **5** | Apps and UI | Copilot or M365, Widgets or Suggestions, Game Bar or the ms-gamingoverlay prompt |
-| **6** | Security mitigations | StrictHandle and games, Defender NP/CFA, Delivery Optimization, PowerShell logging, LSA, CEIP tasks |
+| **6** | Security mitigations | StrictHandle and games, Defender NP/CFA, Defender updates and disk (stale signatures, TEMP fill files, optional daily health task), Delivery Optimization, PowerShell logging, LSA, CEIP tasks |
+| **7** | Known CVE checks | Scan this PC; reverse Bastion-recorded CVE registry/protocol changes; same catalog as main menu **C** |
 
 **Note:** Appx bloat and OneDrive removal are **not** reinstalled from Recovery. Use System Restore or the vendor/Store installers.
 
@@ -23,10 +24,13 @@ Main menu **9 Recovery / fix** opens a set of **modular hubs**. When you know wh
 | Cannot host or reach Windows shares | **9 → 3 →** LAN/discovery **and** **9 → 2** Services | Open File and Printer Sharing if needed; re-enable `LanmanServer` if it is disabled |
 | Cannot RDP / Remote Assistance / WinRM | **9 → 3 →** Remote access | Enable the firewall group you need; for a full RDP host also allow system RDP and TermService. Lock remote access again when you are idle |
 | Name resolution wrong after Bastion DNS | **9 → 3 →** Reset DNS **or** Restore prior DNS | Option **3** resets eligible adapters to automatic (DHCP). Option **4** restores the encrypted pre-Apply snapshot when present (best-effort). Menu **D** intent is unchanged; the next DNS Apply may set public DNS again. A VPN may override DNS while connected |
+| Names fail, ping by IP works, after September 2026 Windows Update | Main **C** row WIN-SEP2026, then **9 → 3** Network | See [September 2026 Windows update](Windows-September-2026). Install KB5129195. Check DNS Client. Use one network path. Do not start with `netsh winsock reset`. |
 | Browser sites broken after policies | **9 → 4** or main **6** | Set that browser to **Default** (best-effort). System Restore remains the surest rollback |
 | ms-gamingoverlay "get an app" dialog | **9 → 5 →** Game Bar | Silence Game DVR (or re-enable flags and install Xbox Game Bar from the Store) |
 | Game or program fails after Apply (instant exit) | **9 → 6 →** StrictHandle | See [Games and StrictHandle](Games-and-StrictHandle) |
 | Controlled Folder Access blocks a trusted app | **9 → 6 →** Defender | Prefer allow-listing the app (Windows Security → Ransomware protection → Allow an app) |
+| Defender looks on but signatures are old / C: is full | **9 → 6 →** Defender **→ 5** or main **C** | Disk, signature age, TEMP fill files; optional delete + signature update. Catalog row BIGDISKBUSTER. |
+| Want a known CVE scan without full Apply | Main **C** or **9 → 7** | Live scan, then confirm remediations. Recovery **7** reverses Bastion registry/protocol changes only. FIREWALL-LAN group locks reverse under **9 → 3** Network. |
 | Printers or Chromecast died after LanHygiene | **9 → 3 →** option **5** | Removes Bastion outbound 137/138/5353 rules only; policies may need System Restore |
 | Curious about the ISP modem | **9 → 3 →** option **6** | Identifies the default gateway on the computer running Bastion. CPE commands only if the live admin speaks a known JSON gateway protocol. Most homes will not match. |
 | Need Widgets or suggestions back | **9 → 5** | Restore Widgets/Suggestions defaults |

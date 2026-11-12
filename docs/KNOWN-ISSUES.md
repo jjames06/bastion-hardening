@@ -15,14 +15,14 @@ Public tracker: [GitHub Issues](https://github.com/jjames06/bastion-hardening/is
 
 | Program / client | Status (maintainer-tested) |
 |---------------|----------------------------|
-| **World of Warcraft** (`Wow.exe`, Classic Era `WowClassic.exe`) | **Documented example** that **was broken** (Eidolon crash reporter / `INVALID_HANDLE` in `Wow_loader.dll` or `WowClassic_loader.dll`) without an exception. Bastion now **auto-excepts** discovered `Wow*.exe`. Installing Classic after Apply does **not** inherit the retail exception - refresh / re-Apply. |
+| **World of Warcraft** (`Wow.exe`, Classic Era `WowClassic.exe`, Forever / Classic Beta `Wow*.exe` such as `WowB.exe`) | **Documented example** that **was broken** (Eidolon crash reporter / `INVALID_HANDLE` in `*_loader.dll`) without an exception. Bastion **auto-excepts** discovered `Wow*.exe` in known product folders (`_retail_`, `_classic_era_`, `_classic_beta_`, `_forever_`, and any other `_…_` child of the WoW root). Installing Classic or Forever after Apply does **not** inherit the retail exception - refresh / re-Apply. |
 | **Counter-Strike 2** | **Tested - not an issue** under the same system StrictHandle profile. |
 | **Other titles** | **Unknown.** No Bastion exception means they **may still break** until reported and we ship one. |
 
 **What Bastion does**
 
 1. Enables system-wide: DEP, SEHOP, BottomUp, HighEntropy, **StrictHandle**.
-2. Turns **StrictHandle OFF only** for **known exception EXEs** (discovered `Wow*.exe` including `Wow.exe` and `WowClassic.exe`, plus any EXE next to a `*_loader.dll`, plus any full paths in `StrictHandleExceptionPaths`).
+2. Turns **StrictHandle OFF only** for **known exception EXEs** (discovered `Wow*.exe` including `Wow.exe`, `WowClassic.exe`, `WowB.exe`, plus any EXE next to a `*_loader.dll`, plus any full paths in `StrictHandleExceptionPaths`).
 3. Leaves StrictHandle **ON** for everything else.
 
 **If a program fails after Apply**
@@ -69,7 +69,7 @@ Stack typically includes **`Wow_loader.dll`** (retail) or **`WowClassic_loader.d
 
 System-wide **StrictHandle** from ExploitProtection, without a per-app exception for that flavor's EXE. Disabling StrictHandle for `Wow.exe` or `WowClassic.exe` (or system-wide) restored launch. That is the verified causal chain.
 
-Retail and Classic are **separate image paths**. An exception on `_retail_\Wow.exe` does **not** cover `_classic_era_\WowClassic.exe`. If you install Classic after Apply, refresh exceptions (Recovery -> **6** -> StrictHandle -> option **2**) or re-Apply.
+Retail, Classic Era, Classic Beta, and Forever are **separate image paths**. An exception on `_retail_\Wow.exe` does **not** cover `_classic_era_\WowClassic.exe` or `_classic_beta_\WowB.exe` (Forever Beta currently uses the Classic Beta product folder). If you install Classic or Forever after Apply, refresh exceptions (Recovery -> **6** -> StrictHandle -> option **2**) or re-Apply.
 
 ### How we describe it (and what we do *not* claim)
 
@@ -223,6 +223,40 @@ Also see the [notice above](#before-you-enable-exploitprotection-stricthandle) a
 ## Controlled Folder Access / Network Protection false positives
 
 **Recovery:** Main menu **9 > 6 > Defender**: soften NP and/or CFA, or re-harden with CFA allow-path refresh. Allow a trusted app path before turning protections off permanently when you can.
+
+---
+
+## Defender signatures stale while the service still looks "on"
+
+Public write-ups (Sep 2026, "BigDiskBuster") describe filling the system drive so Defender **platform and definition updates fail** while the antivirus service keeps running. There is no Microsoft patch in those write-ups. Bastion cannot fix Windows Update. It can **show** C: free space, signature age, oversized hidden TEMP files, blocking update policies, and recent 0x80070643-style events, then **offer** to delete those files (you confirm) and request `Update-MpSignature`. Apply (Defender section on) turns on check-signatures-before-scan and requests an update when signatures are already stale and C: has headroom. An **opt-in daily task** (Recovery option **4** on that same screen) logs health and requests an update; it never deletes files.
+
+**Recovery:** Main menu **9 > 6 > Defender > 5**. Security audit (option **2**) also warns when C: is under 5 GiB or signatures are old.
+
+This is a compensating control. Keep headroom on C:. A green shield with week-old signatures is not healthy. If delete fails, a process may still hold the fill file; reboot and try again.
+
+The same row lives in the **v16.0 known CVE checks** catalog (main menu **C**, Recovery **9 → 7**). That catalog also covers September 2026 Windows Update floors, Defender UnDefend/RedSun platform versions, SMBv1, PrintNightmare Point and Print, optional Follina protocol workaround, Wintrust cert padding, WDigest, AlwaysInstallElevated, and VLC 3.0.0–3.0.23. Bastion cannot patch Microsoft kernel CVEs; those rows start Windows Update. See [Cve-checks](wiki/Cve-checks.md).
+
+---
+
+## September 2026 Windows Update (KB5124008) plus a consumer VPN
+
+**Symptom:** After the 8 September 2026 cumulative update (KB5124008, Windows 11 25H2 build 26200.9445 / 24H2 26100.9445), names fail while ping by IP still works. DNS Client (Dnscache) may log event 7023 Access denied. `nslookup` to 127.0.0.1 may have no listener on UDP 53. Windows Update / DISM can then fail with 0x800f0915.
+
+**What Microsoft has confirmed for that package:** Always On VPN automatic IKEv2/SSTP failover ("port already in use"); Machine Identity Isolation enforcement (registry value 2) breaking domain trust on older DCs; RDS hangs, Plan9/WSL shares, and part of USB Audio Class 1.0 (those three are addressed by out-of-band **KB5129195**, build 9457). Microsoft has **not** listed DNS Client 7023 as a known issue. That last symptom is a field observation.
+
+**What Bastion does *not* do:** DNS Apply never sets the DNS Client logon account and never stops Dnscache. HighRiskServices does not include Dnscache. VPN adapters are excluded from DNS Apply. A connected VPN overriding adapter DNS is expected ([SECURITY.md](../SECURITY.md)).
+
+**What to do** (full staged write-up: [September 2026 Windows update](wiki/Windows-September-2026.md))
+
+1. Confirm names are dead: `ping` by IP works, `ping` by name fails, `nslookup` to 127.0.0.1 has no UDP 53 listener. Store, Windows Update, DISM **0x800f0915**, and troubleshooters fail until names work.
+2. Do **not** start with `netsh winsock reset`, `netsh int ip reset`, or `Restart-Service Dnscache`. Do not uninstall KB5124008.
+3. Use **one** network path. Disconnect the VPN only to test the physical adapter.
+4. DNS Client Running/Automatic; Event **7023** is Access denied. Point the active adapter at a public resolver **by IP**. `ipconfig /flushdns` is safe.
+5. Then install **KB5129195** (UBR 9457). Bastion menu **C** row WIN-SEP2026 already uses that floor. Recovery **9 → 3** restores prior DNS or DHCP.
+6. If Store and Update stay dead after names still will not hold, **Keep Files** reinstall restored this computer. Reinstall programs. Take 5129195 when Update offers it.
+7. Domain-joined PCs with `MachineIdentityIsolation = 2`: set to `0`, restart, then `Test-ComputerSecureChannel -Repair`.
+
+Full handbook: [September 2026 Windows update](wiki/Windows-September-2026.md).
 
 ---
 

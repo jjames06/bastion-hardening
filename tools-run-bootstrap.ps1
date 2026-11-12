@@ -28,7 +28,7 @@
 
   SECURITY NOTES
     - Modular src\ is plain text (not encrypted). MANIFEST.sha256 = integrity.
-    - DPAPI is only for DNS/RDP undo data after Apply (inside Bastion.Config.ps1).
+    - DPAPI is only for undo blobs after Apply / CVE remediate (inside Bastion.Config.ps1).
     - Unblock-File only clears MOTW; it does not disable Defender or signature checks.
     - Process Bypass does not change user/machine ExecutionPolicy permanently.
 

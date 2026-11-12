@@ -324,6 +324,8 @@ function Show-SectionMenu {
                 $suffix = "  (opt-in: deny OS RDP host)"
             } elseif ($n -eq "LanHygiene") {
                 $suffix = "  (opt-in: LAN leaks / NIC power-save; not your ISP modem)"
+            } elseif ($n -eq "CveChecks") {
+                $suffix = "  (opt-in: known CVE catalog on Apply; prefer main menu C)"
             }
             Write-Host ("  {0,2}. {1}  {2}{3}" -f ($i + 1), $mark, $n, $suffix) `
                 -ForegroundColor $(if ($script:Sections[$n]) { "Green" } else { "DarkGray" })
@@ -1037,7 +1039,7 @@ function Show-Help {
         "Not an antivirus product, not enterprise MDM, not a guarantee against zero-days, and not an automated GPU or BIOS flasher.",
         "## Safety model",
         "System Restore is the real safety net. Use main menu 13 or R before major changes. Undo covers tracked services and firewall groups from the last Apply only.",
-        "Recovery hubs (Services, Network, Browsers, Apps/UI, Security mitigations) reverse most Bastion effects with live status - without bloating the main menu.",
+        "Recovery hubs (Services, Network, Browsers, Apps/UI, Security mitigations, Known CVE checks) reverse most Bastion effects with live status - without bloating the main menu.",
         "Irreversible or hard-to-reverse items (BloatApps, OneDrive removal) stay off until you opt in and are called out explicitly.",
         "License: GNU GPLv3. Free to use and share; if you distribute a modified Bastion, you must keep it GPLv3 and provide source. See LICENSE and NOTICE beside the script.",
         "## Official site and downloads",
@@ -1064,7 +1066,7 @@ function Show-Help {
         "Change one area at a time, Dry Run, Apply, verify. Use Recovery hubs for targeted reverse (Services, Network, Browsers, Apps/UI, Security mitigations) or Undo.",
         "If you delete the Bastion data folder, the next launch re-seeds defaults and re-detects the live system - it does not invent a prior Apply.",
         "## If something goes wrong",
-        "Recovery hubs first. Browsers: menu 6 or Recovery > 4 > Default. Network/RDP/DNS: Recovery > 3. Games/StrictHandle: Recovery > 6 (disable system StrictHandle, reboot, report path on GitHub #18; other titles may lack exceptions). Deep failure: Safe Mode then System Restore."
+        "Recovery hubs first. Browsers: menu 6 or Recovery > 4 > Default. Network/RDP/DNS: Recovery > 3. Games/StrictHandle: Recovery > 6 (disable system StrictHandle, reboot, report path on GitHub #18; other titles may lack exceptions). CVE registry/protocol: Recovery > 7 > 2 > Yes. Deep failure: Safe Mode then System Restore."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -1082,14 +1084,15 @@ function Show-Help {
         "7 Quick Harden - safe preset, restore-point gate, then Apply.",
         "8 Apply - runs every enabled section with logging and undo tracking.",
         "## MAINTAIN AND SAFETY",
-        "9 Recovery - modular hubs: Undo, Services, Network, Browser policies, Apps and UI, Security mitigations (no main-menu bloat).",
+        "9 Recovery - modular hubs: Undo, Services, Network, Browser policies, Apps and UI, Security mitigations, Known CVE checks (no main-menu bloat).",
+        "C Known CVE checks - scan this PC now; remediations after you confirm. Same catalog as Recovery hub 7.",
         "10 Uninstall - remove catalog apps via winget with confirmation.",
         "13 or R - create or name a System Restore Point anytime (recommended before Apply).",
         "11 Help and reports - this documentation, last Apply JSON, HTML export.",
         "12 Reset Bastion config - clears Bastion toggles only, not Windows itself.",
         "0 Exit",
         "## Aliases",
-        "Q Quick Harden, A Apply, H Help, D DNS resolver. Numbers typed inside Help documentation are ignored on purpose."
+        "Q Quick Harden, A Apply, H Help, D DNS resolver, C Known CVE checks. Numbers typed inside Help documentation are ignored on purpose."
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -1099,7 +1102,7 @@ function Show-Help {
     if ($r -eq "back" -or $r -eq "quit") { return }
 
     $r = Show-HelpSectionDocs -Title "HELP 5/13 - DEFENDER AND OS HARDENING" -Page 5 -Total $total -Keys @(
-        "Defender","PowerShellAuditing","ExploitProtection","LSAProtection","ScheduledTasks","XboxGaming"
+        "Defender","CveChecks","PowerShellAuditing","ExploitProtection","LSAProtection","ScheduledTasks","XboxGaming"
     )
     if ($r -eq "back" -or $r -eq "quit") { return }
 
@@ -1187,14 +1190,28 @@ function Show-Help {
 
     $r = Show-HelpPage -Title "HELP 11/13 - RECOVERY AND SAFE MODE" -Page 11 -Total $total -Lines @(
         "## Recovery design (option 9) - modular, not bloated",
-        "Main menu still has a single Recovery entry. Inside are six hubs with live status and targeted reverse. Prefer a hub over full Undo when you know what broke.",
+        "Main menu still has a single Recovery entry. Inside are seven hubs with live status and targeted reverse. Prefer a hub over full Undo when you know what broke.",
         "## Recovery hubs",
         "1 Undo last hardening - services, firewall groups, encrypted DNS snapshot (when present), and RDP host prior (when RdpHostLock was applied). Partial by design.",
         "2 Services - Print Spooler, HighRiskServices stack (file share, UPnP, Remote Registry, ...), Xbox services. Enable one, all present, or re-disable Bastion-style.",
         "3 Network - Remote access (RDP/Assistance/WinRM + optional fDenyTSConnections/TermService), LAN/discovery, DNS reset to DHCP, restore prior DNS from last Apply snapshot (encrypted).",
         "4 Browser policies - same as main menu 6 for installed Firefox/Chrome/Brave. Default reverts that browser (best-effort).",
         "5 Apps and UI - Copilot/M365 tools, Widgets/Suggestions restore, Game Bar / ms-gamingoverlay silence or reverse.",
-        "6 Security mitigations - StrictHandle (disable / refresh exceptions / re-enable), Defender NP/CFA, policies/tasks (DO, PowerShell logging, LSA, CEIP tasks).",
+        "6 Security mitigations - StrictHandle (disable / refresh exceptions / re-enable), Defender NP/CFA, Defender updates/disk (signature age, TEMP fill files, optional daily health task), policies/tasks (DO, PowerShell logging, LSA, CEIP tasks).",
+        "7 Known CVE checks - scan this PC, reverse Bastion CVE registry/protocol remediations, or open the same menu as main C.",
+        "## Known CVE checks - exact reverse (version 16)",
+        "Microsoft updates and Defender engine/platform updates are not reversed. Registry and protocol values Bastion recorded go through Recovery hub 7.",
+        "1. Run Bastion-Hardening.bat as Administrator and accept UAC.",
+        "2. Main menu 9 (Recovery / fix).",
+        "3. Press 7 (Known CVE checks).",
+        "4. Press 1 for a read-only scan, or 2 then Yes to restore Bastion-CveUndo.json (Point and Print, Wintrust EnableCertPaddingCheck, WDigest, AlwaysInstallElevated, and ms-msdt .reg backup if present).",
+        "5. Press 3 for the same catalogue menu as main menu C.",
+        "6. Optional daily Defender health task: Recovery 9, then 6, then Defender, then 5, then option 5, then Yes. That task never deletes files.",
+        "7. VLC uninstall and SMBv1 disable are not undone here. Use the vendor installer or Windows Optional Features, or System Restore (menu 13 / R).",
+        "8. FIREWALL-LAN inbound group locks: Recovery 9, then 3 Network (Remote access or LAN / discovery). That is hub 3, not hub 7.",
+        "Public explanation: https://www.operationlockedin.com/bastion/cve-checks",
+        "Full advisories: https://www.operationlockedin.com/bastion/cve-checks/advisories",
+        "Phone-friendly reverse steps: https://www.operationlockedin.com/bastion/help#cve-checks",
         "## Honesty rules shared by hubs",
         "Status is live from Windows. Enabling services or OPEN firewall groups increases attack surface; LOCKED/DISABLED is the safer default after harden.",
         "Firewall hubs only toggle named groups (not profile Inbound=Block). DNS: option 3 = DHCP; option 4 = restore snapshot when available. Menu D intent may re-apply on next DNS Apply. VPN may override DNS.",
@@ -1212,6 +1229,7 @@ function Show-Help {
     $r = Show-HelpPage -Title "HELP 12/13 - FILES AND LOGS" -Page 12 -Total $total -Lines @(
         ("## Directory (this session): {0}" -f $script:Config.LogDirectory),
         "Created automatically on first elevated launch. Prefer durable paths over wipeable temp.",
+        "When the folder name is Bastion (C:\\Temp\\Bastion, ProgramData\\Bastion, ...), Bastion sets a SYSTEM + Administrators directory ACL with inheritance so logs and JSON are not world-readable. Legacy flat C:\\Temp is never ACL'd as a whole.",
         "Resolve order for existing state: C:\Temp\Bastion, legacy C:\Temp, %ProgramData%\Bastion, %LOCALAPPDATA%\Bastion, then %TEMP%\Bastion (last).",
         "New installs prefer C:\Temp\Bastion, then ProgramData, then LocalAppData, then legacy flat C:\Temp. %TEMP%\Bastion is last-resort only.",
         "Bastion-Config.json - section toggles, selected apps, install roots, per-browser wanted modes and ECH Yes/No flags, DNS provider, optional WowInstallRoots and StrictHandleExceptionPaths for custom game paths (seeded on first run; ECH defaults off).",
@@ -1219,7 +1237,10 @@ function Show-Help {
         "Bastion-BrowserPolicies-State.json - wanted + live browser modes, ECH live/wanted, last policy change summary.",
         "browser-policy-backups/ - snapshots taken before Bastion overwrites browser policies (menu 6).",
         "Bastion-LastApply.json - only after a real Apply: timestamp, sections run, tracked undo (services, firewall groups). DNS snapshot and RDP host prior are DPAPI-encrypted (DnsSnapshotProtected / RdpHostPriorProtected), not plaintext. File ACL: SYSTEM + Administrators when Bastion can set it. Missing file = no Bastion Apply undo yet.",
-        "DPAPI honesty: blobs use Windows DPAPI CurrentUser for the account that elevates Bastion, plus optional Bastion entropy. Bastion can decrypt on the same user session. A full compromise of that Windows account can still decrypt. A different user or offline copy of the file alone is not enough. This is not a password vault.",
+        "Bastion-CveUndo.json - only after a CVE remediate that changes registry or the ms-msdt protocol. ItemsProtected is DPAPI (same user as LastApply DNS/RDP). Recovery 9 then 7 option 2 restores those values. Missing file = nothing for hub 7 to reverse.",
+        "ms-msdt-follina-backup.reg - only if you confirmed the Follina protocol workaround on main menu C. Hub 7 imports it back.",
+        "Bastion-DefenderUpdateHealth.ps1 - only if you installed the optional daily Defender health task (Recovery 9, then 6, then Defender, then 5, then 4). Remove with option 5 on that same screen.",
+        "DPAPI honesty: blobs use Windows DPAPI CurrentUser for the account that elevates Bastion, plus optional Bastion entropy. Used for LastApply DNS/RDP and CVE undo items. Logs, session JSON, config, and the Follina .reg backup stay plaintext with ACL only (they are not credentials). Bastion can decrypt on the same user session. A full compromise of that Windows account can still decrypt. A different user or offline copy of the file alone is not enough. This is not a password vault. Home-gateway passwords are session-only and never written.",
         "Bastion-Log-*.txt - session transcript lines for support and review.",
         "Bastion-Report-*.html - optional HTML snapshot from Help and Reports.",
         "BastionInstallers/ - staging folder under the data directory for optional install work.",
@@ -1250,6 +1271,10 @@ function Show-Help {
         "If you distribute a modified version, you must license that distribution under GPLv3 and provide the complete corresponding source. That blocks closed proprietary forks of Bastion.",
         "GPLv3 does not ban selling GPL-compliant copies that include source; it bans keeping distributed modifications secret and proprietary. See LICENSE and NOTICE.",
         "Older published release zips that still contain an MIT LICENSE file remain under those artifact terms.",
+        "## Known CVE checks (honest summary)",
+        "Main menu C scans this PC against a documented catalogue. Bastion cannot patch Microsoft kernel bugs; those rows start Windows Update.",
+        "If a registry or protocol change needs to come back: Recovery > 7 > 2 > Yes. Exact reverse is also on Help page 11 and on https://www.operationlockedin.com/bastion/help#cve-checks",
+        "VLC uninstall, SMBv1 disable, and Microsoft updates are not reversed by hub 7.",
         "## Deliberate non-goals",
         "No aggressive mitigation sets that caused black-screen logons on some hardware. No automatic GPU/BIOS flashing. Not a complete malware guarantee.",
         "## Version",
@@ -1433,6 +1458,7 @@ function Show-MainMenu {
         Write-MenuGroup (BT "menu.maintain")
         Write-Host (BT "menu.9")
         Write-Host (BT "menu.10")
+        Write-Host (BT "menu.C") -ForegroundColor Cyan
 
         Write-MenuGroup (BT "menu.safety")
         Write-Host (BT "menu.13") -ForegroundColor Green
@@ -1474,7 +1500,7 @@ function Show-MainMenu {
         Write-Host ""
 
         $choice = Read-MenuChoice -Prompt (BT "menu.select") -Valid @(
-            "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r","D","d","L","l"
+            "0","1","2","3","4","5","6","7","8","9","10","11","12","13","Q","q","A","a","H","h","R","r","D","d","L","l","C","c"
         )
 
         # Aliases: Q=Quick Harden, A=Apply, H=Help, R=Restore point, D=DNS.
@@ -1492,6 +1518,7 @@ function Show-MainMenu {
             "A" { Invoke-ApplyHardening }
             "9" { Show-RecoveryMenu }
             "10" { Show-UninstallMenu }
+            "C" { Show-CveChecksMenu }
             "11" { Show-HelpReportsMenu }
             "H" { Show-HelpReportsMenu }
             "12" { Reset-ToDefaults }

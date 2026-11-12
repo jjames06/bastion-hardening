@@ -29,7 +29,7 @@ You still install and run Bastion the same way: Unblock the zip, extract, run **
 
 - **Purpose and menus.** Dry Run, selective Apply, Recovery hubs, browser modes, DNS preference, and safety gates remain the product you already know.
 - **Launcher rule.** Always start with **`Bastion-Hardening.bat`**. Do not double-click the `.ps1` alone under Restricted ExecutionPolicy.
-- **Data vs code.** **DPAPI** may protect **Apply undo data** (DNS snapshot / RDP host prior). That is unrelated to how modules load. **Code is never encrypted.**
+- **Data vs code.** **DPAPI** may protect **undo data** (DNS snapshot / RDP host prior / CVE undo items). That is unrelated to how modules load. **Code is never encrypted.**
 - **License.** GPLv3 still applies: run, study, share; distributed modified versions must stay GPLv3 with complete corresponding source.
 
 ## Monolith vs modular (side by side)

@@ -5,6 +5,7 @@
 # Role in modular architecture:
 #   Section helper implementations used by Apply, Dry Run, Audit, and Recovery:
 #   Game DVR silence, OneDrive removal, bloat Appx detection, Defender CFA allow paths,
+#   Defender update health (disk, signature age, TEMP fill files, optional daily task),
 #   World of Warcraft discovery for StrictHandle exceptions, registry soft-set helpers,
 #   suggestion restore, and OS Remote Desktop host allow/deny.
 #
@@ -332,6 +333,396 @@ function Get-CfaCandidatePaths {
     return @($paths)
 }
 
+function Get-BastionDefenderUpdateHealth {
+    <#
+      Purpose:
+        Read-only snapshot of Defender update health and system-drive free space.
+        Compensating control for disk-fill techniques that starve signature/platform
+        updates (publicly discussed as "BigDiskBuster", Sep 2026). Bastion cannot
+        patch Microsoft's updater. This reports stale signatures, low disk,
+        oversized hidden temp files, blocking policies, and recent update-failure
+        events so the user can clean up and request an update.
+
+      When called:
+        Security audit; Dry Run; Apply; Recovery > Defender update health.
+
+      Side effects:
+        WMI/CIM disk query, Get-MpComputerStatus, directory listing of TEMP,
+        bounded Defender Operational log read, scheduled-task lookup.
+        No files created or deleted.
+
+      Undo implications:
+        None (status only).
+    #>
+    $sys = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction SilentlyContinue
+    $freeBytes = [int64]0
+    $sizeBytes = [int64]0
+    if ($sys) {
+        $freeBytes = [int64]$sys.FreeSpace
+        $sizeBytes = [int64]$sys.Size
+    }
+    $st = $null
+    # Reuse a live CVE-scan memo only. Do not create that cache from Dry Run / Audit.
+    if ($script:BastionCveScanCache -is [hashtable] -and $script:BastionCveScanCache.Contains("mp")) {
+        $st = $script:BastionCveScanCache["mp"]
+    }
+    if (-not $st) {
+        try { $st = Get-MpComputerStatus -ErrorAction Stop } catch {}
+    }
+    $sigAgeDays = $null
+    if ($st -and $st.AntivirusSignatureLastUpdated) {
+        try { $sigAgeDays = ((Get-Date) - [datetime]$st.AntivirusSignatureLastUpdated).TotalDays } catch {}
+    }
+    $checkSig = $null
+    try {
+        $pref = Get-MpPreference -ErrorAction Stop
+        if ($null -ne $pref.PSObject.Properties["CheckForSignaturesBeforeRunningScan"]) {
+            $checkSig = [bool]$pref.CheckForSignaturesBeforeRunningScan
+        }
+    } catch {}
+    $task = Get-BastionDefenderHealthTaskStatus
+    [pscustomobject]@{
+        FreeBytes                    = $freeBytes
+        SizeBytes                    = $sizeBytes
+        FreeGiB                      = if ($sizeBytes -gt 0) { [math]::Round($freeBytes / 1GB, 2) } else { $null }
+        FreePct                      = if ($sizeBytes -gt 0) { [math]::Round(100.0 * $freeBytes / $sizeBytes, 1) } else { $null }
+        RealTimeOn                   = if ($st) { [bool]$st.RealTimeProtectionEnabled } else { $null }
+        IoavOn                       = if ($st) { [bool]$st.IoavProtectionEnabled } else { $null }
+        NisOn                        = if ($st) { [bool]$st.NISEnabled } else { $null }
+        SignatureLastUpdated         = if ($st) { $st.AntivirusSignatureLastUpdated } else { $null }
+        SignatureAgeDays             = $sigAgeDays
+        SignatureVersion             = if ($st) { $st.AntivirusSignatureVersion } else { $null }
+        EngineVersion                = if ($st) { $st.AMEngineVersion } else { $null }
+        TamperProtected              = if ($st) { [bool]$st.IsTamperProtected } else { $null }
+        CheckForSignaturesBeforeScan = $checkSig
+        FillSuspects                 = @(Get-BastionSuspectedDiskFillFiles)
+        PolicyNotes                  = @(Get-BastionDefenderUpdatePolicyNotes)
+        RecentUpdateFailures         = @(Get-BastionDefenderUpdateFailureEvents)
+        HealthTaskPresent            = [bool]$task.Present
+        HealthTaskState              = $task.State
+    }
+}
+
+function Get-BastionSuspectedDiskFillFiles {
+    <#
+      Purpose:
+        List oversized hidden/system files in user TEMP and Windows\Temp that can
+        starve Defender updates. Heuristic only - not a signature of any PoC.
+
+      When called:
+        Get-BastionDefenderUpdateHealth; Recovery cleanup.
+
+      Side effects:
+        Directory enumeration. Does not delete.
+
+      Undo implications:
+        None.
+    #>
+    $out = New-Object System.Collections.Generic.List[object]
+    $roots = @()
+    if ($env:TEMP) { $roots += $env:TEMP }
+    if ($env:TMP -and $env:TMP -ne $env:TEMP) { $roots += $env:TMP }
+    $winTemp = Join-Path $env:SystemRoot "Temp"
+    if (Test-Path -LiteralPath $winTemp) { $roots += $winTemp }
+    $cutoff = (Get-Date).AddDays(-14)
+    $minSize = 256MB
+    foreach ($root in $roots) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        try {
+            Get-ChildItem -LiteralPath $root -File -Force -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.Length -ge $minSize -and
+                    $_.LastWriteTime -ge $cutoff -and
+                    (($_.Attributes -band [IO.FileAttributes]::Hidden) -or
+                     ($_.Attributes -band [IO.FileAttributes]::System) -or
+                     $_.Length -ge 2GB)
+                } |
+                ForEach-Object {
+                    [void]$out.Add([pscustomobject]@{
+                        FullName   = $_.FullName
+                        Length     = $_.Length
+                        GiB        = [math]::Round($_.Length / 1GB, 2)
+                        Hidden     = [bool]($_.Attributes -band [IO.FileAttributes]::Hidden)
+                        LastWrite  = $_.LastWriteTime
+                    })
+                }
+        } catch {}
+    }
+    return @($out.ToArray())
+}
+
+function Get-BastionDefenderUpdatePolicyNotes {
+    <#
+      Purpose:
+        List local policies that can stop Defender or Windows Update from
+        refreshing signatures. Read-only.
+
+      When called:
+        Get-BastionDefenderUpdateHealth.
+
+      Side effects:
+        Registry reads.
+
+      Undo implications:
+        None.
+    #>
+    $notes = New-Object System.Collections.Generic.List[string]
+    try {
+        $wd = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -ErrorAction SilentlyContinue
+        if ($wd -and $wd.DisableAntiSpyware -eq 1) { [void]$notes.Add("Policy DisableAntiSpyware=1") }
+        if ($wd -and $wd.DisableAntiVirus -eq 1) { [void]$notes.Add("Policy DisableAntiVirus=1") }
+    } catch {}
+    try {
+        $rtp = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" -ErrorAction SilentlyContinue
+        if ($rtp -and $rtp.DisableRealtimeMonitoring -eq 1) { [void]$notes.Add("Policy DisableRealtimeMonitoring=1") }
+    } catch {}
+    try {
+        $su = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates" -ErrorAction SilentlyContinue
+        if ($su -and $su.DisableUpdateOnStartupWithoutEngine -eq 1) { [void]$notes.Add("Policy DisableUpdateOnStartupWithoutEngine=1") }
+    } catch {}
+    try {
+        $au = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -ErrorAction SilentlyContinue
+        if ($au -and $au.NoAutoUpdate -eq 1) { [void]$notes.Add("Windows Update NoAutoUpdate=1") }
+        if ($au -and $au.AUOptions -eq 1) { [void]$notes.Add("Windows Update AUOptions=1 (never check)") }
+    } catch {}
+    return @($notes.ToArray())
+}
+
+function Get-BastionDefenderUpdateFailureEvents {
+    <#
+      Purpose:
+        Recent Defender Operational events that look like a failed definition or
+        platform update (including 0x80070643). Bounded 14-day window.
+
+      When called:
+        Get-BastionDefenderUpdateHealth.
+
+      Side effects:
+        Event log read. Does not clear events.
+
+      Undo implications:
+        None.
+    #>
+    $out = New-Object System.Collections.Generic.List[object]
+    try {
+        $ev = Get-WinEvent -FilterHashtable @{
+            LogName   = "Microsoft-Windows-Windows Defender/Operational"
+            StartTime = (Get-Date).AddDays(-14)
+        } -MaxEvents 250 -ErrorAction SilentlyContinue
+        foreach ($e in @($ev)) {
+            $m = [string]$e.Message
+            if ($m -match "0x80070643|failed to (download|install|update)|definition update failed|platform update failed|could not be updated") {
+                $short = if ($m.Length -gt 180) { $m.Substring(0, 180) } else { $m }
+                [void]$out.Add([pscustomobject]@{
+                    TimeCreated = $e.TimeCreated
+                    Id          = $e.Id
+                    Message     = $short
+                })
+            }
+            if ($out.Count -ge 8) { break }
+        }
+    } catch {}
+    return @($out.ToArray())
+}
+
+function Get-BastionDefenderHealthTaskStatus {
+    <#
+      Purpose:
+        Whether the opt-in Bastion daily Defender health scheduled task exists.
+
+      When called:
+        Health snapshot; Recovery install/remove.
+
+      Side effects:
+        Get-ScheduledTask lookup.
+
+      Undo implications:
+        None (status only).
+    #>
+    $path = $script:BastionDefenderHealthTaskPath
+    $name = $script:BastionDefenderHealthTaskName
+    if (-not $path) { $path = "\" }
+    if (-not $name) { $name = "BastionDefenderUpdateHealth" }
+    $present = $false
+    $state = $null
+    try {
+        $t = Get-ScheduledTask -TaskPath $path -TaskName $name -ErrorAction SilentlyContinue
+        if ($t) {
+            $present = $true
+            $state = [string]$t.State
+        }
+    } catch {}
+    [pscustomobject]@{ Present = $present; State = $state; Path = $path; Name = $name }
+}
+
+function Get-BastionDefenderHealthTaskScriptText {
+    @"
+#Requires -Version 5.1
+# Written by Bastion Recovery > Defender > daily health task.
+# Requests a signature update when signatures are stale and C: has headroom.
+# Does not delete files. Safe to remove with the matching Recovery option.
+`$ErrorActionPreference = 'SilentlyContinue'
+`$src = 'BastionHardening'
+try {
+    if (-not [System.Diagnostics.EventLog]::SourceExists(`$src)) {
+        New-EventLog -LogName Application -Source `$src
+    }
+} catch {}
+function Write-BastionHealthEvent([string]`$msg, [string]`$type = 'Information') {
+    try {
+        Write-EventLog -LogName Application -Source `$src -EventId 2001 -EntryType `$type -Message `$msg
+    } catch {}
+}
+try {
+    `$sys = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+    `$free = [int64]`$sys.FreeSpace
+    `$st = Get-MpComputerStatus
+    `$age = `$null
+    `$ageText = '?'
+    if (`$st.AntivirusSignatureLastUpdated) {
+        `$age = ((Get-Date) - [datetime]`$st.AntivirusSignatureLastUpdated).TotalDays
+        `$ageText = '{0:N1}d' -f `$age
+    }
+    `$msg = 'Defender health: C: free {0:N1} GiB; signature age {1}; version {2}' -f (`$free / 1GB), `$ageText, `$st.AntivirusSignatureVersion
+    if (`$free -lt 5GB) {
+        Write-BastionHealthEvent ('Low disk may starve Defender updates. {0}' -f `$msg) 'Warning'
+        return
+    }
+    if (`$null -ne `$age -and `$age -gt 2) {
+        Write-BastionHealthEvent ('Signatures stale. Requesting update. {0}' -f `$msg) 'Warning'
+        try { Update-MpSignature } catch {}
+        `$mp = Join-Path `$env:ProgramFiles 'Windows Defender\MpCmdRun.exe'
+        if (Test-Path -LiteralPath `$mp) {
+            Start-Process -FilePath `$mp -ArgumentList '-SignatureUpdate' -Wait -WindowStyle Hidden | Out-Null
+        }
+    } else {
+        Write-BastionHealthEvent `$msg 'Information'
+    }
+} catch {
+    Write-BastionHealthEvent ('Defender health check failed: ' + `$_.Exception.Message) 'Warning'
+}
+"@
+}
+
+function Install-BastionDefenderHealthTask {
+    <#
+      Purpose:
+        Opt-in daily SYSTEM task that logs disk/signature health and requests
+        Update-MpSignature when signatures are stale and C: has at least 5 GiB
+        free. Does not delete TEMP files.
+
+      When called:
+        Recovery > Defender > 5 after Yes.
+
+      Side effects:
+        Writes Bastion-DefenderUpdateHealth.ps1 in the data directory and
+        registers scheduled task BastionDefenderUpdateHealth.
+
+      Undo implications:
+        Uninstall-BastionDefenderHealthTask (Recovery option 5).
+    #>
+    $dir = $script:Config.LogDirectory
+    if ([string]::IsNullOrWhiteSpace($dir)) { $dir = "C:\Temp\Bastion" }
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $scriptPath = Join-Path $dir "Bastion-DefenderUpdateHealth.ps1"
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($scriptPath, (Get-BastionDefenderHealthTaskScriptText), $utf8)
+    $psExe = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    $arg = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $scriptPath
+    $action = New-ScheduledTaskAction -Execute $psExe -Argument $arg
+    $trigger = New-ScheduledTaskTrigger -Daily -At "06:15"
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+    $path = $script:BastionDefenderHealthTaskPath
+    $name = $script:BastionDefenderHealthTaskName
+    if (-not $path) { $path = "\" }
+    if (-not $name) { $name = "BastionDefenderUpdateHealth" }
+    Register-ScheduledTask -TaskPath $path -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
+        -Description "Bastion: daily Defender signature and disk health. Requests an update if signatures are stale and C: has headroom. Does not delete files." `
+        -Force | Out-Null
+    return $scriptPath
+}
+
+function Uninstall-BastionDefenderHealthTask {
+    <#
+      Purpose:
+        Remove the opt-in daily Defender health task and its helper script.
+
+      When called:
+        Recovery > Defender > 5 after Yes.
+
+      Side effects:
+        Unregister-ScheduledTask; deletes Bastion-DefenderUpdateHealth.ps1.
+
+      Undo implications:
+        Re-install from the same Recovery menu.
+    #>
+    $path = $script:BastionDefenderHealthTaskPath
+    $name = $script:BastionDefenderHealthTaskName
+    if (-not $path) { $path = "\" }
+    if (-not $name) { $name = "BastionDefenderUpdateHealth" }
+    try {
+        $t = Get-ScheduledTask -TaskPath $path -TaskName $name -ErrorAction SilentlyContinue
+        if ($t) {
+            Unregister-ScheduledTask -InputObject $t -Confirm:$false -ErrorAction Stop
+        }
+    } catch {
+        throw
+    }
+    $dir = $script:Config.LogDirectory
+    if ($dir) {
+        $scriptPath = Join-Path $dir "Bastion-DefenderUpdateHealth.ps1"
+        if (Test-Path -LiteralPath $scriptPath) {
+            Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Invoke-BastionDefenderSignatureUpdate {
+    <#
+      Purpose:
+        Request Microsoft Defender signature update (Update-MpSignature, then
+        MpCmdRun -SignatureUpdate). Compensating recovery after disk-fill
+        starvation; not a Microsoft patch.
+
+      When called:
+        Recovery > Defender > 5; Apply Defender section when signatures are stale.
+
+      Side effects:
+        Network and disk use. Does not delete files.
+
+      Undo implications:
+        None (updates stay).
+    #>
+    param([switch]$NoConfirm)
+    if (-not $NoConfirm) {
+        if ((Read-YesNo -Prompt "  Request Microsoft Defender signature update now (Y/N)?") -ne "Y") { return }
+    }
+    $ok = $false
+    try {
+        Update-MpSignature -ErrorAction Stop
+        Write-Status "Update-MpSignature completed." "Applied"
+        $ok = $true
+    } catch {
+        Write-Status ("Update-MpSignature: {0}" -f $_.Exception.Message) "Warn"
+    }
+    $mp = Join-Path ${env:ProgramFiles} "Windows Defender\MpCmdRun.exe"
+    if (Test-Path -LiteralPath $mp) {
+        try {
+            $p = Start-Process -FilePath $mp -ArgumentList "-SignatureUpdate" -Wait -PassThru -WindowStyle Hidden
+            Write-Status ("MpCmdRun -SignatureUpdate exit {0}" -f $p.ExitCode) $(if ($p.ExitCode -eq 0) { "Applied" } else { "Warn" })
+            if ($p.ExitCode -eq 0) { $ok = $true }
+        } catch {
+            Write-Status ("MpCmdRun failed: {0}" -f $_.Exception.Message) "Warn"
+        }
+    }
+    if (-not $ok) {
+        Write-Status "Signature update did not confirm success. Check Windows Security > Virus and threat protection updates, and free space on C:." "Failed"
+    }
+}
+
 function Add-CfaAllowPaths {
     <#
       Purpose:
@@ -404,12 +795,24 @@ function Test-BastionLooksLikeWowRoot {
     param([string]$Dir)
     if ([string]::IsNullOrWhiteSpace($Dir) -or -not (Test-Path -LiteralPath $Dir -PathType Container)) { return $false }
     # Do NOT treat a lone "data" folder as enough (Battle.net Agent also has data\).
-    $strong = @("_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_", "_ptr_", "_beta_", "_xptr_")
+    $strong = @(
+        "_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_",
+        "_classic_era_ptr_", "_classic_era_beta_",
+        "_forever_", "_forever_beta_", "_classic_forever_",
+        "_ptr_", "_beta_", "_xptr_"
+    )
     foreach ($m in $strong) {
         if (Test-Path -LiteralPath (Join-Path $Dir $m)) { return $true }
     }
+    try {
+        $kids = @(Get-ChildItem -LiteralPath $Dir -Directory -ErrorAction SilentlyContinue)
+        foreach ($k in $kids) {
+            if ($k.Name -match '^_[a-z0-9_]+_$') { return $true }
+        }
+    } catch {}
     if (Test-Path -LiteralPath (Join-Path $Dir "Wow.exe")) { return $true }
     if (Test-Path -LiteralPath (Join-Path $Dir "WowClassic.exe")) { return $true }
+    if (Test-Path -LiteralPath (Join-Path $Dir "WowB.exe")) { return $true }
     # .battle.net beside product dirs is a Blizzard game install marker when under a Warcraft-named folder
     $leaf = Split-Path -Leaf $Dir
     if ($leaf -match 'Warcraft|WoW' -and (Test-Path -LiteralPath (Join-Path $Dir ".battle.net"))) { return $true }
@@ -443,7 +846,7 @@ function Resolve-BastionWowRootFromPath {
     $cur = $candidate
     for ($i = 0; $i -lt 6 -and $cur; $i++) {
         $leaf = Split-Path -Leaf $cur
-        if ($leaf -match '^(World of Warcraft|_retail_|_classic_|_classic_era_|_classic_ptr_|_ptr_|_beta_|_xptr_|UTILS|Utils)$') {
+        if ($leaf -match '^(World of Warcraft|_retail_|_classic_|_classic_era_|_classic_ptr_|_classic_beta_|_classic_era_ptr_|_classic_era_beta_|_forever_|_forever_beta_|_classic_forever_|_ptr_|_beta_|_xptr_|UTILS|Utils)$' -or $leaf -match '^_[a-z0-9_]+_$') {
             if ($leaf -eq "World of Warcraft" -and (Test-BastionLooksLikeWowRoot -Dir $cur)) {
                 return $cur
             }
@@ -542,7 +945,7 @@ function Get-BastionWowRootsFromBattleNetMetadata {
                 # Paths in JSON often use forward slashes
                 foreach ($m in [regex]::Matches($raw, '[A-Za-z]:(?:/|\\)(?:[^\"\\r\\n]+)+')) {
                     $cand = $m.Value
-                    if ($cand -notmatch 'World of Warcraft|Warcraft|\\\\wow|_retail_|_classic_') { continue }
+                    if ($cand -notmatch 'World of Warcraft|Warcraft|\\\\wow|_retail_|_classic_|_forever_|wow_classic') { continue }
                     $root = Resolve-BastionWowRootFromPath -RawPath $cand
                     if ($root -and -not $roots.Contains($root)) { [void]$roots.Add($root) }
                 }
@@ -685,8 +1088,10 @@ function Get-BastionStrictHandleExceptionPaths {
         in Wow_loader.dll or WowClassic_loader.dll). Eidolon is BlizzardError.exe - the crash
         reporter window, not the process that needs the exception.
         Undiscovered games are NOT excepted. Full path required (bare names collide).
-        Empty list is normal when WoW is not installed. Installing Classic after Apply does
-        not inherit the retail Wow.exe exception - refresh / re-Apply.
+        Empty list is normal when WoW is not installed. Installing Classic Era, Classic
+        Beta, or Forever after Apply does not inherit the retail Wow.exe exception -
+        refresh / re-Apply. Forever Beta currently ships under _classic_beta_; a later
+        _forever_ product folder is still picked up by scanning any _*_ child of the root.
     #>
     # Per-app StrictHandle OFF targets. System keeps StrictHandle ON for everything else.
     # Loader DLLs (Wow_loader.dll, WowClassic_loader.dll) are loaded by the sibling EXE;
@@ -722,11 +1127,21 @@ function Get-BastionStrictHandleExceptionPaths {
     $productDirs = @(
         "_retail_", "_classic_", "_classic_era_", "_classic_ptr_", "_classic_beta_",
         "_classic_era_ptr_", "_classic_era_beta_",
+        "_forever_", "_forever_beta_", "_classic_forever_",
         "_ptr_", "_beta_", "_xptr_", "UTILS", "Utils"
     )
     foreach ($root in @(Get-BastionWowInstallRoots)) {
         try {
+            $scan = [System.Collections.Generic.List[string]]::new()
             foreach ($rel in $productDirs) {
+                if (-not $scan.Contains($rel)) { [void]$scan.Add($rel) }
+            }
+            Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '^_[a-z0-9_]+_$' } |
+                ForEach-Object {
+                    if (-not $scan.Contains($_.Name)) { [void]$scan.Add($_.Name) }
+                }
+            foreach ($rel in $scan) {
                 $dir = Join-Path $root $rel
                 if (-not (Test-Path -LiteralPath $dir)) { continue }
                 Add-WowDirExes $dir
@@ -802,7 +1217,7 @@ function Write-BastionStrictHandleGuidance {
         [ConsoleColor]$Color = [ConsoleColor]::DarkYellow
     )
     if ($Style -eq "Inline") {
-        Write-Host "      Example: WoW retail and Classic Era broke under system StrictHandle; Bastion auto-excepts discovered Wow*.exe (Wow.exe, WowClassic.exe) now. CS2 tested OK." -ForegroundColor $Color
+        Write-Host "      Example: WoW retail, Classic Era, and Forever-family clients can break under system StrictHandle; Bastion auto-excepts discovered Wow*.exe (Wow.exe, WowClassic.exe, WowB.exe, plus any new _*_ product folder). CS2 tested OK." -ForegroundColor $Color
         Write-Host "      Other programs may break until we ship an exception for them. That is expected and not a silent failure." -ForegroundColor $Color
         Write-Host "      If something breaks: Recovery > 6 > StrictHandle > disable system StrictHandle, reboot, confirm it works." -ForegroundColor $Color
         Write-Host "      Then report game name + full .exe path on GitHub #18 or Discussions #23 so we can add an exception." -ForegroundColor $Color
@@ -817,7 +1232,7 @@ function Write-BastionStrictHandleGuidance {
         Write-Host "  are fine under default Windows policy but fatal under StrictHandle." -ForegroundColor DarkGray
         Write-Host "  Example (not the only case): WoW retail Play/Wow.exe and Classic Era WowClassic.exe failed" -ForegroundColor DarkGray
         Write-Host "  (Eidolon crash reporter / INVALID_HANDLE in Wow_loader.dll or WowClassic_loader.dll) until" -ForegroundColor DarkGray
-        Write-Host "  a per-app exception. Bastion auto-excepts discovered Wow*.exe. Install Classic after Apply? Refresh." -ForegroundColor DarkGray
+        Write-Host "  a per-app exception. Bastion auto-excepts discovered Wow*.exe. Install Classic or Forever after Apply? Refresh." -ForegroundColor DarkGray
         Write-Host "  CS2 was tested OK. Other titles: unknown. No exception means it may still break." -ForegroundColor DarkGray
         $wowEx = @()
         try { $wowEx = @(Get-BastionStrictHandleExceptionPaths) } catch { $wowEx = @() }
@@ -843,7 +1258,7 @@ function Write-BastionStrictHandleGuidance {
     # Block (default): recovery-menu honesty block
     Write-Host "  Honest notes" -ForegroundColor Yellow
     Write-Host "    System StrictHandle hardens most apps. Some programs (especially games) can fail to start." -ForegroundColor DarkGray
-    Write-Host "    WoW retail and Classic Era are documented examples (auto-excepted when Wow*.exe is found)." -ForegroundColor DarkGray
+    Write-Host "    WoW retail, Classic Era, and Forever-family clients are documented examples (auto-excepted when Wow*.exe is found)." -ForegroundColor DarkGray
     Write-Host "    Other titles may break with NO exception until someone reports them and we add one." -ForegroundColor DarkGray
     Write-Host "    Option 1: turn StrictHandle OFF for the whole PC (security trade-off). Reboot after." -ForegroundColor DarkGray
     Write-Host "    Option 2: refresh known exception EXEs only (keeps system StrictHandle ON)." -ForegroundColor DarkGray
