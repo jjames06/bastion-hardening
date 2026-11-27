@@ -11,8 +11,8 @@ body:
     id: bastion-version
     attributes:
       label: Bastion version
-      description: Zip name or version shown in the app (for example v15.7)
-      placeholder: v15.7
+      description: Zip name or version shown in the app (for example v16.0)
+      placeholder: v16.0
     validations:
       required: true
   - type: input

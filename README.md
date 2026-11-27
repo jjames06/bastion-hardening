@@ -13,7 +13,7 @@ Version **16.0**
 </p>
 
 <p align="center">
-  <a href="https://www.operationlockedin.com"><strong>Official site</strong></a> - <a href="https://www.operationlockedin.com/bastion/download"><strong>Download</strong></a> - <a href="#how-to-install-properly"><strong>Install guide</strong></a> - <a href="docs/wiki/Home.md"><strong>Handbook</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/wiki/Windows-September-2026"><strong>September 2026 update</strong></a> - <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> - <a href="#known-issues"><strong>Known issues</strong></a> - <a href="#browser-policies"><strong>Browser / ECH</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> - <a href="SECURITY.md"><strong>Security</strong></a>
+  <a href="https://www.operationlockedin.com/bastion"><strong>Official site</strong></a> - <a href="https://www.operationlockedin.com/bastion/download"><strong>Download</strong></a> - <a href="#how-to-install-properly"><strong>Install guide</strong></a> - <a href="docs/wiki/Home.md"><strong>Handbook</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/wiki/Windows-September-2026"><strong>September 2026 update</strong></a> - <a href="#files-and-folders-bastion-creates"><strong>Data directory</strong></a> - <a href="#known-issues"><strong>Known issues</strong></a> - <a href="#browser-policies"><strong>Browser / ECH</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/releases/latest"><strong>Latest release</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/wiki"><strong>Wiki</strong></a> - <a href="https://github.com/jjames06/bastion-hardening/discussions"><strong>Discussions</strong></a> - <a href="SECURITY.md"><strong>Security</strong></a>
 </p>
 
 **Further reading in this repo**
@@ -21,7 +21,7 @@ Version **16.0**
 | Document | Topic |
 |----------|--------|
 | [docs/CODEMAP.md](docs/CODEMAP.md) | File-by-file map. Start here if you did not write this code. Every \`src\\Bastion.*.ps1\` has a matching header. |
-| [Official site](https://www.operationlockedin.com) | Product home (Operation Locked In); Bastion product pages and download |
+| [Official site](https://www.operationlockedin.com/bastion) | Product home (Operation Locked In); Bastion product pages and download |
 | [Rampart](https://github.com/jjames06/Rampart) | Sister program: read-only public-surface check of a hostname you operate |
 | [docs/wiki/Home.md](docs/wiki/Home.md) | **Handbook** - Quick start, Hardening workflow, Recovery cookbook, StrictHandle, FAQ (ships in the zip) |
 | [September 2026 Windows update](https://github.com/jjames06/bastion-hardening/wiki/Windows-September-2026) | Full handbook: KB5124008, KB5129195, what Bastion does, DNS Client 7023, staged recovery. Source file: [docs/wiki/Windows-September-2026.md](docs/wiki/Windows-September-2026.md) |
@@ -206,6 +206,7 @@ Best for most people. Prefer one of these **official** sources only (not random 
 Product overview and docs on the site: [www.operationlockedin.com/bastion](https://www.operationlockedin.com/bastion). GitHub Releases currently publishes only **v16.0**.
 
 1. Download **`bastion-hardening-v16.0.zip`** from the official site or GitHub Latest.
+   Optional check: the release has a `SHA256SUMS.txt` file. In PowerShell, run `Get-FileHash .\bastion-hardening-v16.0.zip -Algorithm SHA256` and confirm the result matches.
 2. **Always Unblock the zip before extract** (Mark-of-the-Web): right-click the zip -> **Properties** -> if you see **Unblock**, check it -> **OK**.  
    Skipping this is a common cause of *running scripts is disabled on this system* after extract.
 3. Extract the zip to a location **you** control, for example `C:\Tools\`.  

@@ -35,7 +35,7 @@ body:
     id: bastion-version
     attributes:
       label: Bastion version
-      placeholder: v15.7
+      placeholder: v16.0
     validations:
       required: true
   - type: input
