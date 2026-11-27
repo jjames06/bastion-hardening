@@ -1,0 +1,33 @@
+name: Idea or improvement
+description: Suggest a new opt-in setting, a clearer message, or a usability improvement.
+title: "[Idea]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve Bastion. New settings stay opt-in, show in Dry Run first, and can be reversed from Recovery.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would this help with?
+      description: Describe the situation in plain words.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What Bastion could do or show differently.
+    validations:
+      required: true
+  - type: textarea
+    id: undo
+    attributes:
+      label: How would it be undone?
+      description: Optional. How Recovery could reverse it.
+  - type: input
+    id: bastion-version
+    attributes:
+      label: Bastion version you are using
+      placeholder: v16.0
